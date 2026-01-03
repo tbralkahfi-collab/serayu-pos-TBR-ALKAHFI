@@ -1,15 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { formatRupiah } from '@/components/RupiahIcon';
-import { Search, Plus, Minus, Trash2, ShoppingCart, CreditCard, Banknote } from 'lucide-react';
+import { useStore } from '@/contexts/StoreContext';
+import { toast } from 'sonner';
+import { 
+  Search, Plus, Minus, Trash2, ShoppingCart, CreditCard, Banknote, 
+  Printer, Save, X, User 
+} from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 interface Product {
   id: string;
   name: string;
   price: number;
   category: string;
+  unit: string;
+  stock: number;
 }
 
 interface CartItem extends Product {
@@ -17,28 +33,43 @@ interface CartItem extends Product {
 }
 
 const sampleProducts: Product[] = [
-  { id: '1', name: 'Indomie Goreng', price: 3500, category: 'Makanan' },
-  { id: '2', name: 'Aqua 600ml', price: 4000, category: 'Minuman' },
-  { id: '3', name: 'Roti Tawar', price: 15000, category: 'Makanan' },
-  { id: '4', name: 'Teh Botol 450ml', price: 5000, category: 'Minuman' },
-  { id: '5', name: 'Sabun Mandi', price: 8500, category: 'Perawatan' },
-  { id: '6', name: 'Shampoo Sachet', price: 1500, category: 'Perawatan' },
-  { id: '7', name: 'Kopi Sachet', price: 2000, category: 'Minuman' },
-  { id: '8', name: 'Biskuit Roma', price: 12000, category: 'Makanan' },
+  { id: '1', name: 'Baja Ringan C75', price: 85000, category: 'Rangka Atap', unit: 'batang', stock: 150 },
+  { id: '2', name: 'Baja Ringan C100', price: 110000, category: 'Rangka Atap', unit: 'batang', stock: 100 },
+  { id: '3', name: 'Hollow 4x4', price: 65000, category: 'Hollow', unit: 'batang', stock: 200 },
+  { id: '4', name: 'Hollow 2x4', price: 45000, category: 'Hollow', unit: 'batang', stock: 180 },
+  { id: '5', name: 'Reng Baja Ringan', price: 28000, category: 'Rangka Atap', unit: 'batang', stock: 300 },
+  { id: '6', name: 'Spandek 0.30mm', price: 75000, category: 'Atap', unit: 'lembar', stock: 150 },
+  { id: '7', name: 'Spandek 0.35mm', price: 95000, category: 'Atap', unit: 'lembar', stock: 120 },
+  { id: '8', name: 'Genteng Metal', price: 45000, category: 'Atap', unit: 'lembar', stock: 250 },
+  { id: '9', name: 'Sekrup Baja 12mm', price: 85000, category: 'Aksesoris', unit: 'dus', stock: 50 },
+  { id: '10', name: 'Dynabolt 10mm', price: 125000, category: 'Aksesoris', unit: 'dus', stock: 30 },
+  { id: '11', name: 'Paku Rivet', price: 45000, category: 'Aksesoris', unit: 'dus', stock: 80 },
+  { id: '12', name: 'Talang Air PVC', price: 55000, category: 'Aksesoris', unit: 'batang', stock: 60 },
 ];
 
 export default function Kasir() {
+  const { storeInfo, printerSettings } = useStore();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'tunai' | 'transfer' | 'kartu'>('tunai');
+  const [cashAmount, setCashAmount] = useState('');
+  const printRef = useRef<HTMLDivElement>(null);
 
   const filteredProducts = sampleProducts.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase())
+    p.name.toLowerCase().includes(search.toLowerCase()) ||
+    p.category.toLowerCase().includes(search.toLowerCase())
   );
 
   const addToCart = (product: Product) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       if (existing) {
+        if (existing.qty >= product.stock) {
+          toast.error(`Stok ${product.name} tidak mencukupi`);
+          return prev;
+        }
         return prev.map((item) =>
           item.id === product.id ? { ...item, qty: item.qty + 1 } : item
         );
@@ -50,11 +81,37 @@ export default function Kasir() {
   const updateQty = (id: string, delta: number) => {
     setCart((prev) =>
       prev
-        .map((item) =>
-          item.id === id ? { ...item, qty: Math.max(0, item.qty + delta) } : item
-        )
+        .map((item) => {
+          if (item.id === id) {
+            const newQty = Math.max(0, item.qty + delta);
+            if (newQty > item.stock) {
+              toast.error(`Stok ${item.name} tidak mencukupi`);
+              return item;
+            }
+            return { ...item, qty: newQty };
+          }
+          return item;
+        })
         .filter((item) => item.qty > 0)
     );
+  };
+
+  const setQty = (id: string, qty: number) => {
+    const product = cart.find(item => item.id === id);
+    if (!product) return;
+    
+    if (qty > product.stock) {
+      toast.error(`Stok ${product.name} hanya ${product.stock} ${product.unit}`);
+      return;
+    }
+    
+    if (qty <= 0) {
+      setCart(prev => prev.filter(item => item.id !== id));
+    } else {
+      setCart(prev => prev.map(item => 
+        item.id === id ? { ...item, qty } : item
+      ));
+    }
   };
 
   const removeFromCart = (id: string) => {
@@ -62,8 +119,147 @@ export default function Kasir() {
   };
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const tax = subtotal * 0.1;
+  const tax = 0; // No tax for baja ringan store
   const total = subtotal + tax;
+
+  const handleCheckout = () => {
+    if (cart.length === 0) {
+      toast.error('Keranjang masih kosong');
+      return;
+    }
+    setShowCheckout(true);
+  };
+
+  const generateReceipt = () => {
+    const date = new Date();
+    const receiptId = `TRX${date.getTime().toString().slice(-8)}`;
+    
+    return {
+      id: receiptId,
+      date: date.toLocaleDateString('id-ID'),
+      time: date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+      customer: customerName || 'Umum',
+      items: cart,
+      subtotal,
+      tax,
+      total,
+      paymentMethod,
+      cashAmount: paymentMethod === 'tunai' ? parseInt(cashAmount) || total : total,
+      change: paymentMethod === 'tunai' ? (parseInt(cashAmount) || total) - total : 0,
+    };
+  };
+
+  const handlePrint = () => {
+    const receipt = generateReceipt();
+    
+    // Create print window
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Popup diblokir. Izinkan popup untuk mencetak.');
+      return;
+    }
+
+    const paperWidth = printerSettings.paperWidth === '58mm' ? '58mm' : 
+                       printerSettings.paperWidth === '80mm' ? '80mm' : '210mm';
+    const fontSize = printerSettings.type === 'thermal' ? '10px' : '12px';
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Nota - ${receipt.id}</title>
+        <style>
+          @page { 
+            size: ${paperWidth} auto; 
+            margin: 2mm; 
+          }
+          body { 
+            font-family: 'Courier New', monospace; 
+            font-size: ${fontSize}; 
+            width: ${paperWidth};
+            margin: 0;
+            padding: 4mm;
+          }
+          .header { text-align: center; margin-bottom: 8px; }
+          .store-name { font-weight: bold; font-size: 14px; }
+          .divider { border-top: 1px dashed #000; margin: 6px 0; }
+          .item { display: flex; justify-content: space-between; margin: 2px 0; }
+          .item-detail { font-size: 9px; color: #666; }
+          .total-section { margin-top: 8px; }
+          .total-row { display: flex; justify-content: space-between; font-weight: bold; }
+          .footer { text-align: center; margin-top: 12px; font-size: 9px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="store-name">${storeInfo.name}</div>
+          <div>SERAYU POS</div>
+          <div style="font-size: 9px;">${storeInfo.address}</div>
+          <div style="font-size: 9px;">${storeInfo.phone}</div>
+        </div>
+        <div class="divider"></div>
+        <div>
+          <div class="item"><span>No:</span><span>${receipt.id}</span></div>
+          <div class="item"><span>Tgl:</span><span>${receipt.date} ${receipt.time}</span></div>
+          <div class="item"><span>Kasir:</span><span>Admin</span></div>
+          <div class="item"><span>Pelanggan:</span><span>${receipt.customer}</span></div>
+        </div>
+        <div class="divider"></div>
+        ${receipt.items.map(item => `
+          <div>
+            <div>${item.name}</div>
+            <div class="item">
+              <span class="item-detail">${item.qty} ${item.unit} x Rp ${item.price.toLocaleString('id-ID')}</span>
+              <span>Rp ${(item.qty * item.price).toLocaleString('id-ID')}</span>
+            </div>
+          </div>
+        `).join('')}
+        <div class="divider"></div>
+        <div class="total-section">
+          <div class="item"><span>Subtotal:</span><span>Rp ${receipt.subtotal.toLocaleString('id-ID')}</span></div>
+          <div class="divider"></div>
+          <div class="total-row"><span>TOTAL:</span><span>Rp ${receipt.total.toLocaleString('id-ID')}</span></div>
+          <div class="item"><span>Bayar (${receipt.paymentMethod}):</span><span>Rp ${receipt.cashAmount.toLocaleString('id-ID')}</span></div>
+          ${receipt.change > 0 ? `<div class="item"><span>Kembalian:</span><span>Rp ${receipt.change.toLocaleString('id-ID')}</span></div>` : ''}
+        </div>
+        <div class="divider"></div>
+        <div class="footer">
+          <div>Terima kasih atas kunjungan Anda</div>
+          <div>Barang yang sudah dibeli tidak dapat dikembalikan</div>
+        </div>
+      </body>
+      </html>
+    `);
+    
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 250);
+  };
+
+  const handleSaveTransaction = () => {
+    const receipt = generateReceipt();
+    // Save to localStorage for now
+    const savedTransactions = JSON.parse(localStorage.getItem('serayu_transactions') || '[]');
+    savedTransactions.push({
+      ...receipt,
+      timestamp: new Date().toISOString(),
+    });
+    localStorage.setItem('serayu_transactions', JSON.stringify(savedTransactions));
+    
+    toast.success(`Transaksi ${receipt.id} berhasil disimpan`);
+    setCart([]);
+    setCustomerName('');
+    setCashAmount('');
+    setShowCheckout(false);
+  };
+
+  const handlePrintAndSave = () => {
+    handlePrint();
+    handleSaveTransaction();
+  };
 
   return (
     <div className="h-screen flex overflow-hidden">
@@ -74,7 +270,7 @@ export default function Kasir() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <Input
-              placeholder="Cari produk..."
+              placeholder="Cari produk baja ringan..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10"
@@ -90,12 +286,15 @@ export default function Kasir() {
               onClick={() => addToCart(product)}
             >
               <CardContent className="p-4">
-                <div className="w-full h-20 rounded-lg bg-muted flex items-center justify-center mb-3">
-                  <ShoppingCart className="w-8 h-8 text-muted-foreground" />
+                <div className="w-full h-16 rounded-lg bg-muted flex items-center justify-center mb-3">
+                  <Package className="w-8 h-8 text-muted-foreground" />
                 </div>
-                <h3 className="font-medium text-foreground truncate">{product.name}</h3>
-                <p className="text-sm text-muted-foreground">{product.category}</p>
-                <p className="text-lg font-bold text-primary mt-2">{formatRupiah(product.price)}</p>
+                <h3 className="font-medium text-foreground text-sm truncate">{product.name}</h3>
+                <p className="text-xs text-muted-foreground">{product.category}</p>
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-sm font-bold text-primary">{formatRupiah(product.price)}</p>
+                  <span className="text-xs text-muted-foreground">{product.stock} {product.unit}</span>
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -114,6 +313,16 @@ export default function Kasir() {
               </span>
             )}
           </h2>
+          {/* Customer name input */}
+          <div className="mt-4 relative">
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Nama Pelanggan (opsional)"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              className="pl-9 text-sm"
+            />
+          </div>
         </div>
 
         <div className="flex-1 overflow-auto p-4 space-y-3">
@@ -126,14 +335,14 @@ export default function Kasir() {
             cart.map((item) => (
               <div key={item.id} className="bg-muted/50 rounded-lg p-3">
                 <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <h4 className="font-medium text-foreground">{item.name}</h4>
-                    <p className="text-sm text-muted-foreground">{formatRupiah(item.price)}</p>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-foreground text-sm">{item.name}</h4>
+                    <p className="text-xs text-muted-foreground">{formatRupiah(item.price)}/{item.unit}</p>
                   </div>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
                     onClick={() => removeFromCart(item.id)}
                   >
                     <Trash2 className="w-4 h-4" />
@@ -149,7 +358,15 @@ export default function Kasir() {
                     >
                       <Minus className="w-4 h-4" />
                     </Button>
-                    <span className="w-8 text-center font-medium">{item.qty}</span>
+                    {/* Editable quantity input */}
+                    <Input
+                      type="number"
+                      value={item.qty}
+                      onChange={(e) => setQty(item.id, parseInt(e.target.value) || 0)}
+                      className="w-16 h-8 text-center text-sm"
+                      min={1}
+                      max={item.stock}
+                    />
                     <Button
                       variant="outline"
                       size="icon"
@@ -159,7 +376,7 @@ export default function Kasir() {
                       <Plus className="w-4 h-4" />
                     </Button>
                   </div>
-                  <p className="font-semibold text-foreground">
+                  <p className="font-semibold text-foreground text-sm">
                     {formatRupiah(item.price * item.qty)}
                   </p>
                 </div>
@@ -175,28 +392,101 @@ export default function Kasir() {
               <span className="text-muted-foreground">Subtotal</span>
               <span className="font-medium">{formatRupiah(subtotal)}</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Pajak (10%)</span>
-              <span className="font-medium">{formatRupiah(tax)}</span>
-            </div>
             <div className="flex justify-between text-lg font-bold pt-2 border-t border-border">
               <span>Total</span>
               <span className="text-primary">{formatRupiah(total)}</span>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="outline" className="gap-2" disabled={cart.length === 0}>
-              <CreditCard className="w-4 h-4" />
-              Kartu
-            </Button>
-            <Button className="gap-2 bg-gradient-primary" disabled={cart.length === 0}>
-              <Banknote className="w-4 h-4" />
-              Tunai
-            </Button>
-          </div>
+          <Button 
+            className="w-full gap-2 bg-gradient-primary" 
+            disabled={cart.length === 0}
+            onClick={handleCheckout}
+          >
+            <Banknote className="w-4 h-4" />
+            Proses Pembayaran
+          </Button>
         </div>
       </div>
+
+      {/* Checkout Dialog */}
+      <Dialog open={showCheckout} onOpenChange={setShowCheckout}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Pembayaran</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="p-4 rounded-lg bg-muted/50">
+              <div className="flex justify-between text-lg font-bold">
+                <span>Total Bayar</span>
+                <span className="text-primary">{formatRupiah(total)}</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Metode Pembayaran</Label>
+              <RadioGroup 
+                value={paymentMethod} 
+                onValueChange={(v) => setPaymentMethod(v as any)}
+                className="grid grid-cols-3 gap-2"
+              >
+                <div className="flex items-center space-x-2 p-3 border rounded-lg cursor-pointer hover:bg-muted/50">
+                  <RadioGroupItem value="tunai" id="tunai" />
+                  <Label htmlFor="tunai" className="cursor-pointer flex items-center gap-1">
+                    <Banknote className="w-4 h-4" /> Tunai
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2 p-3 border rounded-lg cursor-pointer hover:bg-muted/50">
+                  <RadioGroupItem value="transfer" id="transfer" />
+                  <Label htmlFor="transfer" className="cursor-pointer">Transfer</Label>
+                </div>
+                <div className="flex items-center space-x-2 p-3 border rounded-lg cursor-pointer hover:bg-muted/50">
+                  <RadioGroupItem value="kartu" id="kartu" />
+                  <Label htmlFor="kartu" className="cursor-pointer flex items-center gap-1">
+                    <CreditCard className="w-4 h-4" /> Kartu
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            {paymentMethod === 'tunai' && (
+              <div className="space-y-2">
+                <Label>Jumlah Uang</Label>
+                <Input
+                  type="number"
+                  placeholder="Masukkan jumlah uang"
+                  value={cashAmount}
+                  onChange={(e) => setCashAmount(e.target.value)}
+                />
+                {cashAmount && parseInt(cashAmount) >= total && (
+                  <p className="text-sm text-success">
+                    Kembalian: {formatRupiah(parseInt(cashAmount) - total)}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setShowCheckout(false)} className="gap-2">
+              <X className="w-4 h-4" />
+              Batal
+            </Button>
+            <Button variant="outline" onClick={handleSaveTransaction} className="gap-2">
+              <Save className="w-4 h-4" />
+              Simpan Saja
+            </Button>
+            <Button onClick={handlePrintAndSave} className="gap-2 bg-gradient-primary">
+              <Printer className="w-4 h-4" />
+              Cetak & Simpan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
+// Add Package icon import
+import { Package } from 'lucide-react';

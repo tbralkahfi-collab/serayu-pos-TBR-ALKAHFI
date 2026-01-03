@@ -1,7 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { formatRupiah } from '@/components/RupiahIcon';
+import { toast } from 'sonner';
 import {
   Plus,
   Building2,
@@ -11,6 +15,9 @@ import {
   Car,
   Wrench,
   TrendingDown,
+  Edit,
+  Trash2,
+  X,
 } from 'lucide-react';
 import {
   Table,
@@ -21,14 +28,58 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
-const expenses = [
-  { id: 'OP001', kategori: 'Listrik', deskripsi: 'Tagihan PLN Januari', jumlah: 850000, tanggal: '2024-01-15', icon: Zap },
-  { id: 'OP002', kategori: 'Air', deskripsi: 'Tagihan PDAM Januari', jumlah: 250000, tanggal: '2024-01-15', icon: Droplets },
-  { id: 'OP003', kategori: 'Telepon', deskripsi: 'Tagihan Internet & Telepon', jumlah: 450000, tanggal: '2024-01-10', icon: Phone },
-  { id: 'OP004', kategori: 'Transportasi', deskripsi: 'BBM Kendaraan Operasional', jumlah: 500000, tanggal: '2024-01-12', icon: Car },
-  { id: 'OP005', kategori: 'Pemeliharaan', deskripsi: 'Service AC Toko', jumlah: 350000, tanggal: '2024-01-08', icon: Wrench },
-  { id: 'OP006', kategori: 'Sewa', deskripsi: 'Sewa Tempat Januari', jumlah: 5000000, tanggal: '2024-01-01', icon: Building2 },
+interface Expense {
+  id: string;
+  kategori: string;
+  deskripsi: string;
+  jumlah: number;
+  tanggal: string;
+}
+
+const categoryIcons: Record<string, any> = {
+  'Listrik': Zap,
+  'Air': Droplets,
+  'Telepon': Phone,
+  'Transportasi': Car,
+  'Pemeliharaan': Wrench,
+  'Sewa': Building2,
+  'Lainnya': TrendingDown,
+};
+
+const categories = ['Listrik', 'Air', 'Telepon', 'Transportasi', 'Pemeliharaan', 'Sewa', 'Lainnya'];
+
+const initialExpenses: Expense[] = [
+  { id: 'OP001', kategori: 'Listrik', deskripsi: 'Tagihan PLN Januari - Gudang & Toko', jumlah: 1850000, tanggal: '2024-01-15' },
+  { id: 'OP002', kategori: 'Air', deskripsi: 'Tagihan PDAM Januari', jumlah: 350000, tanggal: '2024-01-15' },
+  { id: 'OP003', kategori: 'Telepon', deskripsi: 'Tagihan Internet & Telepon Toko', jumlah: 650000, tanggal: '2024-01-10' },
+  { id: 'OP004', kategori: 'Transportasi', deskripsi: 'BBM Truk Pengiriman', jumlah: 2500000, tanggal: '2024-01-12' },
+  { id: 'OP005', kategori: 'Pemeliharaan', deskripsi: 'Service Forklift', jumlah: 850000, tanggal: '2024-01-08' },
+  { id: 'OP006', kategori: 'Sewa', deskripsi: 'Sewa Gudang Januari', jumlah: 8000000, tanggal: '2024-01-01' },
 ];
 
 const getCategoryColor = (kategori: string) => {
@@ -51,16 +102,94 @@ const getCategoryColor = (kategori: string) => {
 };
 
 export default function Operasional() {
+  const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
+  const [showDialog, setShowDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [expenseToDelete, setExpenseToDelete] = useState<Expense | null>(null);
+  const [formData, setFormData] = useState({
+    kategori: '',
+    deskripsi: '',
+    jumlah: '',
+    tanggal: '',
+  });
+
   const totalOperasional = expenses.reduce((sum, e) => sum + e.jumlah, 0);
+  const listrikTotal = expenses.filter(e => e.kategori === 'Listrik').reduce((sum, e) => sum + e.jumlah, 0);
+  const sewaTotal = expenses.filter(e => e.kategori === 'Sewa').reduce((sum, e) => sum + e.jumlah, 0);
+
+  const handleAddNew = () => {
+    setEditingExpense(null);
+    setFormData({ kategori: '', deskripsi: '', jumlah: '', tanggal: '' });
+    setShowDialog(true);
+  };
+
+  const handleEdit = (expense: Expense) => {
+    setEditingExpense(expense);
+    setFormData({
+      kategori: expense.kategori,
+      deskripsi: expense.deskripsi,
+      jumlah: expense.jumlah.toString(),
+      tanggal: expense.tanggal,
+    });
+    setShowDialog(true);
+  };
+
+  const handleDelete = (expense: Expense) => {
+    setExpenseToDelete(expense);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDelete = () => {
+    if (expenseToDelete) {
+      setExpenses(prev => prev.filter(e => e.id !== expenseToDelete.id));
+      toast.success(`Biaya "${expenseToDelete.deskripsi}" berhasil dihapus`);
+      setShowDeleteDialog(false);
+      setExpenseToDelete(null);
+    }
+  };
+
+  const handleSave = () => {
+    if (!formData.kategori || !formData.deskripsi || !formData.jumlah || !formData.tanggal) {
+      toast.error('Lengkapi semua field');
+      return;
+    }
+
+    if (editingExpense) {
+      setExpenses(prev => prev.map(e => 
+        e.id === editingExpense.id 
+          ? { 
+              ...e,
+              kategori: formData.kategori,
+              deskripsi: formData.deskripsi,
+              jumlah: parseInt(formData.jumlah),
+              tanggal: formData.tanggal,
+            }
+          : e
+      ));
+      toast.success('Biaya berhasil diperbarui');
+    } else {
+      const newExpense: Expense = {
+        id: `OP${String(expenses.length + 1).padStart(3, '0')}`,
+        kategori: formData.kategori,
+        deskripsi: formData.deskripsi,
+        jumlah: parseInt(formData.jumlah),
+        tanggal: formData.tanggal,
+      };
+      setExpenses(prev => [...prev, newExpense]);
+      toast.success('Biaya berhasil ditambahkan');
+    }
+    setShowDialog(false);
+  };
 
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Operasional</h1>
-          <p className="text-muted-foreground">Kelola biaya operasional toko</p>
+          <p className="text-muted-foreground">Kelola biaya operasional toko baja ringan</p>
         </div>
-        <Button className="gap-2 bg-gradient-primary">
+        <Button className="gap-2 bg-gradient-primary" onClick={handleAddNew}>
           <Plus className="w-4 h-4" />
           Tambah Biaya
         </Button>
@@ -85,7 +214,7 @@ export default function Operasional() {
               <Zap className="w-6 h-6 text-warning" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{formatRupiah(850000)}</p>
+              <p className="text-2xl font-bold">{formatRupiah(listrikTotal)}</p>
               <p className="text-sm text-muted-foreground">Listrik</p>
             </div>
           </CardContent>
@@ -96,7 +225,7 @@ export default function Operasional() {
               <Building2 className="w-6 h-6 text-primary" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{formatRupiah(5000000)}</p>
+              <p className="text-2xl font-bold">{formatRupiah(sewaTotal)}</p>
               <p className="text-sm text-muted-foreground">Sewa</p>
             </div>
           </CardContent>
@@ -117,29 +246,135 @@ export default function Operasional() {
                 <TableHead>Deskripsi</TableHead>
                 <TableHead>Tanggal</TableHead>
                 <TableHead className="text-right">Jumlah</TableHead>
+                <TableHead className="text-right">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {expenses.map((expense) => (
-                <TableRow key={expense.id}>
-                  <TableCell className="font-medium">{expense.id}</TableCell>
-                  <TableCell>
-                    <Badge className={getCategoryColor(expense.kategori)} variant="secondary">
-                      <expense.icon className="w-3 h-3 mr-1" />
-                      {expense.kategori}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{expense.deskripsi}</TableCell>
-                  <TableCell className="text-muted-foreground">{expense.tanggal}</TableCell>
-                  <TableCell className="text-right font-medium text-destructive">
-                    {formatRupiah(expense.jumlah)}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {expenses.map((expense) => {
+                const IconComponent = categoryIcons[expense.kategori] || TrendingDown;
+                return (
+                  <TableRow key={expense.id}>
+                    <TableCell className="font-medium">{expense.id}</TableCell>
+                    <TableCell>
+                      <Badge className={getCategoryColor(expense.kategori)} variant="secondary">
+                        <IconComponent className="w-3 h-3 mr-1" />
+                        {expense.kategori}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{expense.deskripsi}</TableCell>
+                    <TableCell className="text-muted-foreground">{expense.tanggal}</TableCell>
+                    <TableCell className="text-right font-medium text-destructive">
+                      {formatRupiah(expense.jumlah)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8"
+                          onClick={() => handleEdit(expense)}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => handleDelete(expense)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+
+      {/* Add/Edit Dialog */}
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingExpense ? 'Edit Biaya' : 'Tambah Biaya Baru'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Kategori</Label>
+                <Select 
+                  value={formData.kategori} 
+                  onValueChange={(v) => setFormData(prev => ({ ...prev, kategori: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih kategori" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map(cat => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Tanggal</Label>
+                <Input
+                  type="date"
+                  value={formData.tanggal}
+                  onChange={(e) => setFormData(prev => ({ ...prev, tanggal: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Deskripsi</Label>
+              <Textarea
+                placeholder="Deskripsi biaya"
+                value={formData.deskripsi}
+                onChange={(e) => setFormData(prev => ({ ...prev, deskripsi: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Jumlah (Rp)</Label>
+              <Input
+                type="number"
+                placeholder="0"
+                value={formData.jumlah}
+                onChange={(e) => setFormData(prev => ({ ...prev, jumlah: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDialog(false)}>
+              <X className="w-4 h-4 mr-2" />
+              Batal
+            </Button>
+            <Button onClick={handleSave} className="bg-gradient-primary">
+              {editingExpense ? 'Simpan Perubahan' : 'Tambah Biaya'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Biaya?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Anda yakin ingin menghapus biaya "{expenseToDelete?.deskripsi}"? 
+              Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground">
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
