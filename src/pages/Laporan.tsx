@@ -13,20 +13,20 @@ import {
 } from 'lucide-react';
 
 const monthlyData = [
-  { month: 'Jan', penjualan: 45000000, pembelian: 32000000 },
-  { month: 'Feb', penjualan: 52000000, pembelian: 38000000 },
-  { month: 'Mar', penjualan: 48000000, pembelian: 35000000 },
-  { month: 'Apr', penjualan: 61000000, pembelian: 42000000 },
-  { month: 'Mei', penjualan: 55000000, pembelian: 40000000 },
-  { month: 'Jun', penjualan: 67000000, pembelian: 48000000 },
+  { month: 'Jan', penjualan: 450000000, pembelian: 320000000 },
+  { month: 'Feb', penjualan: 520000000, pembelian: 380000000 },
+  { month: 'Mar', penjualan: 480000000, pembelian: 350000000 },
+  { month: 'Apr', penjualan: 610000000, pembelian: 420000000 },
+  { month: 'Mei', penjualan: 550000000, pembelian: 400000000 },
+  { month: 'Jun', penjualan: 670000000, pembelian: 480000000 },
 ];
 
 const topProducts = [
-  { name: 'Indomie Goreng', sold: 1250, revenue: 4375000 },
-  { name: 'Aqua 600ml', sold: 980, revenue: 3920000 },
-  { name: 'Kopi Sachet', sold: 850, revenue: 1700000 },
-  { name: 'Teh Botol 450ml', sold: 720, revenue: 3600000 },
-  { name: 'Roti Tawar', sold: 450, revenue: 6750000 },
+  { name: 'Baja Ringan C75', sold: 1250, revenue: 106250000, unit: 'batang' },
+  { name: 'Spandek 0.35mm', sold: 980, revenue: 93100000, unit: 'lembar' },
+  { name: 'Hollow 4x4', sold: 850, revenue: 55250000, unit: 'batang' },
+  { name: 'Genteng Metal', sold: 720, revenue: 32400000, unit: 'lembar' },
+  { name: 'Reng Baja Ringan', sold: 1500, revenue: 42000000, unit: 'batang' },
 ];
 
 export default function Laporan() {
@@ -39,7 +39,7 @@ export default function Laporan() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Laporan</h1>
-          <p className="text-muted-foreground">Analisis dan laporan bisnis</p>
+          <p className="text-muted-foreground">Analisis dan laporan bisnis baja ringan</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="gap-2">
@@ -61,7 +61,7 @@ export default function Laporan() {
               <TrendingUp className="w-6 h-6 text-success" />
             </div>
             <div>
-              <p className="text-xl font-bold text-success">{formatRupiah(totalPenjualan)}</p>
+              <p className="text-lg font-bold text-success">{formatRupiah(totalPenjualan)}</p>
               <p className="text-sm text-muted-foreground">Total Penjualan</p>
             </div>
           </CardContent>
@@ -72,7 +72,7 @@ export default function Laporan() {
               <TrendingDown className="w-6 h-6 text-destructive" />
             </div>
             <div>
-              <p className="text-xl font-bold text-destructive">{formatRupiah(totalPembelian)}</p>
+              <p className="text-lg font-bold text-destructive">{formatRupiah(totalPembelian)}</p>
               <p className="text-sm text-muted-foreground">Total Pembelian</p>
             </div>
           </CardContent>
@@ -83,7 +83,7 @@ export default function Laporan() {
               <BarChart3 className="w-6 h-6 text-primary" />
             </div>
             <div>
-              <p className="text-xl font-bold text-primary">{formatRupiah(labaKotor)}</p>
+              <p className="text-lg font-bold text-primary">{formatRupiah(labaKotor)}</p>
               <p className="text-sm text-muted-foreground">Laba Kotor</p>
             </div>
           </CardContent>
@@ -117,17 +117,17 @@ export default function Laporan() {
                   <div className="flex justify-between text-sm">
                     <span className="font-medium">{data.month}</span>
                     <span className="text-muted-foreground">
-                      {formatRupiah(data.penjualan - data.pembelian)}
+                      Laba: {formatRupiah(data.penjualan - data.pembelian)}
                     </span>
                   </div>
                   <div className="flex gap-1 h-6">
                     <div
-                      className="bg-success/80 rounded-l-md"
-                      style={{ width: `${(data.penjualan / 70000000) * 50}%` }}
+                      className="bg-success/80 rounded-l-md transition-all"
+                      style={{ width: `${(data.penjualan / 700000000) * 50}%` }}
                     />
                     <div
-                      className="bg-destructive/80 rounded-r-md"
-                      style={{ width: `${(data.pembelian / 70000000) * 50}%` }}
+                      className="bg-destructive/80 rounded-r-md transition-all"
+                      style={{ width: `${(data.pembelian / 700000000) * 50}%` }}
                     />
                   </div>
                 </div>
@@ -163,7 +163,7 @@ export default function Laporan() {
                   </div>
                   <div className="flex-1">
                     <p className="font-medium">{product.name}</p>
-                    <p className="text-sm text-muted-foreground">{product.sold} terjual</p>
+                    <p className="text-sm text-muted-foreground">{product.sold} {product.unit} terjual</p>
                   </div>
                   <p className="font-semibold text-success">{formatRupiah(product.revenue)}</p>
                 </div>

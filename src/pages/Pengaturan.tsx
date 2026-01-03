@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { useStore } from '@/contexts/StoreContext';
 import { toast } from 'sonner';
 import {
@@ -15,11 +16,14 @@ import {
   Download,
   Trash2,
   Loader2,
+  Printer,
+  Package,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 export default function Pengaturan() {
-  const { storeInfo, updateStoreInfo } = useStore();
+  const { storeInfo, printerSettings, stockSettings, updateStoreInfo, updatePrinterSettings, updateStockSettings } = useStore();
   const [formData, setFormData] = useState({
     name: storeInfo.name,
     address: storeInfo.address,
@@ -27,6 +31,7 @@ export default function Pengaturan() {
   });
   const [previewLogo, setPreviewLogo] = useState<string | null>(storeInfo.logo);
   const [isUploading, setIsUploading] = useState(false);
+  const [minStock, setMinStock] = useState(stockSettings.minStockAlert.toString());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -51,15 +56,12 @@ export default function Pengaturan() {
     setIsUploading(true);
 
     try {
-      // Read and convert to base64
       const reader = new FileReader();
       reader.onload = async (event) => {
         const base64 = event.target?.result as string;
         
-        // Create image element for processing
         const img = new Image();
         img.onload = () => {
-          // Create canvas to process image
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
           
@@ -69,26 +71,20 @@ export default function Pengaturan() {
             return;
           }
 
-          // Set canvas size to image size
           canvas.width = img.width;
           canvas.height = img.height;
-          
-          // Draw image
           ctx.drawImage(img, 0, 0);
           
-          // Get image data
           const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
           const data = imageData.data;
           
-          // Simple background removal: make white/near-white pixels transparent
           for (let i = 0; i < data.length; i += 4) {
             const r = data[i];
             const g = data[i + 1];
             const b = data[i + 2];
             
-            // Check if pixel is white or near-white
             if (r > 240 && g > 240 && b > 240) {
-              data[i + 3] = 0; // Set alpha to 0 (transparent)
+              data[i + 3] = 0;
             }
           }
           
@@ -123,11 +119,19 @@ export default function Pengaturan() {
       ...formData,
       logo: previewLogo,
     });
-    toast.success('Pengaturan berhasil disimpan');
+    toast.success('Pengaturan toko berhasil disimpan');
+  };
+
+  const handleSavePrinter = () => {
+    toast.success('Pengaturan printer berhasil disimpan');
+  };
+
+  const handleSaveStock = () => {
+    updateStockSettings({ minStockAlert: parseInt(minStock) || 10 });
+    toast.success('Pengaturan stok berhasil disimpan');
   };
 
   const handleInstallPWA = async () => {
-    // Check if the app is installable
     const deferredPrompt = (window as any).deferredPrompt;
     if (deferredPrompt) {
       deferredPrompt.prompt();
@@ -156,6 +160,14 @@ export default function Pengaturan() {
             <Store className="w-4 h-4" />
             Informasi Toko
           </TabsTrigger>
+          <TabsTrigger value="printer" className="gap-2">
+            <Printer className="w-4 h-4" />
+            Printer
+          </TabsTrigger>
+          <TabsTrigger value="stok" className="gap-2">
+            <Package className="w-4 h-4" />
+            Stok
+          </TabsTrigger>
           <TabsTrigger value="aplikasi" className="gap-2">
             <Download className="w-4 h-4" />
             Aplikasi
@@ -164,7 +176,7 @@ export default function Pengaturan() {
 
         <TabsContent value="toko" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Logo section */}
+            {/* Logo section with improved display */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -172,28 +184,34 @@ export default function Pengaturan() {
                   Logo Toko
                 </CardTitle>
                 <CardDescription>
-                  Upload logo toko Anda. Background akan dihapus otomatis.
+                  Upload logo toko. Background putih akan dihapus otomatis.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="relative w-40 h-40 mx-auto rounded-2xl bg-muted flex items-center justify-center overflow-hidden border-2 border-dashed border-border">
-                  {isUploading ? (
-                    <div className="flex flex-col items-center gap-2">
-                      <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                      <span className="text-sm text-muted-foreground">Processing...</span>
-                    </div>
-                  ) : previewLogo ? (
-                    <img
-                      src={previewLogo}
-                      alt="Logo Preview"
-                      className="w-full h-full object-contain"
-                    />
-                  ) : (
-                    <div className="text-center p-4">
-                      <ImageIcon className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
-                      <span className="text-sm text-muted-foreground">Belum ada logo</span>
-                    </div>
-                  )}
+                {/* Improved logo preview */}
+                <div className="relative w-44 h-44 mx-auto">
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent" />
+                  <div className="relative w-full h-full rounded-2xl bg-background border-2 border-dashed border-primary/30 flex items-center justify-center overflow-hidden shadow-lg">
+                    {isUploading ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                        <span className="text-sm text-muted-foreground">Processing...</span>
+                      </div>
+                    ) : previewLogo ? (
+                      <div className="w-full h-full p-4 flex items-center justify-center">
+                        <img
+                          src={previewLogo}
+                          alt="Logo Preview"
+                          className="max-w-full max-h-full object-contain drop-shadow-lg"
+                        />
+                      </div>
+                    ) : (
+                      <div className="text-center p-4">
+                        <ImageIcon className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
+                        <span className="text-sm text-muted-foreground">Belum ada logo</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <input
@@ -289,37 +307,158 @@ export default function Pengaturan() {
             </Card>
           </div>
 
-          {/* Preview */}
+          {/* Preview with SERAYU POS label */}
           <Card>
             <CardHeader>
               <CardTitle>Preview</CardTitle>
               <CardDescription>Tampilan informasi toko di dashboard</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/50">
+              <div className="flex items-center gap-5 p-5 rounded-xl bg-muted/50 border">
                 {previewLogo ? (
-                  <img
-                    src={previewLogo}
-                    alt="Logo"
-                    className="w-16 h-16 rounded-xl object-contain"
-                  />
+                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/5 to-primary/20 p-2 flex items-center justify-center ring-2 ring-primary/30 shadow-md">
+                    <img
+                      src={previewLogo}
+                      alt="Logo"
+                      className="max-w-full max-h-full object-contain drop-shadow-md"
+                    />
+                  </div>
                 ) : (
-                  <div className="w-16 h-16 rounded-xl bg-gradient-primary flex items-center justify-center">
-                    <span className="text-xl font-bold text-primary-foreground">SP</span>
+                  <div className="w-20 h-20 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-md">
+                    <span className="text-2xl font-bold text-primary-foreground">SP</span>
                   </div>
                 )}
                 <div>
-                  <h3 className="font-semibold text-lg">{formData.name || 'Nama Toko'}</h3>
-                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                    <MapPin className="w-3 h-3" />
+                  <h3 className="font-bold text-lg">{formData.name || 'Nama Toko'}</h3>
+                  <p className="text-xs font-medium text-primary mb-2">SERAYU POS</p>
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <MapPin className="w-3.5 h-3.5" />
                     <span>{formData.address || 'Alamat toko'}</span>
                   </div>
-                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                    <Phone className="w-3 h-3" />
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <Phone className="w-3.5 h-3.5" />
                     <span>{formData.phone || 'Nomor telepon'}</span>
                   </div>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="printer" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Printer className="w-5 h-5" />
+                Pengaturan Printer
+              </CardTitle>
+              <CardDescription>
+                Atur jenis printer dan ukuran kertas untuk cetak nota
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-3">
+                <Label>Jenis Printer</Label>
+                <RadioGroup 
+                  value={printerSettings.type} 
+                  onValueChange={(v) => updatePrinterSettings({ type: v as any })}
+                  className="grid grid-cols-2 gap-4"
+                >
+                  <div className="flex items-center space-x-3 p-4 border rounded-lg cursor-pointer hover:bg-muted/50">
+                    <RadioGroupItem value="thermal" id="thermal" />
+                    <Label htmlFor="thermal" className="cursor-pointer">
+                      <div className="font-medium">Printer Thermal</div>
+                      <div className="text-sm text-muted-foreground">Untuk nota struk kecil</div>
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-3 p-4 border rounded-lg cursor-pointer hover:bg-muted/50">
+                    <RadioGroupItem value="regular" id="regular" />
+                    <Label htmlFor="regular" className="cursor-pointer">
+                      <div className="font-medium">Printer Biasa</div>
+                      <div className="text-sm text-muted-foreground">Untuk invoice A4</div>
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              <div className="space-y-3">
+                <Label>Ukuran Kertas</Label>
+                <RadioGroup 
+                  value={printerSettings.paperWidth} 
+                  onValueChange={(v) => updatePrinterSettings({ paperWidth: v as any })}
+                  className="grid grid-cols-3 gap-4"
+                >
+                  <div className="flex items-center space-x-3 p-4 border rounded-lg cursor-pointer hover:bg-muted/50">
+                    <RadioGroupItem value="58mm" id="58mm" />
+                    <Label htmlFor="58mm" className="cursor-pointer">58mm</Label>
+                  </div>
+                  <div className="flex items-center space-x-3 p-4 border rounded-lg cursor-pointer hover:bg-muted/50">
+                    <RadioGroupItem value="80mm" id="80mm" />
+                    <Label htmlFor="80mm" className="cursor-pointer">80mm</Label>
+                  </div>
+                  <div className="flex items-center space-x-3 p-4 border rounded-lg cursor-pointer hover:bg-muted/50">
+                    <RadioGroupItem value="A4" id="A4" />
+                    <Label htmlFor="A4" className="cursor-pointer">A4</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <Label>Auto Print</Label>
+                  <p className="text-sm text-muted-foreground">Cetak otomatis setelah transaksi</p>
+                </div>
+                <Switch 
+                  checked={printerSettings.autoPrint}
+                  onCheckedChange={(v) => updatePrinterSettings({ autoPrint: v })}
+                />
+              </div>
+
+              <Button onClick={handleSavePrinter} className="w-full gap-2 bg-gradient-primary">
+                <Save className="w-4 h-4" />
+                Simpan Pengaturan Printer
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="stok" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="w-5 h-5" />
+                Pengaturan Stok
+              </CardTitle>
+              <CardDescription>
+                Atur batas minimal stok untuk peringatan restok
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label>Batas Minimal Stok</Label>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Produk dengan stok di bawah angka ini akan muncul di peringatan restok di Dashboard
+                </p>
+                <Input
+                  type="number"
+                  value={minStock}
+                  onChange={(e) => setMinStock(e.target.value)}
+                  placeholder="10"
+                  min={1}
+                />
+              </div>
+
+              <div className="p-4 rounded-lg bg-warning/10 border border-warning/30">
+                <p className="text-sm">
+                  <strong>Contoh:</strong> Jika diset ke {minStock || 10}, maka produk dengan stok ≤ {minStock || 10} 
+                  akan ditampilkan di peringatan "Stok Rendah" di halaman Dashboard.
+                </p>
+              </div>
+
+              <Button onClick={handleSaveStock} className="w-full gap-2 bg-gradient-primary">
+                <Save className="w-4 h-4" />
+                Simpan Pengaturan Stok
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>

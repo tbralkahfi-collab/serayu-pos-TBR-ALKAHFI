@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { formatRupiah } from '@/components/RupiahIcon';
+import { toast } from 'sonner';
 import {
   Search,
   Plus,
@@ -10,6 +12,7 @@ import {
   Trash2,
   Package,
   Filter,
+  X,
 } from 'lucide-react';
 import {
   Table,
@@ -20,35 +23,162 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
-const sampleProducts = [
-  { id: '1', name: 'Indomie Goreng', sku: 'SKU001', price: 3500, stock: 150, category: 'Makanan' },
-  { id: '2', name: 'Aqua 600ml', sku: 'SKU002', price: 4000, stock: 200, category: 'Minuman' },
-  { id: '3', name: 'Roti Tawar', sku: 'SKU003', price: 15000, stock: 25, category: 'Makanan' },
-  { id: '4', name: 'Teh Botol 450ml', sku: 'SKU004', price: 5000, stock: 100, category: 'Minuman' },
-  { id: '5', name: 'Sabun Mandi', sku: 'SKU005', price: 8500, stock: 75, category: 'Perawatan' },
-  { id: '6', name: 'Shampoo Sachet', sku: 'SKU006', price: 1500, stock: 300, category: 'Perawatan' },
-  { id: '7', name: 'Kopi Sachet', sku: 'SKU007', price: 2000, stock: 500, category: 'Minuman' },
-  { id: '8', name: 'Biskuit Roma', sku: 'SKU008', price: 12000, stock: 45, category: 'Makanan' },
+interface Product {
+  id: string;
+  name: string;
+  sku: string;
+  price: number;
+  stock: number;
+  category: string;
+  unit: string;
+}
+
+const initialProducts: Product[] = [
+  { id: '1', name: 'Baja Ringan C75', sku: 'BR-C75', price: 85000, stock: 150, category: 'Rangka Atap', unit: 'batang' },
+  { id: '2', name: 'Baja Ringan C100', sku: 'BR-C100', price: 110000, stock: 100, category: 'Rangka Atap', unit: 'batang' },
+  { id: '3', name: 'Hollow 4x4', sku: 'HL-4x4', price: 65000, stock: 200, category: 'Hollow', unit: 'batang' },
+  { id: '4', name: 'Hollow 2x4', sku: 'HL-2x4', price: 45000, stock: 180, category: 'Hollow', unit: 'batang' },
+  { id: '5', name: 'Reng Baja Ringan', sku: 'BR-RNG', price: 28000, stock: 300, category: 'Rangka Atap', unit: 'batang' },
+  { id: '6', name: 'Spandek 0.30mm', sku: 'SP-030', price: 75000, stock: 8, category: 'Atap', unit: 'lembar' },
+  { id: '7', name: 'Spandek 0.35mm', sku: 'SP-035', price: 95000, stock: 120, category: 'Atap', unit: 'lembar' },
+  { id: '8', name: 'Genteng Metal', sku: 'GM-001', price: 45000, stock: 250, category: 'Atap', unit: 'lembar' },
+  { id: '9', name: 'Sekrup Baja 12mm', sku: 'SK-12', price: 85000, stock: 5, category: 'Aksesoris', unit: 'dus' },
+  { id: '10', name: 'Dynabolt 10mm', sku: 'DB-10', price: 125000, stock: 3, category: 'Aksesoris', unit: 'dus' },
 ];
 
-export default function Produk() {
-  const [search, setSearch] = useState('');
+const categories = ['Rangka Atap', 'Hollow', 'Atap', 'Aksesoris'];
+const units = ['batang', 'lembar', 'dus', 'pcs', 'meter'];
 
-  const filteredProducts = sampleProducts.filter(
+export default function Produk() {
+  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [search, setSearch] = useState('');
+  const [showDialog, setShowDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    sku: '',
+    price: '',
+    stock: '',
+    category: '',
+    unit: '',
+  });
+
+  const filteredProducts = products.filter(
     (p) =>
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.sku.toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleAddNew = () => {
+    setEditingProduct(null);
+    setFormData({ name: '', sku: '', price: '', stock: '', category: '', unit: '' });
+    setShowDialog(true);
+  };
+
+  const handleEdit = (product: Product) => {
+    setEditingProduct(product);
+    setFormData({
+      name: product.name,
+      sku: product.sku,
+      price: product.price.toString(),
+      stock: product.stock.toString(),
+      category: product.category,
+      unit: product.unit,
+    });
+    setShowDialog(true);
+  };
+
+  const handleDelete = (product: Product) => {
+    setProductToDelete(product);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDelete = () => {
+    if (productToDelete) {
+      setProducts(prev => prev.filter(p => p.id !== productToDelete.id));
+      toast.success(`Produk ${productToDelete.name} berhasil dihapus`);
+      setShowDeleteDialog(false);
+      setProductToDelete(null);
+    }
+  };
+
+  const handleSave = () => {
+    if (!formData.name || !formData.sku || !formData.price || !formData.stock || !formData.category || !formData.unit) {
+      toast.error('Semua field harus diisi');
+      return;
+    }
+
+    if (editingProduct) {
+      setProducts(prev => prev.map(p => 
+        p.id === editingProduct.id 
+          ? { 
+              ...p, 
+              name: formData.name,
+              sku: formData.sku,
+              price: parseInt(formData.price),
+              stock: parseInt(formData.stock),
+              category: formData.category,
+              unit: formData.unit,
+            }
+          : p
+      ));
+      toast.success('Produk berhasil diperbarui');
+    } else {
+      const newProduct: Product = {
+        id: Date.now().toString(),
+        name: formData.name,
+        sku: formData.sku,
+        price: parseInt(formData.price),
+        stock: parseInt(formData.stock),
+        category: formData.category,
+        unit: formData.unit,
+      };
+      setProducts(prev => [...prev, newProduct]);
+      toast.success('Produk berhasil ditambahkan');
+    }
+    setShowDialog(false);
+  };
+
+  const totalProducts = products.length;
+  const availableStock = products.filter(p => p.stock > 10).length;
+  const lowStock = products.filter(p => p.stock <= 10 && p.stock > 0).length;
+  const outOfStock = products.filter(p => p.stock === 0).length;
 
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Produk</h1>
-          <p className="text-muted-foreground">Kelola daftar produk toko Anda</p>
+          <p className="text-muted-foreground">Kelola daftar produk baja ringan</p>
         </div>
-        <Button className="gap-2 bg-gradient-primary">
+        <Button className="gap-2 bg-gradient-primary" onClick={handleAddNew}>
           <Plus className="w-4 h-4" />
           Tambah Produk
         </Button>
@@ -62,7 +192,7 @@ export default function Produk() {
               <Package className="w-6 h-6 text-primary" />
             </div>
             <div>
-              <p className="text-2xl font-bold">156</p>
+              <p className="text-2xl font-bold">{totalProducts}</p>
               <p className="text-sm text-muted-foreground">Total Produk</p>
             </div>
           </CardContent>
@@ -73,7 +203,7 @@ export default function Produk() {
               <Package className="w-6 h-6 text-success" />
             </div>
             <div>
-              <p className="text-2xl font-bold">142</p>
+              <p className="text-2xl font-bold">{availableStock}</p>
               <p className="text-sm text-muted-foreground">Stok Tersedia</p>
             </div>
           </CardContent>
@@ -84,7 +214,7 @@ export default function Produk() {
               <Package className="w-6 h-6 text-warning" />
             </div>
             <div>
-              <p className="text-2xl font-bold">10</p>
+              <p className="text-2xl font-bold">{lowStock}</p>
               <p className="text-sm text-muted-foreground">Stok Menipis</p>
             </div>
           </CardContent>
@@ -95,7 +225,7 @@ export default function Produk() {
               <Package className="w-6 h-6 text-destructive" />
             </div>
             <div>
-              <p className="text-2xl font-bold">4</p>
+              <p className="text-2xl font-bold">{outOfStock}</p>
               <p className="text-sm text-muted-foreground">Stok Habis</p>
             </div>
           </CardContent>
@@ -147,22 +277,32 @@ export default function Produk() {
                   <TableCell className="text-right">
                     <span
                       className={
-                        product.stock < 30
+                        product.stock === 0
                           ? 'text-destructive font-medium'
-                          : product.stock < 50
+                          : product.stock <= 10
                           ? 'text-warning font-medium'
                           : 'text-foreground'
                       }
                     >
-                      {product.stock}
+                      {product.stock} {product.unit}
                     </span>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8"
+                        onClick={() => handleEdit(product)}
+                      >
                         <Edit className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(product)}
+                      >
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
@@ -173,6 +313,117 @@ export default function Produk() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Add/Edit Dialog */}
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingProduct ? 'Edit Produk' : 'Tambah Produk Baru'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Nama Produk</Label>
+                <Input
+                  placeholder="Contoh: Baja Ringan C75"
+                  value={formData.name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>SKU</Label>
+                <Input
+                  placeholder="Contoh: BR-C75"
+                  value={formData.sku}
+                  onChange={(e) => setFormData(prev => ({ ...prev, sku: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Kategori</Label>
+                <Select 
+                  value={formData.category} 
+                  onValueChange={(v) => setFormData(prev => ({ ...prev, category: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih kategori" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map(cat => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Satuan</Label>
+                <Select 
+                  value={formData.unit} 
+                  onValueChange={(v) => setFormData(prev => ({ ...prev, unit: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih satuan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {units.map(unit => (
+                      <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Harga (Rp)</Label>
+                <Input
+                  type="number"
+                  placeholder="0"
+                  value={formData.price}
+                  onChange={(e) => setFormData(prev => ({ ...prev, price: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Stok</Label>
+                <Input
+                  type="number"
+                  placeholder="0"
+                  value={formData.stock}
+                  onChange={(e) => setFormData(prev => ({ ...prev, stock: e.target.value }))}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDialog(false)}>
+              <X className="w-4 h-4 mr-2" />
+              Batal
+            </Button>
+            <Button onClick={handleSave} className="bg-gradient-primary">
+              {editingProduct ? 'Simpan Perubahan' : 'Tambah Produk'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Produk?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Anda yakin ingin menghapus produk "{productToDelete?.name}"? 
+              Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground">
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
