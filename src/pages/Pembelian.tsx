@@ -50,23 +50,26 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 interface Purchase {
   id: string;
   supplier: string;
   date: string;
   total: number;
+  dp: number;
+  paymentMethod: 'cash' | 'transfer';
   status: string;
   items: string;
   notes: string;
 }
 
 const initialPurchases: Purchase[] = [
-  { id: 'PO001', supplier: 'PT Baja Steel Indonesia', date: '2024-01-15', total: 45000000, status: 'Selesai', items: 'Baja Ringan C75 x 500btg', notes: '' },
-  { id: 'PO002', supplier: 'CV Spandek Jaya', date: '2024-01-14', total: 28500000, status: 'Selesai', items: 'Spandek 0.35mm x 300lbr', notes: '' },
-  { id: 'PO003', supplier: 'UD Hollow Mandiri', date: '2024-01-13', total: 13000000, status: 'Pending', items: 'Hollow 4x4 x 200btg', notes: 'Menunggu konfirmasi' },
-  { id: 'PO004', supplier: 'PT Atap Metal', date: '2024-01-12', total: 22500000, status: 'Dikirim', items: 'Genteng Metal x 500lbr', notes: 'Est. tiba 3 hari' },
-  { id: 'PO005', supplier: 'CV Fastener Indo', date: '2024-01-11', total: 8500000, status: 'Selesai', items: 'Sekrup & Dynabolt', notes: '' },
+  { id: 'PO001', supplier: 'PT Baja Steel Indonesia', date: '2024-01-15', total: 45000000, dp: 15000000, paymentMethod: 'transfer', status: 'Selesai', items: 'Baja Ringan C75 x 500btg', notes: '' },
+  { id: 'PO002', supplier: 'CV Spandek Jaya', date: '2024-01-14', total: 28500000, dp: 0, paymentMethod: 'cash', status: 'Selesai', items: 'Spandek 0.35mm x 300lbr', notes: '' },
+  { id: 'PO003', supplier: 'UD Hollow Mandiri', date: '2024-01-13', total: 13000000, dp: 5000000, paymentMethod: 'transfer', status: 'Pending', items: 'Hollow 4x4 x 200btg', notes: 'Menunggu konfirmasi' },
+  { id: 'PO004', supplier: 'PT Atap Metal', date: '2024-01-12', total: 22500000, dp: 10000000, paymentMethod: 'transfer', status: 'Dikirim', items: 'Genteng Metal x 500lbr', notes: 'Est. tiba 3 hari' },
+  { id: 'PO005', supplier: 'CV Fastener Indo', date: '2024-01-11', total: 8500000, dp: 0, paymentMethod: 'cash', status: 'Selesai', items: 'Sekrup & Dynabolt', notes: '' },
 ];
 
 const suppliers = [
@@ -80,7 +83,7 @@ const suppliers = [
 const getStatusColor = (status: string) => {
   switch (status) {
     case 'Selesai':
-      return 'bg-success/10 text-success';
+      return 'bg-secondary/10 text-secondary';
     case 'Pending':
       return 'bg-warning/10 text-warning';
     case 'Dikirim':
@@ -102,6 +105,8 @@ export default function Pembelian() {
     supplier: '',
     date: '',
     total: '',
+    dp: '',
+    paymentMethod: 'cash' as 'cash' | 'transfer',
     status: 'Pending',
     items: '',
     notes: '',
@@ -109,7 +114,7 @@ export default function Pembelian() {
 
   const handleAddNew = () => {
     setEditingPurchase(null);
-    setFormData({ supplier: '', date: '', total: '', status: 'Pending', items: '', notes: '' });
+    setFormData({ supplier: '', date: '', total: '', dp: '', paymentMethod: 'cash', status: 'Pending', items: '', notes: '' });
     setShowDialog(true);
   };
 
@@ -119,6 +124,8 @@ export default function Pembelian() {
       supplier: purchase.supplier,
       date: purchase.date,
       total: purchase.total.toString(),
+      dp: purchase.dp.toString(),
+      paymentMethod: purchase.paymentMethod,
       status: purchase.status,
       items: purchase.items,
       notes: purchase.notes,
@@ -159,6 +166,8 @@ export default function Pembelian() {
               supplier: formData.supplier,
               date: formData.date,
               total: parseInt(formData.total),
+              dp: parseInt(formData.dp) || 0,
+              paymentMethod: formData.paymentMethod,
               status: formData.status,
               items: formData.items,
               notes: formData.notes,
@@ -172,6 +181,8 @@ export default function Pembelian() {
         supplier: formData.supplier,
         date: formData.date,
         total: parseInt(formData.total),
+        dp: parseInt(formData.dp) || 0,
+        paymentMethod: formData.paymentMethod,
         status: formData.status,
         items: formData.items,
         notes: formData.notes,
@@ -184,11 +195,12 @@ export default function Pembelian() {
 
   const totalPurchases = purchases.length;
   const totalAmount = purchases.reduce((sum, p) => sum + p.total, 0);
+  const totalDP = purchases.reduce((sum, p) => sum + p.dp, 0);
   const pendingCount = purchases.filter(p => p.status === 'Pending').length;
   const shippingCount = purchases.filter(p => p.status === 'Dikirim').length;
 
   return (
-    <div className="p-8">
+    <div className="p-8 bg-background min-h-screen">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Pembelian</h1>
@@ -202,7 +214,7 @@ export default function Pembelian() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Card>
+        <Card className="border-l-4 border-l-primary bg-card">
           <CardContent className="p-4 flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
               <ShoppingBag className="w-6 h-6 text-primary" />
@@ -213,18 +225,18 @@ export default function Pembelian() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-l-4 border-l-secondary bg-card">
           <CardContent className="p-4 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-success/10 flex items-center justify-center">
-              <TrendingUp className="w-6 h-6 text-success" />
+            <div className="w-12 h-12 rounded-xl bg-secondary/10 flex items-center justify-center">
+              <TrendingUp className="w-6 h-6 text-secondary" />
             </div>
             <div>
               <p className="text-xl font-bold">{formatRupiah(totalAmount)}</p>
-              <p className="text-sm text-muted-foreground">Bulan Ini</p>
+              <p className="text-sm text-muted-foreground">Total Nilai</p>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-l-4 border-l-warning bg-card">
           <CardContent className="p-4 flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-warning/10 flex items-center justify-center">
               <Package className="w-6 h-6 text-warning" />
@@ -235,7 +247,7 @@ export default function Pembelian() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-l-4 border-l-info bg-card">
           <CardContent className="p-4 flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-info/10 flex items-center justify-center">
               <Truck className="w-6 h-6 text-info" />
@@ -249,27 +261,29 @@ export default function Pembelian() {
       </div>
 
       {/* Purchase list */}
-      <Card>
+      <Card className="bg-card">
         <CardHeader>
           <CardTitle>Daftar Pembelian</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
-              <TableRow>
+              <TableRow className="bg-muted/50">
                 <TableHead>No. PO</TableHead>
                 <TableHead>Supplier</TableHead>
                 <TableHead>Item</TableHead>
                 <TableHead>Tanggal</TableHead>
                 <TableHead className="text-right">Total</TableHead>
+                <TableHead className="text-right">DP</TableHead>
+                <TableHead>Pembayaran</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {purchases.map((purchase) => (
-                <TableRow key={purchase.id}>
-                  <TableCell className="font-medium">{purchase.id}</TableCell>
+                <TableRow key={purchase.id} className="hover:bg-muted/30">
+                  <TableCell className="font-medium text-primary">{purchase.id}</TableCell>
                   <TableCell>{purchase.supplier}</TableCell>
                   <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
                     {purchase.items}
@@ -278,6 +292,14 @@ export default function Pembelian() {
                   <TableCell className="text-right font-medium">
                     {formatRupiah(purchase.total)}
                   </TableCell>
+                  <TableCell className="text-right font-medium text-warning">
+                    {purchase.dp > 0 ? formatRupiah(purchase.dp) : '-'}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary" className={purchase.paymentMethod === 'transfer' ? 'bg-info/10 text-info' : 'bg-secondary/10 text-secondary'}>
+                      {purchase.paymentMethod === 'transfer' ? 'Transfer' : 'Cash'}
+                    </Badge>
+                  </TableCell>
                   <TableCell>
                     <Badge className={getStatusColor(purchase.status)} variant="secondary">
                       {purchase.status}
@@ -285,13 +307,13 @@ export default function Pembelian() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleView(purchase)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-info/10 hover:text-info" onClick={() => handleView(purchase)}>
                         <Eye className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(purchase)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary/10 hover:text-secondary" onClick={() => handleEdit(purchase)}>
                         <Edit className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDelete(purchase)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(purchase)}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
@@ -309,7 +331,7 @@ export default function Pembelian() {
           <DialogHeader>
             <DialogTitle>{editingPurchase ? 'Edit Pembelian' : 'Buat Pembelian Baru'}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
             <div className="space-y-2">
               <Label>Supplier</Label>
               <Select 
@@ -360,14 +382,48 @@ export default function Pembelian() {
                 onChange={(e) => setFormData(prev => ({ ...prev, items: e.target.value }))}
               />
             </div>
-            <div className="space-y-2">
-              <Label>Total (Rp)</Label>
-              <Input
-                type="number"
-                placeholder="0"
-                value={formData.total}
-                onChange={(e) => setFormData(prev => ({ ...prev, total: e.target.value }))}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Total (Rp)</Label>
+                <Input
+                  type="number"
+                  placeholder="0"
+                  value={formData.total}
+                  onChange={(e) => setFormData(prev => ({ ...prev, total: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>DP / Uang Muka (Rp)</Label>
+                <Input
+                  type="number"
+                  placeholder="0 (opsional)"
+                  value={formData.dp}
+                  onChange={(e) => setFormData(prev => ({ ...prev, dp: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="space-y-3">
+              <Label>Metode Pembayaran</Label>
+              <RadioGroup 
+                value={formData.paymentMethod} 
+                onValueChange={(v) => setFormData(prev => ({ ...prev, paymentMethod: v as 'cash' | 'transfer' }))}
+                className="grid grid-cols-2 gap-4"
+              >
+                <div className="flex items-center space-x-3 p-4 border rounded-lg cursor-pointer hover:bg-secondary/5 hover:border-secondary">
+                  <RadioGroupItem value="cash" id="cash" />
+                  <Label htmlFor="cash" className="cursor-pointer flex-1">
+                    <div className="font-medium">Cash / Tunai</div>
+                    <div className="text-sm text-muted-foreground">Bayar langsung</div>
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-3 p-4 border rounded-lg cursor-pointer hover:bg-info/5 hover:border-info">
+                  <RadioGroupItem value="transfer" id="transfer" />
+                  <Label htmlFor="transfer" className="cursor-pointer flex-1">
+                    <div className="font-medium">Transfer Bank</div>
+                    <div className="text-sm text-muted-foreground">Via rekening</div>
+                  </Label>
+                </div>
+              </RadioGroup>
             </div>
             <div className="space-y-2">
               <Label>Catatan</Label>
@@ -394,7 +450,7 @@ export default function Pembelian() {
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Detail Pembelian {selectedPurchase?.id}</DialogTitle>
+            <DialogTitle className="text-primary">Detail Pembelian {selectedPurchase?.id}</DialogTitle>
           </DialogHeader>
           {selectedPurchase && (
             <div className="space-y-4">
@@ -418,9 +474,25 @@ export default function Pembelian() {
                   <p className="font-medium text-lg">{formatRupiah(selectedPurchase.total)}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Status</p>
-                  <Badge className={getStatusColor(selectedPurchase.status)}>{selectedPurchase.status}</Badge>
+                  <p className="text-sm text-muted-foreground">DP</p>
+                  <p className="font-medium text-lg text-warning">{selectedPurchase.dp > 0 ? formatRupiah(selectedPurchase.dp) : '-'}</p>
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Sisa Bayar</p>
+                  <p className="font-medium text-lg text-primary">{formatRupiah(selectedPurchase.total - selectedPurchase.dp)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Metode</p>
+                  <Badge variant="secondary" className={selectedPurchase.paymentMethod === 'transfer' ? 'bg-info/10 text-info' : 'bg-secondary/10 text-secondary'}>
+                    {selectedPurchase.paymentMethod === 'transfer' ? 'Transfer' : 'Cash'}
+                  </Badge>
+                </div>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Status</p>
+                <Badge className={getStatusColor(selectedPurchase.status)}>{selectedPurchase.status}</Badge>
               </div>
               {selectedPurchase.notes && (
                 <div>

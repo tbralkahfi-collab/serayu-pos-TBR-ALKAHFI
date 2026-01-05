@@ -36,24 +36,26 @@ export function AppSidebar() {
   const location = useLocation();
 
   return (
-    <aside className="w-64 h-screen bg-sidebar flex flex-col border-r border-sidebar-border">
+    <aside className="w-64 h-screen bg-card flex flex-col border-r border-border shadow-lg">
       {/* Header */}
-      <div className="p-6 border-b border-sidebar-border">
+      <div className="p-6 border-b border-border bg-gradient-to-r from-primary/5 to-secondary/5">
         <div className="flex items-center gap-3">
           {storeInfo.logo ? (
-            <img
-              src={storeInfo.logo}
-              alt="Logo"
-              className="w-12 h-12 rounded-xl object-contain"
-            />
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 p-1 flex items-center justify-center ring-2 ring-primary/20">
+              <img
+                src={storeInfo.logo}
+                alt="Logo"
+                className="w-full h-full rounded-lg object-contain"
+              />
+            </div>
           ) : (
             <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">
               <span className="text-lg font-bold text-primary-foreground">SP</span>
             </div>
           )}
           <div>
-            <h1 className="text-lg font-bold text-sidebar-foreground">{storeInfo.name}</h1>
-            <p className="text-xs text-sidebar-foreground/60">Point of Sale</p>
+            <h1 className="text-lg font-bold text-foreground">{storeInfo.name}</h1>
+            <p className="text-xs text-primary font-medium">SERAYU POS</p>
           </div>
         </div>
       </div>
@@ -69,11 +71,11 @@ export function AppSidebar() {
               className={cn(
                 'flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group',
                 isActive
-                  ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                  ? 'bg-primary text-primary-foreground shadow-md'
+                  : 'text-muted-foreground hover:bg-secondary/10 hover:text-secondary'
               )}
             >
-              <item.icon className={cn('w-5 h-5', isActive && 'text-sidebar-primary-foreground')} />
+              <item.icon className={cn('w-5 h-5', isActive && 'text-primary-foreground')} />
               <span className="font-medium">{item.label}</span>
               {isActive && (
                 <ChevronRight className="w-4 h-4 ml-auto" />
@@ -84,22 +86,22 @@ export function AppSidebar() {
       </nav>
 
       {/* User section */}
-      <div className="p-4 border-t border-sidebar-border">
+      <div className="p-4 border-t border-border bg-muted/30">
         <div className="flex items-center gap-3 mb-4 px-2">
-          <div className="w-10 h-10 rounded-full bg-sidebar-accent flex items-center justify-center">
-            <span className="text-sm font-semibold text-sidebar-accent-foreground">
+          <div className="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center ring-2 ring-secondary/30">
+            <span className="text-sm font-semibold text-secondary">
               {user?.username.charAt(0).toUpperCase()}
             </span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-sidebar-foreground truncate">{user?.username}</p>
-            <p className="text-xs text-sidebar-foreground/60">{user?.role}</p>
+            <p className="text-sm font-medium text-foreground truncate">{user?.username}</p>
+            <p className="text-xs text-muted-foreground">{user?.role}</p>
           </div>
         </div>
         <Button
           variant="ghost"
           onClick={logout}
-          className="w-full justify-start gap-3 text-sidebar-foreground/70 hover:text-destructive hover:bg-destructive/10"
+          className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
         >
           <LogOut className="w-5 h-5" />
           <span>Keluar</span>
