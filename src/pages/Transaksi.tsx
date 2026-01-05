@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { formatRupiah } from '@/components/RupiahIcon';
 import { toast } from 'sonner';
 import {
@@ -13,6 +14,9 @@ import {
   Calendar,
   FileSpreadsheet,
   File,
+  Edit,
+  Trash2,
+  X,
 } from 'lucide-react';
 import {
   Table,
@@ -28,6 +32,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import {
   DropdownMenu,
@@ -35,18 +40,41 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+interface TransactionItem {
+  nama: string;
+  qty: number;
+  harga: number;
+}
 
 interface Transaction {
   id: string;
   pelanggan: string;
   tanggal: string;
-  items: { nama: string; qty: number; harga: number }[];
+  items: TransactionItem[];
   total: number;
   metode: string;
   status: string;
 }
 
-const transactions: Transaction[] = [
+const initialTransactions: Transaction[] = [
   { id: 'TRX001', pelanggan: 'Bpk. Agus', tanggal: '2024-01-15 10:30', items: [{ nama: 'Baja Ringan C75', qty: 50, harga: 85000 }], total: 4250000, metode: 'Tunai', status: 'Selesai' },
   { id: 'TRX002', pelanggan: 'CV Maju Jaya', tanggal: '2024-01-15 11:15', items: [{ nama: 'Spandek 0.35mm', qty: 100, harga: 95000 }], total: 9500000, metode: 'Transfer', status: 'Selesai' },
   { id: 'TRX003', pelanggan: 'Bpk. Joko', tanggal: '2024-01-15 12:45', items: [{ nama: 'Hollow 4x4', qty: 30, harga: 65000 }], total: 1950000, metode: 'Tunai', status: 'Selesai' },
@@ -59,7 +87,7 @@ const transactions: Transaction[] = [
 const getMethodColor = (metode: string) => {
   switch (metode) {
     case 'Tunai':
-      return 'bg-success/10 text-success';
+      return 'bg-secondary/10 text-secondary';
     case 'Transfer':
       return 'bg-info/10 text-info';
     case 'Kartu':
@@ -70,9 +98,18 @@ const getMethodColor = (metode: string) => {
 };
 
 export default function Transaksi() {
+  const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
   const [search, setSearch] = useState('');
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    pelanggan: '',
+    metode: '',
+    status: '',
+  });
 
   const filteredTransactions = transactions.filter(
     (t) =>
@@ -89,8 +126,43 @@ export default function Transaksi() {
     setShowDetailDialog(true);
   };
 
+  const handleEdit = (tx: Transaction) => {
+    setSelectedTransaction(tx);
+    setEditFormData({
+      pelanggan: tx.pelanggan,
+      metode: tx.metode,
+      status: tx.status,
+    });
+    setShowEditDialog(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!selectedTransaction) return;
+    
+    setTransactions(prev => prev.map(t => 
+      t.id === selectedTransaction.id
+        ? { ...t, pelanggan: editFormData.pelanggan, metode: editFormData.metode, status: editFormData.status }
+        : t
+    ));
+    toast.success(`Transaksi ${selectedTransaction.id} berhasil diperbarui`);
+    setShowEditDialog(false);
+  };
+
+  const handleDelete = (tx: Transaction) => {
+    setTransactionToDelete(tx);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDelete = () => {
+    if (transactionToDelete) {
+      setTransactions(prev => prev.filter(t => t.id !== transactionToDelete.id));
+      toast.success(`Transaksi ${transactionToDelete.id} berhasil dihapus`);
+      setShowDeleteDialog(false);
+      setTransactionToDelete(null);
+    }
+  };
+
   const exportToExcel = () => {
-    // Create CSV content
     const headers = ['ID Transaksi', 'Pelanggan', 'Tanggal', 'Items', 'Total', 'Metode', 'Status'];
     const rows = filteredTransactions.map(tx => [
       tx.id,
@@ -107,7 +179,6 @@ export default function Transaksi() {
       ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
     ].join('\n');
 
-    // Download
     const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -118,7 +189,6 @@ export default function Transaksi() {
   };
 
   const exportToPDF = () => {
-    // Create print-friendly HTML
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       toast.error('Popup diblokir. Izinkan popup untuk export PDF.');
@@ -132,15 +202,13 @@ export default function Transaksi() {
         <title>Laporan Transaksi</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 20px; }
-          h1 { text-align: center; margin-bottom: 20px; }
+          h1 { text-align: center; margin-bottom: 20px; color: #dc2626; }
           table { width: 100%; border-collapse: collapse; margin-top: 20px; }
           th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-          th { background-color: #f4f4f4; }
-          .total { font-weight: bold; }
+          th { background-color: #dc2626; color: white; }
+          .total { font-weight: bold; background-color: #dcfce7; }
           .header-info { margin-bottom: 20px; }
-          @media print {
-            button { display: none; }
-          }
+          @media print { button { display: none; } }
         </style>
       </head>
       <body>
@@ -183,7 +251,7 @@ export default function Transaksi() {
             </tr>
           </tfoot>
         </table>
-        <button onclick="window.print();" style="margin-top: 20px; padding: 10px 20px; cursor: pointer;">
+        <button onclick="window.print();" style="margin-top: 20px; padding: 10px 20px; cursor: pointer; background: #dc2626; color: white; border: none; border-radius: 8px;">
           Print / Save as PDF
         </button>
       </body>
@@ -195,7 +263,7 @@ export default function Transaksi() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-8 bg-background min-h-screen">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Transaksi</h1>
@@ -203,18 +271,18 @@ export default function Transaksi() {
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2 border-primary/30 hover:bg-primary/5">
               <Download className="w-4 h-4" />
               Export
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent>
             <DropdownMenuItem onClick={exportToExcel} className="gap-2 cursor-pointer">
-              <FileSpreadsheet className="w-4 h-4" />
+              <FileSpreadsheet className="w-4 h-4 text-secondary" />
               Export Excel (CSV)
             </DropdownMenuItem>
             <DropdownMenuItem onClick={exportToPDF} className="gap-2 cursor-pointer">
-              <File className="w-4 h-4" />
+              <File className="w-4 h-4 text-primary" />
               Export PDF
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -223,7 +291,7 @@ export default function Transaksi() {
 
       {/* Summary */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Card>
+        <Card className="border-l-4 border-l-primary bg-card">
           <CardContent className="p-4 flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
               <FileText className="w-6 h-6 text-primary" />
@@ -234,21 +302,21 @@ export default function Transaksi() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-l-4 border-l-secondary bg-card">
           <CardContent className="p-4 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-success/10 flex items-center justify-center">
-              <span className="text-success font-bold">Rp</span>
+            <div className="w-12 h-12 rounded-xl bg-secondary/10 flex items-center justify-center">
+              <span className="text-secondary font-bold">Rp</span>
             </div>
             <div>
-              <p className="text-xl font-bold text-success">{formatRupiah(totalToday)}</p>
+              <p className="text-xl font-bold text-secondary">{formatRupiah(totalToday)}</p>
               <p className="text-sm text-muted-foreground">Total Hari Ini</p>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-l-4 border-l-info bg-card">
           <CardContent className="p-4 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center">
-              <Calendar className="w-6 h-6 text-accent" />
+            <div className="w-12 h-12 rounded-xl bg-info/10 flex items-center justify-center">
+              <Calendar className="w-6 h-6 text-info" />
             </div>
             <div>
               <p className="text-xl font-bold">{formatRupiah(Math.round(totalToday / transactions.length))}</p>
@@ -256,7 +324,7 @@ export default function Transaksi() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-l-4 border-l-warning bg-card">
           <CardContent className="p-4 flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-warning/10 flex items-center justify-center">
               <FileText className="w-6 h-6 text-warning" />
@@ -270,7 +338,7 @@ export default function Transaksi() {
       </div>
 
       {/* Transaction list */}
-      <Card>
+      <Card className="bg-card">
         <CardHeader className="pb-4">
           <div className="flex items-center gap-4">
             <div className="relative flex-1">
@@ -279,10 +347,10 @@ export default function Transaksi() {
                 placeholder="Cari ID transaksi atau pelanggan..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-10"
+                className="pl-10 border-primary/20 focus:border-primary"
               />
             </div>
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2 border-secondary/30 hover:bg-secondary/5">
               <Filter className="w-4 h-4" />
               Filter
             </Button>
@@ -291,7 +359,7 @@ export default function Transaksi() {
         <CardContent>
           <Table>
             <TableHeader>
-              <TableRow>
+              <TableRow className="bg-muted/50">
                 <TableHead>ID Transaksi</TableHead>
                 <TableHead>Pelanggan</TableHead>
                 <TableHead>Tanggal & Waktu</TableHead>
@@ -304,8 +372,8 @@ export default function Transaksi() {
             </TableHeader>
             <TableBody>
               {filteredTransactions.map((tx) => (
-                <TableRow key={tx.id}>
-                  <TableCell className="font-medium">{tx.id}</TableCell>
+                <TableRow key={tx.id} className="hover:bg-muted/30">
+                  <TableCell className="font-medium text-primary">{tx.id}</TableCell>
                   <TableCell>{tx.pelanggan}</TableCell>
                   <TableCell className="text-muted-foreground">{tx.tanggal}</TableCell>
                   <TableCell className="text-center">{tx.items.reduce((sum, i) => sum + i.qty, 0)}</TableCell>
@@ -316,19 +384,40 @@ export default function Transaksi() {
                   </TableCell>
                   <TableCell className="text-right font-medium">{formatRupiah(tx.total)}</TableCell>
                   <TableCell>
-                    <Badge variant={tx.status === 'Selesai' ? 'default' : 'secondary'}>
+                    <Badge 
+                      variant={tx.status === 'Selesai' ? 'default' : 'secondary'}
+                      className={tx.status === 'Selesai' ? 'bg-secondary text-secondary-foreground' : ''}
+                    >
                       {tx.status}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-8 w-8"
-                      onClick={() => handleViewDetail(tx)}
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 hover:bg-info/10 hover:text-info"
+                        onClick={() => handleViewDetail(tx)}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 hover:bg-secondary/10 hover:text-secondary"
+                        onClick={() => handleEdit(tx)}
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 hover:bg-destructive/10 text-destructive"
+                        onClick={() => handleDelete(tx)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -341,7 +430,7 @@ export default function Transaksi() {
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Detail Transaksi {selectedTransaction?.id}</DialogTitle>
+            <DialogTitle className="text-primary">Detail Transaksi {selectedTransaction?.id}</DialogTitle>
           </DialogHeader>
           {selectedTransaction && (
             <div className="space-y-4">
@@ -385,6 +474,83 @@ export default function Transaksi() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Transaksi {selectedTransaction?.id}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Pelanggan</Label>
+              <Input
+                value={editFormData.pelanggan}
+                onChange={(e) => setEditFormData(prev => ({ ...prev, pelanggan: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Metode Pembayaran</Label>
+              <Select 
+                value={editFormData.metode} 
+                onValueChange={(v) => setEditFormData(prev => ({ ...prev, metode: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Tunai">Tunai</SelectItem>
+                  <SelectItem value="Transfer">Transfer</SelectItem>
+                  <SelectItem value="Kartu">Kartu</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select 
+                value={editFormData.status} 
+                onValueChange={(v) => setEditFormData(prev => ({ ...prev, status: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Pending">Pending</SelectItem>
+                  <SelectItem value="Selesai">Selesai</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+              <X className="w-4 h-4 mr-2" />
+              Batal
+            </Button>
+            <Button onClick={handleSaveEdit} className="bg-gradient-primary">
+              Simpan Perubahan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Transaksi?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Anda yakin ingin menghapus transaksi "{transactionToDelete?.id}"? 
+              Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground">
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

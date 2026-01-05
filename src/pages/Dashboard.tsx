@@ -24,6 +24,7 @@ const stats = [
     change: 12.5,
     icon: TrendingUp,
     positive: true,
+    color: 'secondary',
   },
   {
     title: 'Transaksi',
@@ -32,6 +33,7 @@ const stats = [
     icon: ShoppingCart,
     positive: true,
     isCount: true,
+    color: 'primary',
   },
   {
     title: 'Produk Terjual',
@@ -40,6 +42,7 @@ const stats = [
     icon: Package,
     positive: false,
     isCount: true,
+    color: 'info',
   },
   {
     title: 'Pelanggan Baru',
@@ -48,6 +51,7 @@ const stats = [
     icon: Users,
     positive: true,
     isCount: true,
+    color: 'secondary',
   },
 ];
 
@@ -81,7 +85,7 @@ export default function Dashboard() {
   const productsNeedRestock = lowStockProducts.filter(p => p.stock <= stockSettings.minStockAlert);
 
   return (
-    <div className="p-8">
+    <div className="p-8 bg-background min-h-screen">
       {/* Header */}
       <div className="flex items-start justify-between mb-8 gap-6 flex-wrap">
         <div>
@@ -94,13 +98,13 @@ export default function Dashboard() {
         </div>
 
         {/* Store info card with improved logo display */}
-        <Card className="min-w-[320px] border-2 border-primary/20 shadow-lg">
+        <Card className="min-w-[320px] border-2 border-primary/20 shadow-lg bg-card">
           <CardContent className="p-5">
             <div className="flex items-center gap-5">
               {/* Improved logo display */}
               <div className="relative">
                 {storeInfo.logo ? (
-                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/5 to-primary/20 p-2 flex items-center justify-center ring-2 ring-primary/30 shadow-md">
+                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/10 to-secondary/10 p-2 flex items-center justify-center ring-2 ring-primary/30 shadow-md">
                     <img
                       src={storeInfo.logo}
                       alt="Logo Toko"
@@ -117,11 +121,11 @@ export default function Dashboard() {
                 <h3 className="font-bold text-lg text-foreground truncate">{storeInfo.name}</h3>
                 <p className="text-xs font-medium text-primary mb-2">SERAYU POS</p>
                 <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <MapPin className="w-3.5 h-3.5 shrink-0" />
+                  <MapPin className="w-3.5 h-3.5 shrink-0 text-secondary" />
                   <span className="truncate">{storeInfo.address}</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <Phone className="w-3.5 h-3.5 shrink-0" />
+                  <Phone className="w-3.5 h-3.5 shrink-0 text-info" />
                   <span>{storeInfo.phone}</span>
                 </div>
               </div>
@@ -133,15 +137,27 @@ export default function Dashboard() {
       {/* Stats grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {stats.map((stat, index) => (
-          <Card key={index} className="hover:shadow-card-hover transition-shadow">
+          <Card key={index} className={`hover:shadow-lg transition-shadow border-l-4 ${
+            stat.color === 'secondary' ? 'border-l-secondary' :
+            stat.color === 'primary' ? 'border-l-primary' :
+            'border-l-info'
+          } bg-card`}>
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <stat.icon className="w-6 h-6 text-primary" />
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                  stat.color === 'secondary' ? 'bg-secondary/10' :
+                  stat.color === 'primary' ? 'bg-primary/10' :
+                  'bg-info/10'
+                }`}>
+                  <stat.icon className={`w-6 h-6 ${
+                    stat.color === 'secondary' ? 'text-secondary' :
+                    stat.color === 'primary' ? 'text-primary' :
+                    'text-info'
+                  }`} />
                 </div>
                 <div
                   className={`flex items-center gap-1 text-sm font-medium ${
-                    stat.positive ? 'text-success' : 'text-destructive'
+                    stat.positive ? 'text-secondary' : 'text-destructive'
                   }`}
                 >
                   {stat.positive ? (
@@ -177,7 +193,7 @@ export default function Dashboard() {
               {productsNeedRestock.map((product) => (
                 <div
                   key={product.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-background border border-warning/30"
+                  className="flex items-center justify-between p-3 rounded-lg bg-card border border-warning/30"
                 >
                   <div>
                     <p className="font-medium text-foreground text-sm">{product.name}</p>
@@ -196,7 +212,7 @@ export default function Dashboard() {
       {/* Content grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent transactions */}
-        <Card>
+        <Card className="bg-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ShoppingCart className="w-5 h-5 text-primary" />
@@ -208,10 +224,10 @@ export default function Dashboard() {
               {recentTransactions.map((tx) => (
                 <div
                   key={tx.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                  className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center">
                       <RupiahIcon size="sm" />
                     </div>
                     <div>
@@ -220,7 +236,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-foreground">{formatRupiah(tx.amount)}</p>
+                    <p className="font-semibold text-secondary">{formatRupiah(tx.amount)}</p>
                     <p className="text-sm text-muted-foreground">{tx.time}</p>
                   </div>
                 </div>
@@ -230,7 +246,7 @@ export default function Dashboard() {
         </Card>
 
         {/* Quick actions */}
-        <Card>
+        <Card className="bg-card">
           <CardHeader>
             <CardTitle>Aksi Cepat</CardTitle>
           </CardHeader>
@@ -238,30 +254,30 @@ export default function Dashboard() {
             <div className="grid grid-cols-2 gap-4">
               <button 
                 onClick={() => navigate('/kasir')}
-                className="p-6 rounded-xl bg-gradient-primary text-primary-foreground text-center hover:opacity-90 transition-opacity"
+                className="p-6 rounded-xl bg-gradient-primary text-primary-foreground text-center hover:opacity-90 transition-opacity shadow-md"
               >
                 <ShoppingCart className="w-8 h-8 mx-auto mb-2" />
                 <span className="font-semibold">Buka Kasir</span>
               </button>
               <button 
                 onClick={() => navigate('/produk')}
-                className="p-6 rounded-xl bg-muted text-foreground text-center hover:bg-muted/80 transition-colors"
+                className="p-6 rounded-xl bg-secondary/10 text-secondary text-center hover:bg-secondary/20 transition-colors border border-secondary/30"
               >
                 <Package className="w-8 h-8 mx-auto mb-2" />
                 <span className="font-semibold">Tambah Produk</span>
               </button>
               <button 
                 onClick={() => navigate('/laporan')}
-                className="p-6 rounded-xl bg-muted text-foreground text-center hover:bg-muted/80 transition-colors"
+                className="p-6 rounded-xl bg-info/10 text-info text-center hover:bg-info/20 transition-colors border border-info/30"
               >
                 <TrendingUp className="w-8 h-8 mx-auto mb-2" />
                 <span className="font-semibold">Lihat Laporan</span>
               </button>
               <button 
                 onClick={() => navigate('/transaksi')}
-                className="p-6 rounded-xl bg-accent/20 text-accent-foreground text-center hover:bg-accent/30 transition-colors"
+                className="p-6 rounded-xl bg-gradient-secondary text-secondary-foreground text-center hover:opacity-90 transition-opacity shadow-md"
               >
-                <Users className="w-8 h-8 mx-auto mb-2 text-accent" />
+                <Users className="w-8 h-8 mx-auto mb-2" />
                 <span className="font-semibold">Transaksi</span>
               </button>
             </div>
