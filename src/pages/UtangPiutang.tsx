@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { formatRupiah } from '@/components/RupiahIcon';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
+import { useData } from '@/contexts/DataContext';
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -43,34 +44,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-
-interface DebtRecord {
-  id: string;
-  nama: string;
-  jumlah: number;
-  dibayar: number;
-  jatuhTempo: string;
-  status: string;
-  keterangan: string;
-  riwayatPembayaran: { tanggal: string; jumlah: number }[];
-}
-
-const initialUtangData: DebtRecord[] = [
-  { id: 'U001', nama: 'PT Baja Steel Indonesia', jumlah: 50000000, dibayar: 20000000, jatuhTempo: '2024-02-01', status: 'Belum Lunas', keterangan: 'Pembelian baja ringan C75', riwayatPembayaran: [{ tanggal: '2024-01-15', jumlah: 20000000 }] },
-  { id: 'U002', nama: 'CV Spandek Jaya', jumlah: 25000000, dibayar: 0, jatuhTempo: '2024-01-25', status: 'Belum Lunas', keterangan: 'Pembelian spandek', riwayatPembayaran: [] },
-  { id: 'U003', nama: 'UD Hollow Mandiri', jumlah: 12000000, dibayar: 12000000, jatuhTempo: '2024-01-20', status: 'Lunas', keterangan: 'Pembelian hollow', riwayatPembayaran: [{ tanggal: '2024-01-18', jumlah: 12000000 }] },
-];
-
-const initialPiutangData: DebtRecord[] = [
-  { id: 'P001', nama: 'Toko Bangunan Makmur', jumlah: 35000000, dibayar: 15000000, jatuhTempo: '2024-02-05', status: 'Belum Lunas', keterangan: 'Penjualan baja ringan', riwayatPembayaran: [{ tanggal: '2024-01-20', jumlah: 15000000 }] },
-  { id: 'P002', nama: 'CV Kontraktor Jaya', jumlah: 18000000, dibayar: 0, jatuhTempo: '2024-01-28', status: 'Belum Lunas', keterangan: 'Proyek atap', riwayatPembayaran: [] },
-  { id: 'P003', nama: 'Bpk. Ahmad (Proyek Rumah)', jumlah: 7500000, dibayar: 7500000, jatuhTempo: '2024-01-15', status: 'Lunas', keterangan: 'Rangka atap rumah', riwayatPembayaran: [{ tanggal: '2024-01-14', jumlah: 7500000 }] },
-];
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import type { DebtRecord } from '@/contexts/DataContext';
 
 export default function UtangPiutang() {
-  const [activeTab, setActiveTab] = useState('utang');
-  const [utangData, setUtangData] = useState<DebtRecord[]>(initialUtangData);
-  const [piutangData, setPiutangData] = useState<DebtRecord[]>(initialPiutangData);
+  const { debts, addDebt, updateDebt, deleteDebt, addPayment } = useData();
+  const [activeTab, setActiveTab] = useState<'utang' | 'piutang'>('utang');
   const [showDialog, setShowDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
@@ -79,22 +64,26 @@ export default function UtangPiutang() {
   const [recordToDelete, setRecordToDelete] = useState<DebtRecord | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<DebtRecord | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('Transfer');
+  const [paymentNote, setPaymentNote] = useState('');
   const [formData, setFormData] = useState({
     nama: '',
-    jumlah: '',
+    total: '',
     jatuhTempo: '',
     keterangan: '',
   });
 
-  const totalUtang = utangData.filter(u => u.status === 'Belum Lunas').reduce((sum, u) => sum + (u.jumlah - u.dibayar), 0);
-  const totalPiutang = piutangData.filter(p => p.status === 'Belum Lunas').reduce((sum, p) => sum + (p.jumlah - p.dibayar), 0);
+  const utangData = debts.filter(d => d.type === 'utang');
+  const piutangData = debts.filter(d => d.type === 'piutang');
+
+  const totalUtang = utangData.filter(u => u.sisa > 0).reduce((sum, u) => sum + u.sisa, 0);
+  const totalPiutang = piutangData.filter(p => p.sisa > 0).reduce((sum, p) => sum + p.sisa, 0);
 
   const currentData = activeTab === 'utang' ? utangData : piutangData;
-  const setCurrentData = activeTab === 'utang' ? setUtangData : setPiutangData;
 
   const handleAddNew = () => {
     setEditingRecord(null);
-    setFormData({ nama: '', jumlah: '', jatuhTempo: '', keterangan: '' });
+    setFormData({ nama: '', total: '', jatuhTempo: '', keterangan: '' });
     setShowDialog(true);
   };
 
@@ -102,7 +91,7 @@ export default function UtangPiutang() {
     setEditingRecord(record);
     setFormData({
       nama: record.nama,
-      jumlah: record.jumlah.toString(),
+      total: record.total.toString(),
       jatuhTempo: record.jatuhTempo,
       keterangan: record.keterangan,
     });
@@ -116,7 +105,7 @@ export default function UtangPiutang() {
 
   const confirmDelete = () => {
     if (recordToDelete) {
-      setCurrentData(prev => prev.filter(r => r.id !== recordToDelete.id));
+      deleteDebt(recordToDelete.id);
       toast.success(`Data berhasil dihapus`);
       setShowDeleteDialog(false);
       setRecordToDelete(null);
@@ -126,6 +115,8 @@ export default function UtangPiutang() {
   const handlePayment = (record: DebtRecord) => {
     setSelectedRecord(record);
     setPaymentAmount('');
+    setPaymentMethod('Transfer');
+    setPaymentNote('');
     setShowPaymentDialog(true);
   };
 
@@ -138,7 +129,7 @@ export default function UtangPiutang() {
     if (!selectedRecord || !paymentAmount) return;
 
     const amount = parseInt(paymentAmount);
-    const sisaHutang = selectedRecord.jumlah - selectedRecord.dibayar;
+    const sisaHutang = selectedRecord.sisa;
 
     if (amount <= 0) {
       toast.error('Jumlah pembayaran harus lebih dari 0');
@@ -150,63 +141,47 @@ export default function UtangPiutang() {
       return;
     }
 
-    setCurrentData(prev => prev.map(r => {
-      if (r.id === selectedRecord.id) {
-        const newDibayar = r.dibayar + amount;
-        const newStatus = newDibayar >= r.jumlah ? 'Lunas' : 'Belum Lunas';
-        return {
-          ...r,
-          dibayar: newDibayar,
-          status: newStatus,
-          riwayatPembayaran: [
-            ...r.riwayatPembayaran,
-            { tanggal: new Date().toISOString().split('T')[0], jumlah: amount }
-          ]
-        };
-      }
-      return r;
-    }));
+    addPayment(selectedRecord.id, {
+      tanggal: new Date().toISOString().split('T')[0],
+      jumlah: amount,
+      metode: paymentMethod,
+      catatan: paymentNote,
+    });
 
     toast.success(`Pembayaran ${formatRupiah(amount)} berhasil dicatat`);
     setShowPaymentDialog(false);
   };
 
   const handleSave = () => {
-    if (!formData.nama || !formData.jumlah || !formData.jatuhTempo) {
+    if (!formData.nama || !formData.total || !formData.jatuhTempo) {
       toast.error('Lengkapi semua field yang diperlukan');
       return;
     }
 
     if (editingRecord) {
-      setCurrentData(prev => prev.map(r => 
-        r.id === editingRecord.id 
-          ? { 
-              ...r,
-              nama: formData.nama,
-              jumlah: parseInt(formData.jumlah),
-              jatuhTempo: formData.jatuhTempo,
-              keterangan: formData.keterangan,
-            }
-          : r
-      ));
+      updateDebt(editingRecord.id, {
+        nama: formData.nama,
+        total: parseInt(formData.total),
+        jatuhTempo: formData.jatuhTempo,
+        keterangan: formData.keterangan,
+      });
       toast.success('Data berhasil diperbarui');
     } else {
-      const prefix = activeTab === 'utang' ? 'U' : 'P';
-      const newRecord: DebtRecord = {
-        id: `${prefix}${String(currentData.length + 1).padStart(3, '0')}`,
+      addDebt({
+        type: activeTab,
         nama: formData.nama,
-        jumlah: parseInt(formData.jumlah),
-        dibayar: 0,
+        total: parseInt(formData.total),
+        sisa: parseInt(formData.total),
+        tanggal: new Date().toISOString().split('T')[0],
         jatuhTempo: formData.jatuhTempo,
-        status: 'Belum Lunas',
         keterangan: formData.keterangan,
-        riwayatPembayaran: [],
-      };
-      setCurrentData(prev => [...prev, newRecord]);
+      });
       toast.success('Data berhasil ditambahkan');
     }
     setShowDialog(false);
   };
+
+  const getStatus = (record: DebtRecord) => record.sisa <= 0 ? 'Lunas' : 'Belum Lunas';
 
   return (
     <div className="p-8">
@@ -236,11 +211,11 @@ export default function UtangPiutang() {
         </Card>
         <Card>
           <CardContent className="p-4 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-success/10 flex items-center justify-center">
-              <ArrowUpRight className="w-6 h-6 text-success" />
+            <div className="w-12 h-12 rounded-xl bg-secondary/10 flex items-center justify-center">
+              <ArrowUpRight className="w-6 h-6 text-secondary" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-success">{formatRupiah(totalPiutang)}</p>
+              <p className="text-2xl font-bold text-secondary">{formatRupiah(totalPiutang)}</p>
               <p className="text-sm text-muted-foreground">Sisa Piutang</p>
             </div>
           </CardContent>
@@ -251,7 +226,7 @@ export default function UtangPiutang() {
               <Wallet className="w-6 h-6 text-primary" />
             </div>
             <div>
-              <p className={`text-2xl font-bold ${totalPiutang - totalUtang >= 0 ? 'text-success' : 'text-destructive'}`}>
+              <p className={`text-2xl font-bold ${totalPiutang - totalUtang >= 0 ? 'text-secondary' : 'text-destructive'}`}>
                 {formatRupiah(Math.abs(totalPiutang - totalUtang))}
               </p>
               <p className="text-sm text-muted-foreground">
@@ -264,125 +239,41 @@ export default function UtangPiutang() {
 
       {/* Tabs */}
       <Card>
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'utang' | 'piutang')}>
           <CardHeader className="pb-0">
             <TabsList className="grid w-full max-w-md grid-cols-2">
               <TabsTrigger value="utang" className="gap-2">
                 <ArrowDownLeft className="w-4 h-4" />
-                Utang ({utangData.filter(u => u.status === 'Belum Lunas').length})
+                Utang ({utangData.filter(u => u.sisa > 0).length})
               </TabsTrigger>
               <TabsTrigger value="piutang" className="gap-2">
                 <ArrowUpRight className="w-4 h-4" />
-                Piutang ({piutangData.filter(p => p.status === 'Belum Lunas').length})
+                Piutang ({piutangData.filter(p => p.sisa > 0).length})
               </TabsTrigger>
             </TabsList>
           </CardHeader>
           <CardContent className="pt-6">
             <TabsContent value="utang" className="mt-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Nama</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead className="text-right">Dibayar</TableHead>
-                    <TableHead className="text-right">Sisa</TableHead>
-                    <TableHead>Jatuh Tempo</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Aksi</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {utangData.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium">{item.id}</TableCell>
-                      <TableCell>{item.nama}</TableCell>
-                      <TableCell className="text-right">{formatRupiah(item.jumlah)}</TableCell>
-                      <TableCell className="text-right text-success">{formatRupiah(item.dibayar)}</TableCell>
-                      <TableCell className="text-right font-medium text-destructive">
-                        {formatRupiah(item.jumlah - item.dibayar)}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{item.jatuhTempo}</TableCell>
-                      <TableCell>
-                        <Badge variant={item.status === 'Lunas' ? 'default' : 'destructive'}>
-                          {item.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {item.status !== 'Lunas' && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-success hover:text-success" onClick={() => handlePayment(item)} title="Bayar">
-                              <CreditCard className="w-4 h-4" />
-                            </Button>
-                          )}
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleViewHistory(item)} title="Riwayat">
-                            <History className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(item)}>
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDelete(item)}>
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <DebtTable 
+                data={utangData} 
+                type="utang"
+                getStatus={getStatus}
+                onPayment={handlePayment}
+                onViewHistory={handleViewHistory}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
             </TabsContent>
             <TabsContent value="piutang" className="mt-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Nama</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead className="text-right">Diterima</TableHead>
-                    <TableHead className="text-right">Sisa</TableHead>
-                    <TableHead>Jatuh Tempo</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Aksi</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {piutangData.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium">{item.id}</TableCell>
-                      <TableCell>{item.nama}</TableCell>
-                      <TableCell className="text-right">{formatRupiah(item.jumlah)}</TableCell>
-                      <TableCell className="text-right text-success">{formatRupiah(item.dibayar)}</TableCell>
-                      <TableCell className="text-right font-medium text-primary">
-                        {formatRupiah(item.jumlah - item.dibayar)}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{item.jatuhTempo}</TableCell>
-                      <TableCell>
-                        <Badge variant={item.status === 'Lunas' ? 'default' : 'secondary'}>
-                          {item.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {item.status !== 'Lunas' && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-success hover:text-success" onClick={() => handlePayment(item)} title="Terima Pembayaran">
-                              <CreditCard className="w-4 h-4" />
-                            </Button>
-                          )}
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleViewHistory(item)} title="Riwayat">
-                            <History className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(item)}>
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDelete(item)}>
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <DebtTable 
+                data={piutangData} 
+                type="piutang"
+                getStatus={getStatus}
+                onPayment={handlePayment}
+                onViewHistory={handleViewHistory}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
             </TabsContent>
           </CardContent>
         </Tabs>
@@ -411,8 +302,8 @@ export default function UtangPiutang() {
                 <Input
                   type="number"
                   placeholder="0"
-                  value={formData.jumlah}
-                  onChange={(e) => setFormData(prev => ({ ...prev, jumlah: e.target.value }))}
+                  value={formData.total}
+                  onChange={(e) => setFormData(prev => ({ ...prev, total: e.target.value }))}
                 />
               </div>
               <div className="space-y-2">
@@ -427,7 +318,7 @@ export default function UtangPiutang() {
             <div className="space-y-2">
               <Label>Keterangan</Label>
               <Input
-                placeholder="Keterangan (opsional)"
+                placeholder="Keterangan tambahan"
                 value={formData.keterangan}
                 onChange={(e) => setFormData(prev => ({ ...prev, keterangan: e.target.value }))}
               />
@@ -449,42 +340,72 @@ export default function UtangPiutang() {
       <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-secondary" />
               {activeTab === 'utang' ? 'Bayar Utang' : 'Terima Pembayaran'}
             </DialogTitle>
           </DialogHeader>
           {selectedRecord && (
             <div className="space-y-4">
               <div className="p-4 rounded-lg bg-muted/50">
-                <p className="text-sm text-muted-foreground">Sisa {activeTab === 'utang' ? 'Utang' : 'Piutang'}</p>
-                <p className="text-2xl font-bold text-primary">
-                  {formatRupiah(selectedRecord.jumlah - selectedRecord.dibayar)}
-                </p>
+                <p className="text-sm text-muted-foreground">Nama</p>
+                <p className="font-medium">{selectedRecord.nama}</p>
+                <div className="grid grid-cols-2 gap-4 mt-2">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total</p>
+                    <p className="font-medium">{formatRupiah(selectedRecord.total)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Sisa</p>
+                    <p className="font-medium text-primary">{formatRupiah(selectedRecord.sisa)}</p>
+                  </div>
+                </div>
               </div>
               <div className="space-y-2">
-                <Label>Jumlah Pembayaran</Label>
+                <Label>Jumlah Pembayaran (Rp)</Label>
                 <Input
                   type="number"
-                  placeholder="Masukkan jumlah"
+                  placeholder="0"
                   value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value)}
                 />
+                <div className="flex gap-2 mt-1">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setPaymentAmount(Math.round(selectedRecord.sisa / 2).toString())}
+                  >
+                    50%
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setPaymentAmount(selectedRecord.sisa.toString())}
+                  >
+                    Lunas
+                  </Button>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setPaymentAmount(((selectedRecord.jumlah - selectedRecord.dibayar) / 2).toString())}
-                >
-                  50%
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setPaymentAmount((selectedRecord.jumlah - selectedRecord.dibayar).toString())}
-                >
-                  Lunas
-                </Button>
+              <div className="space-y-2">
+                <Label>Metode Pembayaran</Label>
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Transfer">Transfer Bank</SelectItem>
+                    <SelectItem value="Cash">Tunai</SelectItem>
+                    <SelectItem value="Kartu">Kartu</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Catatan (opsional)</Label>
+                <Input
+                  placeholder="Catatan pembayaran"
+                  value={paymentNote}
+                  onChange={(e) => setPaymentNote(e.target.value)}
+                />
               </div>
             </div>
           )}
@@ -492,7 +413,7 @@ export default function UtangPiutang() {
             <Button variant="outline" onClick={() => setShowPaymentDialog(false)}>
               Batal
             </Button>
-            <Button onClick={confirmPayment} className="bg-gradient-primary">
+            <Button onClick={confirmPayment} className="bg-secondary hover:bg-secondary/90">
               <CreditCard className="w-4 h-4 mr-2" />
               Konfirmasi Pembayaran
             </Button>
@@ -500,34 +421,57 @@ export default function UtangPiutang() {
         </DialogContent>
       </Dialog>
 
-      {/* Payment History Dialog */}
+      {/* History Dialog */}
       <Dialog open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Riwayat Pembayaran</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="w-5 h-5 text-primary" />
+              Riwayat Pembayaran
+            </DialogTitle>
           </DialogHeader>
           {selectedRecord && (
             <div className="space-y-4">
-              <div className="p-4 rounded-lg bg-muted/50">
+              <div className="p-3 rounded-lg bg-muted/50">
                 <p className="font-medium">{selectedRecord.nama}</p>
                 <p className="text-sm text-muted-foreground">{selectedRecord.keterangan}</p>
               </div>
-              {selectedRecord.riwayatPembayaran.length > 0 ? (
-                <div className="space-y-2">
-                  {selectedRecord.riwayatPembayaran.map((payment, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 rounded-lg border">
-                      <span className="text-sm text-muted-foreground">{payment.tanggal}</span>
-                      <span className="font-medium text-success">{formatRupiah(payment.jumlah)}</span>
+              
+              {selectedRecord.payments.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">
+                  Belum ada riwayat pembayaran
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                  {selectedRecord.payments.map((payment, idx) => (
+                    <div key={payment.id} className="flex items-center justify-between p-3 rounded-lg border">
+                      <div>
+                        <p className="font-medium text-secondary">{formatRupiah(payment.jumlah)}</p>
+                        <p className="text-xs text-muted-foreground">{payment.tanggal} • {payment.metode}</p>
+                        {payment.catatan && (
+                          <p className="text-xs text-muted-foreground mt-1">{payment.catatan}</p>
+                        )}
+                      </div>
+                      <Badge variant="secondary">#{idx + 1}</Badge>
                     </div>
                   ))}
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted font-medium">
-                    <span>Total Dibayar</span>
-                    <span className="text-success">{formatRupiah(selectedRecord.dibayar)}</span>
-                  </div>
                 </div>
-              ) : (
-                <p className="text-center text-muted-foreground py-4">Belum ada pembayaran</p>
               )}
+              
+              <div className="pt-2 border-t">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Total Dibayar</span>
+                  <span className="font-medium text-secondary">
+                    {formatRupiah(selectedRecord.total - selectedRecord.sisa)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Sisa</span>
+                  <span className="font-medium text-primary">
+                    {formatRupiah(selectedRecord.sisa)}
+                  </span>
+                </div>
+              </div>
             </div>
           )}
         </DialogContent>
@@ -539,7 +483,8 @@ export default function UtangPiutang() {
           <AlertDialogHeader>
             <AlertDialogTitle>Hapus Data?</AlertDialogTitle>
             <AlertDialogDescription>
-              Anda yakin ingin menghapus data ini? Tindakan ini tidak dapat dibatalkan.
+              Anda yakin ingin menghapus data "{recordToDelete?.nama}"? 
+              Tindakan ini tidak dapat dibatalkan.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -551,5 +496,82 @@ export default function UtangPiutang() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+// Extracted table component for reuse
+function DebtTable({ 
+  data, 
+  type,
+  getStatus,
+  onPayment, 
+  onViewHistory, 
+  onEdit, 
+  onDelete 
+}: {
+  data: DebtRecord[];
+  type: 'utang' | 'piutang';
+  getStatus: (record: DebtRecord) => string;
+  onPayment: (record: DebtRecord) => void;
+  onViewHistory: (record: DebtRecord) => void;
+  onEdit: (record: DebtRecord) => void;
+  onDelete: (record: DebtRecord) => void;
+}) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>ID</TableHead>
+          <TableHead>Nama</TableHead>
+          <TableHead className="text-right">Total</TableHead>
+          <TableHead className="text-right">{type === 'utang' ? 'Dibayar' : 'Diterima'}</TableHead>
+          <TableHead className="text-right">Sisa</TableHead>
+          <TableHead>Jatuh Tempo</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead className="text-right">Aksi</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {data.map((item) => {
+          const status = getStatus(item);
+          const paid = item.total - item.sisa;
+          return (
+            <TableRow key={item.id}>
+              <TableCell className="font-medium">{item.id}</TableCell>
+              <TableCell>{item.nama}</TableCell>
+              <TableCell className="text-right">{formatRupiah(item.total)}</TableCell>
+              <TableCell className="text-right text-secondary">{formatRupiah(paid)}</TableCell>
+              <TableCell className={`text-right font-medium ${type === 'utang' ? 'text-destructive' : 'text-primary'}`}>
+                {formatRupiah(item.sisa)}
+              </TableCell>
+              <TableCell className="text-muted-foreground">{item.jatuhTempo}</TableCell>
+              <TableCell>
+                <Badge variant={status === 'Lunas' ? 'default' : type === 'utang' ? 'destructive' : 'secondary'}>
+                  {status}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex items-center justify-end gap-1">
+                  {status !== 'Lunas' && (
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-secondary hover:text-secondary" onClick={() => onPayment(item)} title={type === 'utang' ? 'Bayar' : 'Terima'}>
+                      <CreditCard className="w-4 h-4" />
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onViewHistory(item)} title="Riwayat">
+                    <History className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onEdit(item)}>
+                    <Edit className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => onDelete(item)}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
   );
 }

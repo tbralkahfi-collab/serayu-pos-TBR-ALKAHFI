@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatRupiah } from '@/components/RupiahIcon';
 import { toast } from 'sonner';
+import { useData } from '@/contexts/DataContext';
 import {
   Search,
   FileText,
@@ -57,36 +58,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-
-interface TransactionItem {
-  nama: string;
-  qty: number;
-  harga: number;
-}
-
-interface Transaction {
-  id: string;
-  pelanggan: string;
-  tanggal: string;
-  items: TransactionItem[];
-  total: number;
-  metode: string;
-  status: string;
-}
-
-const initialTransactions: Transaction[] = [
-  { id: 'TRX001', pelanggan: 'Bpk. Agus', tanggal: '2024-01-15 10:30', items: [{ nama: 'Baja Ringan C75', qty: 50, harga: 85000 }], total: 4250000, metode: 'Tunai', status: 'Selesai' },
-  { id: 'TRX002', pelanggan: 'CV Maju Jaya', tanggal: '2024-01-15 11:15', items: [{ nama: 'Spandek 0.35mm', qty: 100, harga: 95000 }], total: 9500000, metode: 'Transfer', status: 'Selesai' },
-  { id: 'TRX003', pelanggan: 'Bpk. Joko', tanggal: '2024-01-15 12:45', items: [{ nama: 'Hollow 4x4', qty: 30, harga: 65000 }], total: 1950000, metode: 'Tunai', status: 'Selesai' },
-  { id: 'TRX004', pelanggan: 'UD Berkah', tanggal: '2024-01-15 14:20', items: [{ nama: 'Genteng Metal', qty: 200, harga: 45000 }], total: 9000000, metode: 'Kartu', status: 'Selesai' },
-  { id: 'TRX005', pelanggan: 'Bpk. Rudi', tanggal: '2024-01-15 15:05', items: [{ nama: 'Reng Baja Ringan', qty: 100, harga: 28000 }], total: 2800000, metode: 'Tunai', status: 'Selesai' },
-  { id: 'TRX006', pelanggan: 'Toko Bangunan Makmur', tanggal: '2024-01-15 16:30', items: [{ nama: 'Baja Ringan C100', qty: 40, harga: 110000 }], total: 4400000, metode: 'Transfer', status: 'Pending' },
-  { id: 'TRX007', pelanggan: 'CV Kontraktor Jaya', tanggal: '2024-01-15 17:00', items: [{ nama: 'Sekrup Baja 12mm', qty: 10, harga: 85000 }, { nama: 'Dynabolt 10mm', qty: 5, harga: 125000 }], total: 1475000, metode: 'Kartu', status: 'Selesai' },
-];
+import type { Transaction } from '@/contexts/DataContext';
 
 const getMethodColor = (metode: string) => {
   switch (metode) {
-    case 'Tunai':
+    case 'Cash':
       return 'bg-secondary/10 text-secondary';
     case 'Transfer':
       return 'bg-info/10 text-info';
@@ -98,7 +74,7 @@ const getMethodColor = (metode: string) => {
 };
 
 export default function Transaksi() {
-  const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
+  const { transactions, updateTransaction, deleteTransaction } = useData();
   const [search, setSearch] = useState('');
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
@@ -139,11 +115,11 @@ export default function Transaksi() {
   const handleSaveEdit = () => {
     if (!selectedTransaction) return;
     
-    setTransactions(prev => prev.map(t => 
-      t.id === selectedTransaction.id
-        ? { ...t, pelanggan: editFormData.pelanggan, metode: editFormData.metode, status: editFormData.status }
-        : t
-    ));
+    updateTransaction(selectedTransaction.id, {
+      pelanggan: editFormData.pelanggan,
+      metode: editFormData.metode,
+      status: editFormData.status,
+    });
     toast.success(`Transaksi ${selectedTransaction.id} berhasil diperbarui`);
     setShowEditDialog(false);
   };
@@ -155,7 +131,7 @@ export default function Transaksi() {
 
   const confirmDelete = () => {
     if (transactionToDelete) {
-      setTransactions(prev => prev.filter(t => t.id !== transactionToDelete.id));
+      deleteTransaction(transactionToDelete.id);
       toast.success(`Transaksi ${transactionToDelete.id} berhasil dihapus`);
       setShowDeleteDialog(false);
       setTransactionToDelete(null);
@@ -168,7 +144,7 @@ export default function Transaksi() {
       tx.id,
       tx.pelanggan,
       tx.tanggal,
-      tx.items.map(i => `${i.nama} (${i.qty})`).join('; '),
+      tx.items,
       tx.total,
       tx.metode,
       tx.status
@@ -236,7 +212,7 @@ export default function Transaksi() {
                 <td>${tx.id}</td>
                 <td>${tx.pelanggan}</td>
                 <td>${tx.tanggal}</td>
-                <td>${tx.items.map(i => `${i.nama} (${i.qty})`).join(', ')}</td>
+                <td>${tx.items}</td>
                 <td>Rp ${tx.total.toLocaleString('id-ID')}</td>
                 <td>${tx.metode}</td>
                 <td>${tx.status}</td>
@@ -309,7 +285,7 @@ export default function Transaksi() {
             </div>
             <div>
               <p className="text-xl font-bold text-secondary">{formatRupiah(totalToday)}</p>
-              <p className="text-sm text-muted-foreground">Total Hari Ini</p>
+              <p className="text-sm text-muted-foreground">Total Penjualan</p>
             </div>
           </CardContent>
         </Card>
@@ -319,7 +295,7 @@ export default function Transaksi() {
               <Calendar className="w-6 h-6 text-info" />
             </div>
             <div>
-              <p className="text-xl font-bold">{formatRupiah(Math.round(totalToday / transactions.length))}</p>
+              <p className="text-xl font-bold">{formatRupiah(transactions.length > 0 ? Math.round(totalToday / transactions.length) : 0)}</p>
               <p className="text-sm text-muted-foreground">Rata-rata</p>
             </div>
           </CardContent>
@@ -363,7 +339,7 @@ export default function Transaksi() {
                 <TableHead>ID Transaksi</TableHead>
                 <TableHead>Pelanggan</TableHead>
                 <TableHead>Tanggal & Waktu</TableHead>
-                <TableHead className="text-center">Items</TableHead>
+                <TableHead>Items</TableHead>
                 <TableHead>Metode</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>Status</TableHead>
@@ -376,7 +352,7 @@ export default function Transaksi() {
                   <TableCell className="font-medium text-primary">{tx.id}</TableCell>
                   <TableCell>{tx.pelanggan}</TableCell>
                   <TableCell className="text-muted-foreground">{tx.tanggal}</TableCell>
-                  <TableCell className="text-center">{tx.items.reduce((sum, i) => sum + i.qty, 0)}</TableCell>
+                  <TableCell className="text-sm max-w-[200px] truncate">{tx.items}</TableCell>
                   <TableCell>
                     <Badge className={getMethodColor(tx.metode)} variant="secondary">
                       {tx.metode}
@@ -447,27 +423,32 @@ export default function Transaksi() {
               
               <div>
                 <p className="text-sm text-muted-foreground mb-2">Items</p>
-                <div className="space-y-2">
-                  {selectedTransaction.items.map((item, idx) => (
-                    <div key={idx} className="flex justify-between p-2 rounded bg-muted/50">
-                      <div>
-                        <p className="font-medium text-sm">{item.nama}</p>
-                        <p className="text-xs text-muted-foreground">{item.qty} x {formatRupiah(item.harga)}</p>
-                      </div>
-                      <p className="font-medium">{formatRupiah(item.qty * item.harga)}</p>
-                    </div>
-                  ))}
+                <div className="p-3 rounded-lg bg-muted/50">
+                  <p className="font-medium">{selectedTransaction.items}</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Metode</p>
-                  <Badge className={getMethodColor(selectedTransaction.metode)}>{selectedTransaction.metode}</Badge>
+                  <Badge className={getMethodColor(selectedTransaction.metode)}>
+                    {selectedTransaction.metode}
+                  </Badge>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Total</p>
-                  <p className="text-xl font-bold text-primary">{formatRupiah(selectedTransaction.total)}</p>
+                  <p className="text-sm text-muted-foreground">Status</p>
+                  <Badge variant={selectedTransaction.status === 'Selesai' ? 'default' : 'secondary'}>
+                    {selectedTransaction.status}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t">
+                <div className="flex justify-between items-center">
+                  <span className="text-lg font-medium">Total</span>
+                  <span className="text-2xl font-bold text-primary">
+                    {formatRupiah(selectedTransaction.total)}
+                  </span>
                 </div>
               </div>
             </div>
@@ -477,7 +458,7 @@ export default function Transaksi() {
 
       {/* Edit Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Transaksi {selectedTransaction?.id}</DialogTitle>
           </DialogHeader>
@@ -491,15 +472,12 @@ export default function Transaksi() {
             </div>
             <div className="space-y-2">
               <Label>Metode Pembayaran</Label>
-              <Select 
-                value={editFormData.metode} 
-                onValueChange={(v) => setEditFormData(prev => ({ ...prev, metode: v }))}
-              >
+              <Select value={editFormData.metode} onValueChange={(v) => setEditFormData(prev => ({ ...prev, metode: v }))}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Tunai">Tunai</SelectItem>
+                  <SelectItem value="Cash">Cash</SelectItem>
                   <SelectItem value="Transfer">Transfer</SelectItem>
                   <SelectItem value="Kartu">Kartu</SelectItem>
                 </SelectContent>
@@ -507,16 +485,14 @@ export default function Transaksi() {
             </div>
             <div className="space-y-2">
               <Label>Status</Label>
-              <Select 
-                value={editFormData.status} 
-                onValueChange={(v) => setEditFormData(prev => ({ ...prev, status: v }))}
-              >
+              <Select value={editFormData.status} onValueChange={(v) => setEditFormData(prev => ({ ...prev, status: v }))}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Pending">Pending</SelectItem>
                   <SelectItem value="Selesai">Selesai</SelectItem>
+                  <SelectItem value="Pending">Pending</SelectItem>
+                  <SelectItem value="Batal">Batal</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -539,7 +515,7 @@ export default function Transaksi() {
           <AlertDialogHeader>
             <AlertDialogTitle>Hapus Transaksi?</AlertDialogTitle>
             <AlertDialogDescription>
-              Anda yakin ingin menghapus transaksi "{transactionToDelete?.id}"? 
+              Anda yakin ingin menghapus transaksi {transactionToDelete?.id}? 
               Tindakan ini tidak dapat dibatalkan.
             </AlertDialogDescription>
           </AlertDialogHeader>

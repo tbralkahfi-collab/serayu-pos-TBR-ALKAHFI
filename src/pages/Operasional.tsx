@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { formatRupiah } from '@/components/RupiahIcon';
 import { toast } from 'sonner';
+import { useData } from '@/contexts/DataContext';
 import {
   Plus,
   Building2,
@@ -52,14 +53,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-
-interface Expense {
-  id: string;
-  kategori: string;
-  deskripsi: string;
-  jumlah: number;
-  tanggal: string;
-}
+import type { Expense } from '@/contexts/DataContext';
 
 const categoryIcons: Record<string, any> = {
   'Listrik': Zap,
@@ -72,15 +66,6 @@ const categoryIcons: Record<string, any> = {
 };
 
 const categories = ['Listrik', 'Air', 'Telepon', 'Transportasi', 'Pemeliharaan', 'Sewa', 'Lainnya'];
-
-const initialExpenses: Expense[] = [
-  { id: 'OP001', kategori: 'Listrik', deskripsi: 'Tagihan PLN Januari - Gudang & Toko', jumlah: 1850000, tanggal: '2024-01-15' },
-  { id: 'OP002', kategori: 'Air', deskripsi: 'Tagihan PDAM Januari', jumlah: 350000, tanggal: '2024-01-15' },
-  { id: 'OP003', kategori: 'Telepon', deskripsi: 'Tagihan Internet & Telepon Toko', jumlah: 650000, tanggal: '2024-01-10' },
-  { id: 'OP004', kategori: 'Transportasi', deskripsi: 'BBM Truk Pengiriman', jumlah: 2500000, tanggal: '2024-01-12' },
-  { id: 'OP005', kategori: 'Pemeliharaan', deskripsi: 'Service Forklift', jumlah: 850000, tanggal: '2024-01-08' },
-  { id: 'OP006', kategori: 'Sewa', deskripsi: 'Sewa Gudang Januari', jumlah: 8000000, tanggal: '2024-01-01' },
-];
 
 const getCategoryColor = (kategori: string) => {
   switch (kategori) {
@@ -102,7 +87,7 @@ const getCategoryColor = (kategori: string) => {
 };
 
 export default function Operasional() {
-  const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
+  const { expenses, addExpense, updateExpense, deleteExpense } = useData();
   const [showDialog, setShowDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -142,7 +127,7 @@ export default function Operasional() {
 
   const confirmDelete = () => {
     if (expenseToDelete) {
-      setExpenses(prev => prev.filter(e => e.id !== expenseToDelete.id));
+      deleteExpense(expenseToDelete.id);
       toast.success(`Biaya "${expenseToDelete.deskripsi}" berhasil dihapus`);
       setShowDeleteDialog(false);
       setExpenseToDelete(null);
@@ -156,27 +141,20 @@ export default function Operasional() {
     }
 
     if (editingExpense) {
-      setExpenses(prev => prev.map(e => 
-        e.id === editingExpense.id 
-          ? { 
-              ...e,
-              kategori: formData.kategori,
-              deskripsi: formData.deskripsi,
-              jumlah: parseInt(formData.jumlah),
-              tanggal: formData.tanggal,
-            }
-          : e
-      ));
-      toast.success('Biaya berhasil diperbarui');
-    } else {
-      const newExpense: Expense = {
-        id: `OP${String(expenses.length + 1).padStart(3, '0')}`,
+      updateExpense(editingExpense.id, {
         kategori: formData.kategori,
         deskripsi: formData.deskripsi,
         jumlah: parseInt(formData.jumlah),
         tanggal: formData.tanggal,
-      };
-      setExpenses(prev => [...prev, newExpense]);
+      });
+      toast.success('Biaya berhasil diperbarui');
+    } else {
+      addExpense({
+        kategori: formData.kategori,
+        deskripsi: formData.deskripsi,
+        jumlah: parseInt(formData.jumlah),
+        tanggal: formData.tanggal,
+      });
       toast.success('Biaya berhasil ditambahkan');
     }
     setShowDialog(false);
