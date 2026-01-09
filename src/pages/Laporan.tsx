@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatRupiah } from '@/components/RupiahIcon';
 import { toast } from 'sonner';
+import { useData } from '@/contexts/DataContext';
 import {
   BarChart3,
   TrendingUp,
@@ -29,6 +30,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 const monthlyData = [
   { month: 'Jan', penjualan: 450000000, pembelian: 320000000 },
@@ -40,11 +49,11 @@ const monthlyData = [
 ];
 
 const topProducts = [
-  { name: 'Baja Ringan C75', sold: 1250, revenue: 106250000, unit: 'batang' },
-  { name: 'Spandek 0.35mm', sold: 980, revenue: 93100000, unit: 'lembar' },
-  { name: 'Hollow 4x4', sold: 850, revenue: 55250000, unit: 'batang' },
-  { name: 'Genteng Metal', sold: 720, revenue: 32400000, unit: 'lembar' },
-  { name: 'Reng Baja Ringan', sold: 1500, revenue: 42000000, unit: 'batang' },
+  { name: 'Baja Ringan C75', sold: 1250, unit: 'batang', hargaBeli: 72000, hargaJual: 85000 },
+  { name: 'Spandek 0.35mm', sold: 980, unit: 'lembar', hargaBeli: 82000, hargaJual: 95000 },
+  { name: 'Hollow 4x4', sold: 850, unit: 'batang', hargaBeli: 54000, hargaJual: 65000 },
+  { name: 'Genteng Metal', sold: 720, unit: 'lembar', hargaBeli: 38000, hargaJual: 45000 },
+  { name: 'Reng Baja Ringan', sold: 1500, unit: 'batang', hargaBeli: 22000, hargaJual: 28000 },
 ];
 
 export default function Laporan() {
@@ -53,10 +62,27 @@ export default function Laporan() {
   const [endDate, setEndDate] = useState('');
   const [activePeriod, setActivePeriod] = useState('Semua Periode');
 
+  const { expenses } = useData();
+
+  const totalOperasional = useMemo(
+    () => expenses.reduce((sum, e) => sum + e.jumlah, 0),
+    [expenses]
+  );
+
   const totalPenjualan = monthlyData.reduce((sum, d) => sum + d.penjualan, 0);
   const totalPembelian = monthlyData.reduce((sum, d) => sum + d.pembelian, 0);
   const labaKotor = totalPenjualan - totalPembelian;
+  const labaBersih = labaKotor - totalOperasional;
+  const marginBersih = totalPenjualan > 0 ? (labaBersih / totalPenjualan) * 100 : 0;
 
+  const topProductRows = useMemo(() => {
+    return topProducts.map((p) => {
+      const marginPerUnit = p.hargaJual - p.hargaBeli;
+      const revenue = p.sold * p.hargaJual;
+      const totalMargin = p.sold * marginPerUnit;
+      return { ...p, marginPerUnit, revenue, totalMargin };
+    });
+  }, []);
   const handleApplyPeriod = () => {
     if (!startDate || !endDate) {
       toast.error('Pilih tanggal mulai dan akhir');
@@ -109,11 +135,34 @@ export default function Laporan() {
       case 'stok':
         reportTitle = 'Laporan Stok';
         reportContent = `
-          <h2>Produk Terlaris</h2>
+          <h2>Produk Terlaris (Harga Beli/Jual & Margin)</h2>
           <table>
-            <thead><tr><th>Produk</th><th>Terjual</th><th>Revenue</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Produk</th>
+                <th>Terjual</th>
+                <th>Harga Beli</th>
+                <th>Harga Jual</th>
+                <th>Margin/Unit</th>
+                <th>Total Margin</th>
+                <th>Revenue</th>
+              </tr>
+            </thead>
             <tbody>
-              ${topProducts.map(p => `<tr><td>${p.name}</td><td>${p.sold} ${p.unit}</td><td>Rp ${p.revenue.toLocaleString('id-ID')}</td></tr>`).join('')}
+              ${topProductRows
+                .map(
+                  (p) =>
+                    `<tr>
+                      <td>${p.name}</td>
+                      <td>${p.sold} ${p.unit}</td>
+                      <td>Rp ${p.hargaBeli.toLocaleString('id-ID')}</td>
+                      <td>Rp ${p.hargaJual.toLocaleString('id-ID')}</td>
+                      <td>Rp ${p.marginPerUnit.toLocaleString('id-ID')}</td>
+                      <td>Rp ${p.totalMargin.toLocaleString('id-ID')}</td>
+                      <td>Rp ${p.revenue.toLocaleString('id-ID')}</td>
+                    </tr>`
+                )
+                .join('')}
             </tbody>
           </table>
         `;
@@ -126,8 +175,9 @@ export default function Laporan() {
             <tbody>
               <tr><td>Total Penjualan</td><td style="color: #16a34a;">Rp ${totalPenjualan.toLocaleString('id-ID')}</td></tr>
               <tr><td>Total Pembelian</td><td style="color: #dc2626;">Rp ${totalPembelian.toLocaleString('id-ID')}</td></tr>
-              <tr style="font-weight: bold; background: #dcfce7;"><td>Laba Kotor</td><td>Rp ${labaKotor.toLocaleString('id-ID')}</td></tr>
-              <tr><td>Margin</td><td>${((labaKotor / totalPenjualan) * 100).toFixed(1)}%</td></tr>
+              <tr><td>Biaya Operasional</td><td style="color: #dc2626;">Rp ${totalOperasional.toLocaleString('id-ID')}</td></tr>
+              <tr style="font-weight: bold; background: #dcfce7;"><td>Laba Bersih</td><td>Rp ${labaBersih.toLocaleString('id-ID')}</td></tr>
+              <tr><td>Margin Bersih</td><td>${marginBersih.toFixed(1)}%</td></tr>
             </tbody>
           </table>
         `;
@@ -249,15 +299,30 @@ export default function Laporan() {
           </tbody>
         </table>
 
-        <h2>Produk Terlaris</h2>
+        <h2>Produk Terlaris (Harga Beli/Jual & Margin)</h2>
         <table>
-          <thead><tr><th>No</th><th>Produk</th><th>Terjual</th><th>Revenue</th></tr></thead>
+          <thead>
+            <tr>
+              <th>No</th>
+              <th>Produk</th>
+              <th>Terjual</th>
+              <th>Harga Beli</th>
+              <th>Harga Jual</th>
+              <th>Margin/Unit</th>
+              <th>Total Margin</th>
+              <th>Revenue</th>
+            </tr>
+          </thead>
           <tbody>
-            ${topProducts.map((p, i) => `
+            ${topProductRows.map((p, i) => `
               <tr>
                 <td>${i + 1}</td>
                 <td>${p.name}</td>
                 <td>${p.sold} ${p.unit}</td>
+                <td>Rp ${p.hargaBeli.toLocaleString('id-ID')}</td>
+                <td>Rp ${p.hargaJual.toLocaleString('id-ID')}</td>
+                <td>Rp ${p.marginPerUnit.toLocaleString('id-ID')}</td>
+                <td>Rp ${p.totalMargin.toLocaleString('id-ID')}</td>
                 <td style="color: #16a34a;">Rp ${p.revenue.toLocaleString('id-ID')}</td>
               </tr>
             `).join('')}
@@ -341,8 +406,11 @@ export default function Laporan() {
               <BarChart3 className="w-6 h-6 text-primary" />
             </div>
             <div>
-              <p className="text-lg font-bold text-primary">{formatRupiah(labaKotor)}</p>
-              <p className="text-sm text-muted-foreground">Laba Kotor</p>
+              <p className="text-lg font-bold text-primary">{formatRupiah(labaBersih)}</p>
+              <p className="text-sm text-muted-foreground">Laba Bersih</p>
+              <p className="text-xs text-muted-foreground">
+                Operasional: {formatRupiah(totalOperasional)}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -352,8 +420,11 @@ export default function Laporan() {
               <PieChart className="w-6 h-6 text-info" />
             </div>
             <div>
-              <p className="text-xl font-bold">{((labaKotor / totalPenjualan) * 100).toFixed(1)}%</p>
-              <p className="text-sm text-muted-foreground">Margin</p>
+              <p className="text-xl font-bold">{marginBersih.toFixed(1)}%</p>
+              <p className="text-sm text-muted-foreground">Margin Bersih</p>
+              <p className="text-xs text-muted-foreground">
+                Laba kotor: {formatRupiah(labaKotor)}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -413,23 +484,31 @@ export default function Laporan() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {topProducts.map((product, index) => (
-                <div key={product.name} className="flex items-center gap-4">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                    index === 0 ? 'bg-primary/10 text-primary' : 
-                    index === 1 ? 'bg-secondary/10 text-secondary' : 
-                    'bg-muted text-muted-foreground'
-                  }`}>
-                    {index + 1}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium">{product.name}</p>
-                    <p className="text-sm text-muted-foreground">{product.sold} {product.unit} terjual</p>
-                  </div>
-                  <p className="font-semibold text-secondary">{formatRupiah(product.revenue)}</p>
-                </div>
-              ))}
+            <div className="rounded-lg border bg-card overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Produk</TableHead>
+                    <TableHead className="text-right">Terjual</TableHead>
+                    <TableHead className="text-right">Harga Beli</TableHead>
+                    <TableHead className="text-right">Harga Jual</TableHead>
+                    <TableHead className="text-right">Margin/Unit</TableHead>
+                    <TableHead className="text-right">Revenue</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {topProductRows.map((p) => (
+                    <TableRow key={p.name}>
+                      <TableCell className="font-medium">{p.name}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{p.sold} {p.unit}</TableCell>
+                      <TableCell className="text-right">{formatRupiah(p.hargaBeli)}</TableCell>
+                      <TableCell className="text-right">{formatRupiah(p.hargaJual)}</TableCell>
+                      <TableCell className="text-right text-primary">{formatRupiah(p.marginPerUnit)}</TableCell>
+                      <TableCell className="text-right font-semibold text-secondary">{formatRupiah(p.revenue)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           </CardContent>
         </Card>
