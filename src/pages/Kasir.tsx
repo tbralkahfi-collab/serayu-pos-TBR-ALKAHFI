@@ -1,13 +1,14 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { formatRupiah } from '@/components/RupiahIcon';
 import { useStore } from '@/contexts/StoreContext';
+import { useData, Product } from '@/contexts/DataContext';
 import { toast } from 'sonner';
 import { 
   Search, Plus, Minus, Trash2, ShoppingCart, CreditCard, Banknote, 
-  Printer, Save, X, User 
+  Printer, Save, X, User, Package
 } from 'lucide-react';
 import {
   Dialog,
@@ -19,36 +20,18 @@ import {
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
-interface Product {
+interface CartItem {
   id: string;
   name: string;
   price: number;
-  category: string;
   unit: string;
   stock: number;
-}
-
-interface CartItem extends Product {
   qty: number;
 }
 
-const sampleProducts: Product[] = [
-  { id: '1', name: 'Baja Ringan C75', price: 85000, category: 'Rangka Atap', unit: 'batang', stock: 150 },
-  { id: '2', name: 'Baja Ringan C100', price: 110000, category: 'Rangka Atap', unit: 'batang', stock: 100 },
-  { id: '3', name: 'Hollow 4x4', price: 65000, category: 'Hollow', unit: 'batang', stock: 200 },
-  { id: '4', name: 'Hollow 2x4', price: 45000, category: 'Hollow', unit: 'batang', stock: 180 },
-  { id: '5', name: 'Reng Baja Ringan', price: 28000, category: 'Rangka Atap', unit: 'batang', stock: 300 },
-  { id: '6', name: 'Spandek 0.30mm', price: 75000, category: 'Atap', unit: 'lembar', stock: 150 },
-  { id: '7', name: 'Spandek 0.35mm', price: 95000, category: 'Atap', unit: 'lembar', stock: 120 },
-  { id: '8', name: 'Genteng Metal', price: 45000, category: 'Atap', unit: 'lembar', stock: 250 },
-  { id: '9', name: 'Sekrup Baja 12mm', price: 85000, category: 'Aksesoris', unit: 'dus', stock: 50 },
-  { id: '10', name: 'Dynabolt 10mm', price: 125000, category: 'Aksesoris', unit: 'dus', stock: 30 },
-  { id: '11', name: 'Paku Rivet', price: 45000, category: 'Aksesoris', unit: 'dus', stock: 80 },
-  { id: '12', name: 'Talang Air PVC', price: 55000, category: 'Aksesoris', unit: 'batang', stock: 60 },
-];
-
 export default function Kasir() {
   const { storeInfo, printerSettings } = useStore();
+  const { products, addTransaction, updateProduct } = useData();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -57,24 +40,33 @@ export default function Kasir() {
   const [cashAmount, setCashAmount] = useState('');
   const printRef = useRef<HTMLDivElement>(null);
 
-  const filteredProducts = sampleProducts.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.category.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredProducts = useMemo(() => {
+    return products.filter((p) =>
+      p.nama.toLowerCase().includes(search.toLowerCase()) ||
+      p.kategori.toLowerCase().includes(search.toLowerCase())
+    );
+  }, [products, search]);
 
   const addToCart = (product: Product) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       if (existing) {
-        if (existing.qty >= product.stock) {
-          toast.error(`Stok ${product.name} tidak mencukupi`);
+        if (existing.qty >= product.stok) {
+          toast.error(`Stok ${product.nama} tidak mencukupi`);
           return prev;
         }
         return prev.map((item) =>
           item.id === product.id ? { ...item, qty: item.qty + 1 } : item
         );
       }
-      return [...prev, { ...product, qty: 1 }];
+      return [...prev, { 
+        id: product.id, 
+        name: product.nama, 
+        price: product.harga, 
+        unit: product.satuan, 
+        stock: product.stok,
+        qty: 1 
+      }];
     });
   };
 
@@ -289,11 +281,11 @@ export default function Kasir() {
                 <div className="w-full h-16 rounded-lg bg-muted flex items-center justify-center mb-3">
                   <Package className="w-8 h-8 text-muted-foreground" />
                 </div>
-                <h3 className="font-medium text-foreground text-sm truncate">{product.name}</h3>
-                <p className="text-xs text-muted-foreground">{product.category}</p>
+                <h3 className="font-medium text-foreground text-sm truncate">{product.nama}</h3>
+                <p className="text-xs text-muted-foreground">{product.kategori}</p>
                 <div className="flex items-center justify-between mt-2">
-                  <p className="text-sm font-bold text-primary">{formatRupiah(product.price)}</p>
-                  <span className="text-xs text-muted-foreground">{product.stock} {product.unit}</span>
+                  <p className="text-sm font-bold text-primary">{formatRupiah(product.harga)}</p>
+                  <span className="text-xs text-muted-foreground">{product.stok} {product.satuan}</span>
                 </div>
               </CardContent>
             </Card>
@@ -487,6 +479,3 @@ export default function Kasir() {
     </div>
   );
 }
-
-// Add Package icon import
-import { Package } from 'lucide-react';

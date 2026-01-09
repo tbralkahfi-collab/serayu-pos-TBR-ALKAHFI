@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useStore } from '@/contexts/StoreContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useData } from '@/contexts/DataContext';
 import { RupiahIcon, formatRupiah } from '@/components/RupiahIcon';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -17,63 +18,10 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 
-const stats = [
-  {
-    title: 'Penjualan Hari Ini',
-    value: 25000000,
-    change: 12.5,
-    icon: TrendingUp,
-    positive: true,
-    color: 'secondary',
-  },
-  {
-    title: 'Transaksi',
-    value: 18,
-    change: 8.2,
-    icon: ShoppingCart,
-    positive: true,
-    isCount: true,
-    color: 'primary',
-  },
-  {
-    title: 'Produk Terjual',
-    value: 245,
-    change: -2.4,
-    icon: Package,
-    positive: false,
-    isCount: true,
-    color: 'info',
-  },
-  {
-    title: 'Pelanggan Baru',
-    value: 5,
-    change: 15.3,
-    icon: Users,
-    positive: true,
-    isCount: true,
-    color: 'secondary',
-  },
-];
-
-const recentTransactions = [
-  { id: 'TRX001', customer: 'Bpk. Agus', amount: 3500000, time: '10:30', items: 'Baja Ringan C75 x 50btg' },
-  { id: 'TRX002', customer: 'CV Maju Jaya', amount: 8750000, time: '11:15', items: 'Spandek 0.35mm x 100lbr' },
-  { id: 'TRX003', customer: 'Bpk. Joko', amount: 1890000, time: '12:45', items: 'Hollow 4x4 x 30btg' },
-  { id: 'TRX004', customer: 'UD Berkah', amount: 12500000, time: '14:20', items: 'Genteng Metal x 200lbr' },
-  { id: 'TRX005', customer: 'Bpk. Rudi', amount: 2450000, time: '15:05', items: 'Reng x 100btg' },
-];
-
-// Sample products with low stock
-const lowStockProducts = [
-  { id: '1', name: 'Baja Ringan C75', stock: 8, minStock: 10, unit: 'batang' },
-  { id: '2', name: 'Sekrup Baja 12mm', stock: 5, minStock: 20, unit: 'dus' },
-  { id: '3', name: 'Hollow 4x4', stock: 12, minStock: 15, unit: 'batang' },
-  { id: '4', name: 'Dynabolt 10mm', stock: 3, minStock: 10, unit: 'dus' },
-];
-
 export default function Dashboard() {
   const { storeInfo, stockSettings } = useStore();
   const { user } = useAuth();
+  const { products, transactions, expenses } = useData();
   const navigate = useNavigate();
 
   const currentHour = new Date().getHours();
@@ -82,7 +30,66 @@ export default function Dashboard() {
   else if (currentHour >= 15 && currentHour < 18) greeting = 'Selamat Sore';
   else if (currentHour >= 18) greeting = 'Selamat Malam';
 
-  const productsNeedRestock = lowStockProducts.filter(p => p.stock <= stockSettings.minStockAlert);
+  // Calculate stats from real data
+  const stats = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const todayTransactions = transactions.filter(t => t.tanggal.startsWith(today));
+    const totalSales = todayTransactions.reduce((sum, t) => sum + t.total, 0);
+    const totalTransactions = todayTransactions.length;
+
+    return [
+      {
+        title: 'Penjualan Hari Ini',
+        value: totalSales || transactions.reduce((sum, t) => sum + t.total, 0),
+        change: 12.5,
+        icon: TrendingUp,
+        positive: true,
+        color: 'secondary',
+      },
+      {
+        title: 'Transaksi',
+        value: totalTransactions || transactions.length,
+        change: 8.2,
+        icon: ShoppingCart,
+        positive: true,
+        isCount: true,
+        color: 'primary',
+      },
+      {
+        title: 'Total Produk',
+        value: products.length,
+        change: 0,
+        icon: Package,
+        positive: true,
+        isCount: true,
+        color: 'info',
+      },
+      {
+        title: 'Biaya Operasional',
+        value: expenses.reduce((sum, e) => sum + e.jumlah, 0),
+        change: 0,
+        icon: Users,
+        positive: false,
+        color: 'secondary',
+      },
+    ];
+  }, [transactions, products, expenses]);
+
+  // Recent transactions from real data
+  const recentTransactions = useMemo(() => {
+    return transactions.slice(0, 5).map(t => ({
+      id: t.id,
+      customer: t.pelanggan,
+      amount: t.total,
+      time: t.tanggal.split(' ')[1] || t.tanggal,
+      items: t.items,
+    }));
+  }, [transactions]);
+
+  // Low stock products from real data
+  const productsNeedRestock = useMemo(() => {
+    return products.filter(p => p.stok <= (p.minStok || stockSettings.minStockAlert));
+  }, [products, stockSettings.minStockAlert]);
 
   return (
     <div className="p-8 bg-background min-h-screen">
@@ -196,11 +203,11 @@ export default function Dashboard() {
                   className="flex items-center justify-between p-3 rounded-lg bg-card border border-warning/30"
                 >
                   <div>
-                    <p className="font-medium text-foreground text-sm">{product.name}</p>
-                    <p className="text-xs text-muted-foreground">Min: {product.minStock} {product.unit}</p>
+                    <p className="font-medium text-foreground text-sm">{product.nama}</p>
+                    <p className="text-xs text-muted-foreground">Min: {product.minStok || stockSettings.minStockAlert} {product.satuan}</p>
                   </div>
                   <Badge variant="destructive" className="text-xs">
-                    {product.stock} {product.unit}
+                    {product.stok} {product.satuan}
                   </Badge>
                 </div>
               ))}
