@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatRupiah } from '@/components/RupiahIcon';
 import { toast } from 'sonner';
+import { useData, Product } from '@/contexts/DataContext';
 import {
   Search,
   Plus,
@@ -48,69 +49,44 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-interface Product {
-  id: string;
-  name: string;
-  sku: string;
-  price: number;
-  stock: number;
-  category: string;
-  unit: string;
-}
-
-const initialProducts: Product[] = [
-  { id: '1', name: 'Baja Ringan C75', sku: 'BR-C75', price: 85000, stock: 150, category: 'Rangka Atap', unit: 'batang' },
-  { id: '2', name: 'Baja Ringan C100', sku: 'BR-C100', price: 110000, stock: 100, category: 'Rangka Atap', unit: 'batang' },
-  { id: '3', name: 'Hollow 4x4', sku: 'HL-4x4', price: 65000, stock: 200, category: 'Hollow', unit: 'batang' },
-  { id: '4', name: 'Hollow 2x4', sku: 'HL-2x4', price: 45000, stock: 180, category: 'Hollow', unit: 'batang' },
-  { id: '5', name: 'Reng Baja Ringan', sku: 'BR-RNG', price: 28000, stock: 300, category: 'Rangka Atap', unit: 'batang' },
-  { id: '6', name: 'Spandek 0.30mm', sku: 'SP-030', price: 75000, stock: 8, category: 'Atap', unit: 'lembar' },
-  { id: '7', name: 'Spandek 0.35mm', sku: 'SP-035', price: 95000, stock: 120, category: 'Atap', unit: 'lembar' },
-  { id: '8', name: 'Genteng Metal', sku: 'GM-001', price: 45000, stock: 250, category: 'Atap', unit: 'lembar' },
-  { id: '9', name: 'Sekrup Baja 12mm', sku: 'SK-12', price: 85000, stock: 5, category: 'Aksesoris', unit: 'dus' },
-  { id: '10', name: 'Dynabolt 10mm', sku: 'DB-10', price: 125000, stock: 3, category: 'Aksesoris', unit: 'dus' },
-];
-
-const categories = ['Rangka Atap', 'Hollow', 'Atap', 'Aksesoris'];
+const categories = ['Rangka', 'Atap', 'Aksesoris', 'Hollow'];
 const units = ['batang', 'lembar', 'dus', 'pcs', 'meter'];
 
 export default function Produk() {
-  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const { products, addProduct, updateProduct, deleteProduct } = useData();
   const [search, setSearch] = useState('');
   const [showDialog, setShowDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [formData, setFormData] = useState({
-    name: '',
-    sku: '',
-    price: '',
-    stock: '',
-    category: '',
-    unit: '',
+    nama: '',
+    harga: '',
+    stok: '',
+    kategori: '',
+    satuan: '',
   });
 
   const filteredProducts = products.filter(
     (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.sku.toLowerCase().includes(search.toLowerCase())
+      p.nama.toLowerCase().includes(search.toLowerCase()) ||
+      p.kategori.toLowerCase().includes(search.toLowerCase())
   );
 
   const handleAddNew = () => {
     setEditingProduct(null);
-    setFormData({ name: '', sku: '', price: '', stock: '', category: '', unit: '' });
+    setFormData({ nama: '', harga: '', stok: '', kategori: '', satuan: '' });
     setShowDialog(true);
   };
 
   const handleEdit = (product: Product) => {
     setEditingProduct(product);
     setFormData({
-      name: product.name,
-      sku: product.sku,
-      price: product.price.toString(),
-      stock: product.stock.toString(),
-      category: product.category,
-      unit: product.unit,
+      nama: product.nama,
+      harga: product.harga.toString(),
+      stok: product.stok.toString(),
+      kategori: product.kategori,
+      satuan: product.satuan,
     });
     setShowDialog(true);
   };
@@ -122,54 +98,45 @@ export default function Produk() {
 
   const confirmDelete = () => {
     if (productToDelete) {
-      setProducts(prev => prev.filter(p => p.id !== productToDelete.id));
-      toast.success(`Produk ${productToDelete.name} berhasil dihapus`);
+      deleteProduct(productToDelete.id);
+      toast.success(`Produk ${productToDelete.nama} berhasil dihapus`);
       setShowDeleteDialog(false);
       setProductToDelete(null);
     }
   };
 
   const handleSave = () => {
-    if (!formData.name || !formData.sku || !formData.price || !formData.stock || !formData.category || !formData.unit) {
+    if (!formData.nama || !formData.harga || !formData.stok || !formData.kategori || !formData.satuan) {
       toast.error('Semua field harus diisi');
       return;
     }
 
     if (editingProduct) {
-      setProducts(prev => prev.map(p => 
-        p.id === editingProduct.id 
-          ? { 
-              ...p, 
-              name: formData.name,
-              sku: formData.sku,
-              price: parseInt(formData.price),
-              stock: parseInt(formData.stock),
-              category: formData.category,
-              unit: formData.unit,
-            }
-          : p
-      ));
+      updateProduct(editingProduct.id, {
+        nama: formData.nama,
+        harga: parseInt(formData.harga),
+        stok: parseInt(formData.stok),
+        kategori: formData.kategori,
+        satuan: formData.satuan,
+      });
       toast.success('Produk berhasil diperbarui');
     } else {
-      const newProduct: Product = {
-        id: Date.now().toString(),
-        name: formData.name,
-        sku: formData.sku,
-        price: parseInt(formData.price),
-        stock: parseInt(formData.stock),
-        category: formData.category,
-        unit: formData.unit,
-      };
-      setProducts(prev => [...prev, newProduct]);
+      addProduct({
+        nama: formData.nama,
+        harga: parseInt(formData.harga),
+        stok: parseInt(formData.stok),
+        kategori: formData.kategori,
+        satuan: formData.satuan,
+      });
       toast.success('Produk berhasil ditambahkan');
     }
     setShowDialog(false);
   };
 
   const totalProducts = products.length;
-  const availableStock = products.filter(p => p.stock > 10).length;
-  const lowStock = products.filter(p => p.stock <= 10 && p.stock > 0).length;
-  const outOfStock = products.filter(p => p.stock === 0).length;
+  const availableStock = products.filter(p => p.stok > 10).length;
+  const lowStock = products.filter(p => p.stok <= 10 && p.stok > 0).length;
+  const outOfStock = products.filter(p => p.stok === 0).length;
 
   return (
     <div className="p-8">
@@ -256,7 +223,6 @@ export default function Produk() {
             <TableHeader>
               <TableRow>
                 <TableHead>Produk</TableHead>
-                <TableHead>SKU</TableHead>
                 <TableHead>Kategori</TableHead>
                 <TableHead className="text-right">Harga</TableHead>
                 <TableHead className="text-right">Stok</TableHead>
@@ -266,25 +232,24 @@ export default function Produk() {
             <TableBody>
               {filteredProducts.map((product) => (
                 <TableRow key={product.id}>
-                  <TableCell className="font-medium">{product.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{product.sku}</TableCell>
+                  <TableCell className="font-medium">{product.nama}</TableCell>
                   <TableCell>
-                    <Badge variant="secondary">{product.category}</Badge>
+                    <Badge variant="secondary">{product.kategori}</Badge>
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    {formatRupiah(product.price)}
+                    {formatRupiah(product.harga)}
                   </TableCell>
                   <TableCell className="text-right">
                     <span
                       className={
-                        product.stock === 0
+                        product.stok === 0
                           ? 'text-destructive font-medium'
-                          : product.stock <= 10
+                          : product.stok <= 10
                           ? 'text-warning font-medium'
                           : 'text-foreground'
                       }
                     >
-                      {product.stock} {product.unit}
+                      {product.stok} {product.satuan}
                     </span>
                   </TableCell>
                   <TableCell className="text-right">
@@ -321,30 +286,20 @@ export default function Produk() {
             <DialogTitle>{editingProduct ? 'Edit Produk' : 'Tambah Produk Baru'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Nama Produk</Label>
-                <Input
-                  placeholder="Contoh: Baja Ringan C75"
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>SKU</Label>
-                <Input
-                  placeholder="Contoh: BR-C75"
-                  value={formData.sku}
-                  onChange={(e) => setFormData(prev => ({ ...prev, sku: e.target.value }))}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label>Nama Produk</Label>
+              <Input
+                placeholder="Contoh: Baja Ringan C75"
+                value={formData.nama}
+                onChange={(e) => setFormData(prev => ({ ...prev, nama: e.target.value }))}
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Kategori</Label>
                 <Select 
-                  value={formData.category} 
-                  onValueChange={(v) => setFormData(prev => ({ ...prev, category: v }))}
+                  value={formData.kategori} 
+                  onValueChange={(v) => setFormData(prev => ({ ...prev, kategori: v }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Pilih kategori" />
@@ -359,8 +314,8 @@ export default function Produk() {
               <div className="space-y-2">
                 <Label>Satuan</Label>
                 <Select 
-                  value={formData.unit} 
-                  onValueChange={(v) => setFormData(prev => ({ ...prev, unit: v }))}
+                  value={formData.satuan} 
+                  onValueChange={(v) => setFormData(prev => ({ ...prev, satuan: v }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Pilih satuan" />
@@ -379,8 +334,8 @@ export default function Produk() {
                 <Input
                   type="number"
                   placeholder="0"
-                  value={formData.price}
-                  onChange={(e) => setFormData(prev => ({ ...prev, price: e.target.value }))}
+                  value={formData.harga}
+                  onChange={(e) => setFormData(prev => ({ ...prev, harga: e.target.value }))}
                 />
               </div>
               <div className="space-y-2">
@@ -388,8 +343,8 @@ export default function Produk() {
                 <Input
                   type="number"
                   placeholder="0"
-                  value={formData.stock}
-                  onChange={(e) => setFormData(prev => ({ ...prev, stock: e.target.value }))}
+                  value={formData.stok}
+                  onChange={(e) => setFormData(prev => ({ ...prev, stok: e.target.value }))}
                 />
               </div>
             </div>
@@ -412,7 +367,7 @@ export default function Produk() {
           <AlertDialogHeader>
             <AlertDialogTitle>Hapus Produk?</AlertDialogTitle>
             <AlertDialogDescription>
-              Anda yakin ingin menghapus produk "{productToDelete?.name}"? 
+              Anda yakin ingin menghapus produk "{productToDelete?.nama}"? 
               Tindakan ini tidak dapat dibatalkan.
             </AlertDialogDescription>
           </AlertDialogHeader>
