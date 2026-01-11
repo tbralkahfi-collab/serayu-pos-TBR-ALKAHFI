@@ -14,6 +14,7 @@ import {
   Building2,
   LogOut,
   ChevronRight,
+  FolderKanban,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -23,6 +24,7 @@ const menuItems = [
   { icon: ShoppingCart, label: 'Kasir', path: '/kasir' },
   { icon: Package, label: 'Produk', path: '/produk' },
   { icon: ShoppingBag, label: 'Pembelian', path: '/pembelian' },
+  { icon: FolderKanban, label: 'Proyek', path: '/proyek' },
   { icon: Wallet, label: 'Utang/Piutang', path: '/utang-piutang' },
   { icon: Building2, label: 'Operasional', path: '/operasional' },
   { icon: FileText, label: 'Transaksi', path: '/transaksi' },

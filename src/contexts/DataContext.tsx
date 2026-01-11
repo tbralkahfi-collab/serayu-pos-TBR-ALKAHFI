@@ -73,6 +73,22 @@ export interface Transaction {
   status: string;
 }
 
+export interface Project {
+  id: string;
+  namaProyek: string;
+  pelanggan: string;
+  alamat: string;
+  telepon: string;
+  deskripsi: string;
+  nilaiKontrak: number;
+  dp: number;
+  tanggalOrder: string;
+  tanggalMulai: string;
+  tanggalSelesai: string;
+  status: 'Pending' | 'Berjalan' | 'Selesai' | 'Dibatalkan';
+  catatan: string;
+}
+
 // Initial data
 const initialProducts: Product[] = [
   { id: 'PRD001', nama: 'Baja Ringan C75', kategori: 'Rangka', harga: 85000, stok: 250, satuan: 'batang' },
@@ -151,6 +167,54 @@ const initialTransactions: Transaction[] = [
   { id: 'TRX005', tanggal: '2024-01-13 13:00', pelanggan: 'PT Konstruksi', items: 'Spandek 0.35mm x100', total: 9500000, bayar: 9500000, kembalian: 0, metode: 'Transfer', status: 'Selesai' },
 ];
 
+const initialProjects: Project[] = [
+  { 
+    id: 'PRJ001', 
+    namaProyek: 'Atap Rumah Pak Ahmad', 
+    pelanggan: 'Pak Ahmad', 
+    alamat: 'Jl. Melati No. 45, Sidoarjo', 
+    telepon: '081234567890',
+    deskripsi: 'Pemasangan rangka atap baja ringan untuk rumah type 45',
+    nilaiKontrak: 35000000,
+    dp: 15000000,
+    tanggalOrder: '2024-01-10',
+    tanggalMulai: '2024-01-15',
+    tanggalSelesai: '2024-01-25',
+    status: 'Selesai',
+    catatan: 'Termasuk material dan ongkos pasang'
+  },
+  { 
+    id: 'PRJ002', 
+    namaProyek: 'Gudang CV Maju Jaya', 
+    pelanggan: 'CV Maju Jaya', 
+    alamat: 'Kawasan Industri Rungkut, Surabaya', 
+    telepon: '031-8881234',
+    deskripsi: 'Konstruksi rangka gudang 20x30 meter',
+    nilaiKontrak: 180000000,
+    dp: 60000000,
+    tanggalOrder: '2024-01-05',
+    tanggalMulai: '2024-01-12',
+    tanggalSelesai: '',
+    status: 'Berjalan',
+    catatan: 'Pembayaran 3 termin'
+  },
+  { 
+    id: 'PRJ003', 
+    namaProyek: 'Renovasi Ruko Pasar', 
+    pelanggan: 'Toko Sembako Berkah', 
+    alamat: 'Pasar Tradisional Blok C-15, Gresik', 
+    telepon: '085678901234',
+    deskripsi: 'Ganti atap lama dengan spandek baru',
+    nilaiKontrak: 25000000,
+    dp: 0,
+    tanggalOrder: '2024-01-14',
+    tanggalMulai: '',
+    tanggalSelesai: '',
+    status: 'Pending',
+    catatan: 'Menunggu pembayaran DP'
+  },
+];
+
 interface DataContextType {
   // Products
   products: Product[];
@@ -194,6 +258,13 @@ interface DataContextType {
   addTransaction: (transaction: Omit<Transaction, 'id'>) => void;
   updateTransaction: (id: string, transaction: Partial<Transaction>) => void;
   deleteTransaction: (id: string) => void;
+
+  // Projects
+  projects: Project[];
+  setProjects: React.Dispatch<React.SetStateAction<Project[]>>;
+  addProject: (project: Omit<Project, 'id'>) => void;
+  updateProject: (id: string, project: Partial<Project>) => void;
+  deleteProject: (id: string) => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -205,6 +276,7 @@ const STORAGE_KEYS = {
   debts: 'serayu_debts',
   expenses: 'serayu_expenses',
   transactions: 'serayu_transactions',
+  projects: 'serayu_projects',
 };
 
 export function DataProvider({ children }: { children: ReactNode }) {
@@ -238,6 +310,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return saved ? JSON.parse(saved) : initialTransactions;
   });
 
+  const [projects, setProjects] = useState<Project[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.projects);
+    return saved ? JSON.parse(saved) : initialProjects;
+  });
+
   // Save to localStorage whenever data changes
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.products, JSON.stringify(products));
@@ -262,6 +339,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.transactions, JSON.stringify(transactions));
   }, [transactions]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.projects, JSON.stringify(projects));
+  }, [projects]);
 
   // Product functions
   const addProduct = (product: Omit<Product, 'id'>) => {
@@ -365,6 +446,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setTransactions(prev => prev.filter(t => t.id !== id));
   };
 
+  // Project functions
+  const addProject = (project: Omit<Project, 'id'>) => {
+    const id = `PRJ${String(projects.length + 1).padStart(3, '0')}`;
+    setProjects(prev => [...prev, { ...project, id }]);
+  };
+  
+  const updateProject = (id: string, project: Partial<Project>) => {
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, ...project } : p));
+  };
+  
+  const deleteProject = (id: string) => {
+    setProjects(prev => prev.filter(p => p.id !== id));
+  };
+
   return (
     <DataContext.Provider value={{
       products, setProducts, addProduct, updateProduct, deleteProduct,
@@ -373,6 +468,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       debts, setDebts, addDebt, updateDebt, deleteDebt, addPayment,
       expenses, setExpenses, addExpense, updateExpense, deleteExpense,
       transactions, setTransactions, addTransaction, updateTransaction, deleteTransaction,
+      projects, setProjects, addProject, updateProject, deleteProject,
     }}>
       {children}
     </DataContext.Provider>

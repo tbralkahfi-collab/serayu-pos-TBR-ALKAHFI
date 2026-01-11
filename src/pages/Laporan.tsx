@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { formatRupiah } from '@/components/RupiahIcon';
 import { toast } from 'sonner';
 import { useData } from '@/contexts/DataContext';
@@ -16,6 +17,7 @@ import {
   PieChart,
   FileSpreadsheet,
   File,
+  FolderKanban,
 } from 'lucide-react';
 import {
   Dialog,
@@ -38,6 +40,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { format } from 'date-fns';
+import { id } from 'date-fns/locale';
 
 const monthlyData = [
   { month: 'Jan', penjualan: 450000000, pembelian: 320000000 },
@@ -56,18 +60,35 @@ const topProducts = [
   { name: 'Reng Baja Ringan', sold: 1500, unit: 'batang', hargaBeli: 22000, hargaJual: 28000 },
 ];
 
+const statusColors: Record<string, string> = {
+  'Pending': 'bg-yellow-100 text-yellow-800',
+  'Berjalan': 'bg-blue-100 text-blue-800',
+  'Selesai': 'bg-green-100 text-green-800',
+  'Dibatalkan': 'bg-red-100 text-red-800',
+};
+
 export default function Laporan() {
   const [showPeriodDialog, setShowPeriodDialog] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [activePeriod, setActivePeriod] = useState('Semua Periode');
 
-  const { expenses } = useData();
+  const { expenses, projects } = useData();
 
   const totalOperasional = useMemo(
     () => expenses.reduce((sum, e) => sum + e.jumlah, 0),
     [expenses]
   );
+
+  const projectStats = useMemo(() => {
+    const total = projects.length;
+    const selesai = projects.filter(p => p.status === 'Selesai').length;
+    const berjalan = projects.filter(p => p.status === 'Berjalan').length;
+    const totalNilai = projects.reduce((sum, p) => sum + p.nilaiKontrak, 0);
+    const totalDP = projects.reduce((sum, p) => sum + p.dp, 0);
+    const sisaBayar = totalNilai - totalDP;
+    return { total, selesai, berjalan, totalNilai, totalDP, sisaBayar };
+  }, [projects]);
 
   const totalPenjualan = monthlyData.reduce((sum, d) => sum + d.penjualan, 0);
   const totalPembelian = monthlyData.reduce((sum, d) => sum + d.pembelian, 0);
@@ -83,6 +104,15 @@ export default function Laporan() {
       return { ...p, marginPerUnit, revenue, totalMargin };
     });
   }, []);
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '-';
+    try {
+      return format(new Date(dateStr), 'dd MMM yy', { locale: id });
+    } catch {
+      return dateStr;
+    }
+  };
   const handleApplyPeriod = () => {
     if (!startDate || !endDate) {
       toast.error('Pilih tanggal mulai dan akhir');
@@ -178,6 +208,49 @@ export default function Laporan() {
               <tr><td>Biaya Operasional</td><td style="color: #dc2626;">Rp ${totalOperasional.toLocaleString('id-ID')}</td></tr>
               <tr style="font-weight: bold; background: #dcfce7;"><td>Laba Bersih</td><td>Rp ${labaBersih.toLocaleString('id-ID')}</td></tr>
               <tr><td>Margin Bersih</td><td>${marginBersih.toFixed(1)}%</td></tr>
+            </tbody>
+          </table>
+        `;
+        break;
+      case 'proyek':
+        reportTitle = 'Laporan Proyek';
+        reportContent = `
+          <h2>Ringkasan Proyek</h2>
+          <div style="display: flex; gap: 20px; margin-bottom: 20px;">
+            <div style="flex:1; text-align:center; padding:15px; background:#f3f4f6; border-radius:8px;">
+              <div style="font-size:24px; font-weight:bold;">${projectStats.total}</div>
+              <div>Total Proyek</div>
+            </div>
+            <div style="flex:1; text-align:center; padding:15px; background:#dcfce7; border-radius:8px;">
+              <div style="font-size:24px; font-weight:bold; color:#16a34a;">${projectStats.selesai}</div>
+              <div>Selesai</div>
+            </div>
+            <div style="flex:1; text-align:center; padding:15px; background:#dbeafe; border-radius:8px;">
+              <div style="font-size:24px; font-weight:bold; color:#2563eb;">${projectStats.berjalan}</div>
+              <div>Berjalan</div>
+            </div>
+          </div>
+          <table>
+            <tbody>
+              <tr><td>Total Nilai Kontrak</td><td style="font-weight:bold;">Rp ${projectStats.totalNilai.toLocaleString('id-ID')}</td></tr>
+              <tr><td>Total DP Diterima</td><td style="color:#16a34a; font-weight:bold;">Rp ${projectStats.totalDP.toLocaleString('id-ID')}</td></tr>
+              <tr><td>Sisa Pembayaran</td><td style="color:#dc2626; font-weight:bold;">Rp ${projectStats.sisaBayar.toLocaleString('id-ID')}</td></tr>
+            </tbody>
+          </table>
+          <h2 style="margin-top:30px;">Daftar Proyek</h2>
+          <table>
+            <thead><tr><th>Proyek</th><th>Pelanggan</th><th>Nilai Kontrak</th><th>DP</th><th>Sisa</th><th>Status</th></tr></thead>
+            <tbody>
+              ${projects.map(p => `
+                <tr>
+                  <td>${p.namaProyek}</td>
+                  <td>${p.pelanggan}</td>
+                  <td>Rp ${p.nilaiKontrak.toLocaleString('id-ID')}</td>
+                  <td style="color:#16a34a;">Rp ${p.dp.toLocaleString('id-ID')}</td>
+                  <td style="color:#dc2626;">Rp ${(p.nilaiKontrak - p.dp).toLocaleString('id-ID')}</td>
+                  <td>${p.status}</td>
+                </tr>
+              `).join('')}
             </tbody>
           </table>
         `;
@@ -513,13 +586,83 @@ export default function Laporan() {
           </CardContent>
         </Card>
 
+        {/* Project Report */}
+        <Card className="bg-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FolderKanban className="w-5 h-5 text-primary" />
+              Ringkasan Proyek
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="text-center p-3 bg-muted/30 rounded-lg">
+                <p className="text-2xl font-bold text-primary">{projectStats.total}</p>
+                <p className="text-xs text-muted-foreground">Total Proyek</p>
+              </div>
+              <div className="text-center p-3 bg-green-50 rounded-lg">
+                <p className="text-2xl font-bold text-green-600">{projectStats.selesai}</p>
+                <p className="text-xs text-muted-foreground">Selesai</p>
+              </div>
+              <div className="text-center p-3 bg-blue-50 rounded-lg">
+                <p className="text-2xl font-bold text-blue-600">{projectStats.berjalan}</p>
+                <p className="text-xs text-muted-foreground">Berjalan</p>
+              </div>
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Total Nilai Kontrak</span>
+                <span className="font-bold">{formatRupiah(projectStats.totalNilai)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Total DP Diterima</span>
+                <span className="font-bold text-secondary">{formatRupiah(projectStats.totalDP)}</span>
+              </div>
+              <div className="flex justify-between border-t pt-2">
+                <span className="text-muted-foreground">Sisa Pembayaran</span>
+                <span className="font-bold text-destructive">{formatRupiah(projectStats.sisaBayar)}</span>
+              </div>
+            </div>
+
+            {projects.length > 0 && (
+              <div className="mt-4 max-h-[200px] overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Proyek</TableHead>
+                      <TableHead>Nilai</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {projects.slice(0, 5).map((p) => (
+                      <TableRow key={p.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium text-xs">{p.namaProyek}</p>
+                            <p className="text-xs text-muted-foreground">{p.pelanggan}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs">{formatRupiah(p.nilaiKontrak)}</TableCell>
+                        <TableCell>
+                          <Badge className={`text-xs ${statusColors[p.status]}`}>{p.status}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Quick reports */}
         <Card className="lg:col-span-2 bg-card">
           <CardHeader>
             <CardTitle>Laporan Cepat</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <Button 
                 variant="outline" 
                 className="h-auto py-6 flex-col gap-2 border-secondary/30 hover:bg-secondary/5 hover:border-secondary"
@@ -551,6 +694,14 @@ export default function Laporan() {
               >
                 <FileText className="w-8 h-8 text-info" />
                 <span>Laporan Laba/Rugi</span>
+              </Button>
+              <Button 
+                variant="outline" 
+                className="h-auto py-6 flex-col gap-2 border-purple-300 hover:bg-purple-50 hover:border-purple-500"
+                onClick={() => handleQuickReport('proyek')}
+              >
+                <FolderKanban className="w-8 h-8 text-purple-500" />
+                <span>Laporan Proyek</span>
               </Button>
             </div>
           </CardContent>

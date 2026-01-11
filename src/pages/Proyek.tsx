@@ -1,0 +1,641 @@
+import React, { useState, useMemo } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { formatRupiah } from '@/components/RupiahIcon';
+import { toast } from 'sonner';
+import { useData } from '@/contexts/DataContext';
+import {
+  FolderKanban,
+  Plus,
+  Search,
+  Edit,
+  Trash2,
+  MoreHorizontal,
+  Calendar,
+  Wallet,
+  CheckCircle2,
+  Clock,
+  PlayCircle,
+  AlertCircle,
+  Eye,
+} from 'lucide-react';
+import { format } from 'date-fns';
+import { id } from 'date-fns/locale';
+
+const statusColors: Record<string, string> = {
+  'Pending': 'bg-yellow-100 text-yellow-800 border-yellow-300',
+  'Berjalan': 'bg-blue-100 text-blue-800 border-blue-300',
+  'Selesai': 'bg-green-100 text-green-800 border-green-300',
+  'Dibatalkan': 'bg-red-100 text-red-800 border-red-300',
+};
+
+const statusIcons: Record<string, React.ReactNode> = {
+  'Pending': <Clock className="w-3 h-3" />,
+  'Berjalan': <PlayCircle className="w-3 h-3" />,
+  'Selesai': <CheckCircle2 className="w-3 h-3" />,
+  'Dibatalkan': <AlertCircle className="w-3 h-3" />,
+};
+
+export default function Proyek() {
+  const { projects, addProject, updateProject, deleteProject } = useData();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [showDialog, setShowDialog] = useState(false);
+  const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const [editingProject, setEditingProject] = useState<typeof projects[0] | null>(null);
+  const [viewingProject, setViewingProject] = useState<typeof projects[0] | null>(null);
+
+  const [formData, setFormData] = useState({
+    namaProyek: '',
+    pelanggan: '',
+    alamat: '',
+    telepon: '',
+    deskripsi: '',
+    nilaiKontrak: 0,
+    dp: 0,
+    tanggalOrder: '',
+    tanggalMulai: '',
+    tanggalSelesai: '',
+    status: 'Pending' as 'Pending' | 'Berjalan' | 'Selesai' | 'Dibatalkan',
+    catatan: '',
+  });
+
+  const resetForm = () => {
+    setFormData({
+      namaProyek: '',
+      pelanggan: '',
+      alamat: '',
+      telepon: '',
+      deskripsi: '',
+      nilaiKontrak: 0,
+      dp: 0,
+      tanggalOrder: '',
+      tanggalMulai: '',
+      tanggalSelesai: '',
+      status: 'Pending',
+      catatan: '',
+    });
+    setEditingProject(null);
+  };
+
+  const handleOpenAdd = () => {
+    resetForm();
+    setShowDialog(true);
+  };
+
+  const handleOpenEdit = (project: typeof projects[0]) => {
+    setEditingProject(project);
+    setFormData({
+      namaProyek: project.namaProyek,
+      pelanggan: project.pelanggan,
+      alamat: project.alamat,
+      telepon: project.telepon,
+      deskripsi: project.deskripsi,
+      nilaiKontrak: project.nilaiKontrak,
+      dp: project.dp,
+      tanggalOrder: project.tanggalOrder,
+      tanggalMulai: project.tanggalMulai,
+      tanggalSelesai: project.tanggalSelesai,
+      status: project.status,
+      catatan: project.catatan,
+    });
+    setShowDialog(true);
+  };
+
+  const handleViewDetail = (project: typeof projects[0]) => {
+    setViewingProject(project);
+    setShowDetailDialog(true);
+  };
+
+  const handleSubmit = () => {
+    if (!formData.namaProyek || !formData.pelanggan || !formData.tanggalOrder) {
+      toast.error('Lengkapi data wajib: Nama Proyek, Pelanggan, Tanggal Order');
+      return;
+    }
+
+    if (editingProject) {
+      updateProject(editingProject.id, formData);
+      toast.success('Proyek berhasil diperbarui');
+    } else {
+      addProject(formData);
+      toast.success('Proyek baru berhasil ditambahkan');
+    }
+
+    setShowDialog(false);
+    resetForm();
+  };
+
+  const handleDelete = (id: string) => {
+    if (confirm('Hapus proyek ini?')) {
+      deleteProject(id);
+      toast.success('Proyek berhasil dihapus');
+    }
+  };
+
+  const filteredProjects = useMemo(() => {
+    return projects.filter((project) => {
+      const matchSearch =
+        project.namaProyek.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        project.pelanggan.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchStatus = filterStatus === 'all' || project.status === filterStatus;
+      return matchSearch && matchStatus;
+    });
+  }, [projects, searchTerm, filterStatus]);
+
+  const stats = useMemo(() => {
+    const total = projects.length;
+    const pending = projects.filter((p) => p.status === 'Pending').length;
+    const berjalan = projects.filter((p) => p.status === 'Berjalan').length;
+    const selesai = projects.filter((p) => p.status === 'Selesai').length;
+    const totalNilai = projects.reduce((sum, p) => sum + p.nilaiKontrak, 0);
+    const totalDP = projects.reduce((sum, p) => sum + p.dp, 0);
+    const sisaPembayaran = totalNilai - totalDP;
+
+    return { total, pending, berjalan, selesai, totalNilai, totalDP, sisaPembayaran };
+  }, [projects]);
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '-';
+    try {
+      return format(new Date(dateStr), 'dd MMM yyyy', { locale: id });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  return (
+    <div className="p-8 bg-background min-h-screen">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Manajemen Proyek</h1>
+          <p className="text-muted-foreground">Kelola proyek dan kontrak pelanggan</p>
+        </div>
+        <Button onClick={handleOpenAdd} className="gap-2 bg-gradient-primary">
+          <Plus className="w-4 h-4" />
+          Tambah Proyek
+        </Button>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
+        <Card className="bg-card">
+          <CardContent className="p-4 text-center">
+            <FolderKanban className="w-6 h-6 mx-auto text-primary mb-1" />
+            <p className="text-2xl font-bold">{stats.total}</p>
+            <p className="text-xs text-muted-foreground">Total Proyek</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-card">
+          <CardContent className="p-4 text-center">
+            <Clock className="w-6 h-6 mx-auto text-yellow-500 mb-1" />
+            <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
+            <p className="text-xs text-muted-foreground">Pending</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-card">
+          <CardContent className="p-4 text-center">
+            <PlayCircle className="w-6 h-6 mx-auto text-blue-500 mb-1" />
+            <p className="text-2xl font-bold text-blue-600">{stats.berjalan}</p>
+            <p className="text-xs text-muted-foreground">Berjalan</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-card">
+          <CardContent className="p-4 text-center">
+            <CheckCircle2 className="w-6 h-6 mx-auto text-green-500 mb-1" />
+            <p className="text-2xl font-bold text-green-600">{stats.selesai}</p>
+            <p className="text-xs text-muted-foreground">Selesai</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-card">
+          <CardContent className="p-4 text-center">
+            <Wallet className="w-6 h-6 mx-auto text-secondary mb-1" />
+            <p className="text-lg font-bold text-secondary">{formatRupiah(stats.totalNilai)}</p>
+            <p className="text-xs text-muted-foreground">Total Nilai</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-card">
+          <CardContent className="p-4 text-center">
+            <Wallet className="w-6 h-6 mx-auto text-primary mb-1" />
+            <p className="text-lg font-bold text-primary">{formatRupiah(stats.totalDP)}</p>
+            <p className="text-xs text-muted-foreground">Total DP</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-card">
+          <CardContent className="p-4 text-center">
+            <AlertCircle className="w-6 h-6 mx-auto text-destructive mb-1" />
+            <p className="text-lg font-bold text-destructive">{formatRupiah(stats.sisaPembayaran)}</p>
+            <p className="text-xs text-muted-foreground">Sisa Bayar</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filters */}
+      <Card className="mb-6 bg-card">
+        <CardContent className="p-4">
+          <div className="flex flex-wrap gap-4">
+            <div className="flex-1 min-w-[200px]">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Cari nama proyek atau pelanggan..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Status</SelectItem>
+                <SelectItem value="Pending">Pending</SelectItem>
+                <SelectItem value="Berjalan">Berjalan</SelectItem>
+                <SelectItem value="Selesai">Selesai</SelectItem>
+                <SelectItem value="Dibatalkan">Dibatalkan</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Table */}
+      <Card className="bg-card">
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead>ID</TableHead>
+                <TableHead>Proyek</TableHead>
+                <TableHead>Pelanggan</TableHead>
+                <TableHead>Nilai Kontrak</TableHead>
+                <TableHead>DP</TableHead>
+                <TableHead>Sisa</TableHead>
+                <TableHead>Tgl Order</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Aksi</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredProjects.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                    Belum ada data proyek
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredProjects.map((project) => (
+                  <TableRow key={project.id} className="hover:bg-muted/30">
+                    <TableCell className="font-mono text-xs">{project.id}</TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{project.namaProyek}</p>
+                        <p className="text-xs text-muted-foreground truncate max-w-[150px]">
+                          {project.alamat}
+                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{project.pelanggan}</p>
+                        <p className="text-xs text-muted-foreground">{project.telepon}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-medium">{formatRupiah(project.nilaiKontrak)}</TableCell>
+                    <TableCell className="text-secondary font-medium">{formatRupiah(project.dp)}</TableCell>
+                    <TableCell className="text-destructive font-medium">
+                      {formatRupiah(project.nilaiKontrak - project.dp)}
+                    </TableCell>
+                    <TableCell>{formatDate(project.tanggalOrder)}</TableCell>
+                    <TableCell>
+                      <Badge className={`gap-1 ${statusColors[project.status]}`}>
+                        {statusIcons[project.status]}
+                        {project.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => handleViewDetail(project)}
+                            className="gap-2 cursor-pointer"
+                          >
+                            <Eye className="w-4 h-4" />
+                            Lihat Detail
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleOpenEdit(project)}
+                            className="gap-2 cursor-pointer"
+                          >
+                            <Edit className="w-4 h-4" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleDelete(project.id)}
+                            className="gap-2 cursor-pointer text-destructive"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Hapus
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Add/Edit Dialog */}
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderKanban className="w-5 h-5 text-primary" />
+              {editingProject ? 'Edit Proyek' : 'Tambah Proyek Baru'}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2">
+              <Label>Nama Proyek *</Label>
+              <Input
+                value={formData.namaProyek}
+                onChange={(e) => setFormData({ ...formData, namaProyek: e.target.value })}
+                placeholder="Contoh: Proyek Atap Rumah Pak Ahmad"
+              />
+            </div>
+
+            <div>
+              <Label>Nama Pelanggan *</Label>
+              <Input
+                value={formData.pelanggan}
+                onChange={(e) => setFormData({ ...formData, pelanggan: e.target.value })}
+                placeholder="Nama pelanggan"
+              />
+            </div>
+
+            <div>
+              <Label>Telepon</Label>
+              <Input
+                value={formData.telepon}
+                onChange={(e) => setFormData({ ...formData, telepon: e.target.value })}
+                placeholder="08xx-xxxx-xxxx"
+              />
+            </div>
+
+            <div className="col-span-2">
+              <Label>Alamat Proyek</Label>
+              <Textarea
+                value={formData.alamat}
+                onChange={(e) => setFormData({ ...formData, alamat: e.target.value })}
+                placeholder="Alamat lengkap lokasi proyek"
+                rows={2}
+              />
+            </div>
+
+            <div className="col-span-2">
+              <Label>Deskripsi Proyek</Label>
+              <Textarea
+                value={formData.deskripsi}
+                onChange={(e) => setFormData({ ...formData, deskripsi: e.target.value })}
+                placeholder="Detail pekerjaan, ukuran, spesifikasi..."
+                rows={3}
+              />
+            </div>
+
+            <div>
+              <Label>Nilai Kontrak (Rp)</Label>
+              <Input
+                type="number"
+                value={formData.nilaiKontrak || ''}
+                onChange={(e) => setFormData({ ...formData, nilaiKontrak: Number(e.target.value) })}
+                placeholder="0"
+              />
+            </div>
+
+            <div>
+              <Label>DP / Uang Muka (Rp)</Label>
+              <Input
+                type="number"
+                value={formData.dp || ''}
+                onChange={(e) => setFormData({ ...formData, dp: Number(e.target.value) })}
+                placeholder="0"
+              />
+            </div>
+
+            <div>
+              <Label>Tanggal Order *</Label>
+              <Input
+                type="date"
+                value={formData.tanggalOrder}
+                onChange={(e) => setFormData({ ...formData, tanggalOrder: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <Label>Tanggal Mulai</Label>
+              <Input
+                type="date"
+                value={formData.tanggalMulai}
+                onChange={(e) => setFormData({ ...formData, tanggalMulai: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <Label>Tanggal Selesai</Label>
+              <Input
+                type="date"
+                value={formData.tanggalSelesai}
+                onChange={(e) => setFormData({ ...formData, tanggalSelesai: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <Label>Status</Label>
+              <Select
+                value={formData.status}
+                onValueChange={(val) =>
+                  setFormData({ ...formData, status: val as typeof formData.status })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Pending">Pending</SelectItem>
+                  <SelectItem value="Berjalan">Berjalan</SelectItem>
+                  <SelectItem value="Selesai">Selesai</SelectItem>
+                  <SelectItem value="Dibatalkan">Dibatalkan</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="col-span-2">
+              <Label>Catatan</Label>
+              <Textarea
+                value={formData.catatan}
+                onChange={(e) => setFormData({ ...formData, catatan: e.target.value })}
+                placeholder="Catatan tambahan..."
+                rows={2}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDialog(false)}>
+              Batal
+            </Button>
+            <Button onClick={handleSubmit} className="bg-gradient-primary">
+              {editingProject ? 'Simpan Perubahan' : 'Tambah Proyek'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Detail Dialog */}
+      <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderKanban className="w-5 h-5 text-primary" />
+              Detail Proyek
+            </DialogTitle>
+          </DialogHeader>
+
+          {viewingProject && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-lg font-bold">{viewingProject.namaProyek}</h3>
+                  <p className="text-sm text-muted-foreground">{viewingProject.id}</p>
+                </div>
+                <Badge className={`gap-1 ${statusColors[viewingProject.status]}`}>
+                  {statusIcons[viewingProject.status]}
+                  {viewingProject.status}
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Pelanggan</p>
+                  <p className="font-medium">{viewingProject.pelanggan}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Telepon</p>
+                  <p className="font-medium">{viewingProject.telepon || '-'}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-muted-foreground">Alamat</p>
+                  <p className="font-medium">{viewingProject.alamat || '-'}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-muted-foreground">Deskripsi</p>
+                  <p className="font-medium">{viewingProject.deskripsi || '-'}</p>
+                </div>
+              </div>
+
+              <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Nilai Kontrak</span>
+                  <span className="font-bold">{formatRupiah(viewingProject.nilaiKontrak)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">DP / Uang Muka</span>
+                  <span className="font-bold text-secondary">{formatRupiah(viewingProject.dp)}</span>
+                </div>
+                <div className="flex justify-between border-t pt-2">
+                  <span className="text-muted-foreground">Sisa Pembayaran</span>
+                  <span className="font-bold text-destructive">
+                    {formatRupiah(viewingProject.nilaiKontrak - viewingProject.dp)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className="text-center p-3 bg-muted/30 rounded-lg">
+                  <Calendar className="w-4 h-4 mx-auto mb-1 text-primary" />
+                  <p className="text-xs text-muted-foreground">Order</p>
+                  <p className="font-medium">{formatDate(viewingProject.tanggalOrder)}</p>
+                </div>
+                <div className="text-center p-3 bg-muted/30 rounded-lg">
+                  <PlayCircle className="w-4 h-4 mx-auto mb-1 text-blue-500" />
+                  <p className="text-xs text-muted-foreground">Mulai</p>
+                  <p className="font-medium">{formatDate(viewingProject.tanggalMulai)}</p>
+                </div>
+                <div className="text-center p-3 bg-muted/30 rounded-lg">
+                  <CheckCircle2 className="w-4 h-4 mx-auto mb-1 text-green-500" />
+                  <p className="text-xs text-muted-foreground">Selesai</p>
+                  <p className="font-medium">{formatDate(viewingProject.tanggalSelesai)}</p>
+                </div>
+              </div>
+
+              {viewingProject.catatan && (
+                <div>
+                  <p className="text-muted-foreground text-sm">Catatan</p>
+                  <p className="text-sm bg-muted/30 p-3 rounded-lg">{viewingProject.catatan}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDetailDialog(false)}>
+              Tutup
+            </Button>
+            <Button
+              onClick={() => {
+                setShowDetailDialog(false);
+                if (viewingProject) handleOpenEdit(viewingProject);
+              }}
+              className="gap-2"
+            >
+              <Edit className="w-4 h-4" />
+              Edit Proyek
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
