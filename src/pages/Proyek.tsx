@@ -35,7 +35,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { formatRupiah } from '@/components/RupiahIcon';
 import { toast } from 'sonner';
-import { useData } from '@/contexts/DataContext';
+import { useData, ProjectMaterial } from '@/contexts/DataContext';
 import {
   FolderKanban,
   Plus,
@@ -50,6 +50,8 @@ import {
   PlayCircle,
   AlertCircle,
   Eye,
+  Package,
+  X,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
@@ -69,7 +71,7 @@ const statusIcons: Record<string, React.ReactNode> = {
 };
 
 export default function Proyek() {
-  const { projects, addProject, updateProject, deleteProject } = useData();
+  const { projects, products, addProject, updateProject, deleteProject, updateProduct } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showDialog, setShowDialog] = useState(false);
@@ -92,6 +94,11 @@ export default function Proyek() {
     catatan: '',
   });
 
+  // Material state
+  const [materials, setMaterials] = useState<ProjectMaterial[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [materialQty, setMaterialQty] = useState(1);
+
   const resetForm = () => {
     setFormData({
       namaProyek: '',
@@ -107,8 +114,48 @@ export default function Proyek() {
       status: 'Pending',
       catatan: '',
     });
+    setMaterials([]);
+    setSelectedProductId('');
+    setMaterialQty(1);
     setEditingProject(null);
   };
+
+  const handleAddMaterial = () => {
+    if (!selectedProductId || materialQty <= 0) {
+      toast.error('Pilih produk dan masukkan jumlah');
+      return;
+    }
+    const product = products.find(p => p.id === selectedProductId);
+    if (!product) return;
+
+    // Check if already added
+    const existing = materials.find(m => m.productId === selectedProductId);
+    if (existing) {
+      setMaterials(prev => prev.map(m => 
+        m.productId === selectedProductId 
+          ? { ...m, qty: m.qty + materialQty }
+          : m
+      ));
+    } else {
+      setMaterials(prev => [...prev, {
+        productId: product.id,
+        productName: product.nama,
+        qty: materialQty,
+        satuan: product.satuan,
+        harga: product.harga,
+      }]);
+    }
+    setSelectedProductId('');
+    setMaterialQty(1);
+  };
+
+  const handleRemoveMaterial = (productId: string) => {
+    setMaterials(prev => prev.filter(m => m.productId !== productId));
+  };
+
+  const totalMaterialCost = useMemo(() => {
+    return materials.reduce((sum, m) => sum + (m.qty * m.harga), 0);
+  }, [materials]);
 
   const handleOpenAdd = () => {
     resetForm();
@@ -131,6 +178,7 @@ export default function Proyek() {
       status: project.status,
       catatan: project.catatan,
     });
+    setMaterials(project.materials || []);
     setShowDialog(true);
   };
 
@@ -145,11 +193,37 @@ export default function Proyek() {
       return;
     }
 
+    const projectData = { ...formData, materials };
+
     if (editingProject) {
-      updateProject(editingProject.id, formData);
+      // Restore stock from old materials
+      editingProject.materials?.forEach(oldMat => {
+        const product = products.find(p => p.id === oldMat.productId);
+        if (product) {
+          updateProduct(product.id, { stok: product.stok + oldMat.qty });
+        }
+      });
+      
+      // Deduct stock for new materials
+      materials.forEach(mat => {
+        const product = products.find(p => p.id === mat.productId);
+        if (product) {
+          updateProduct(product.id, { stok: product.stok - mat.qty });
+        }
+      });
+
+      updateProject(editingProject.id, projectData);
       toast.success('Proyek berhasil diperbarui');
     } else {
-      addProject(formData);
+      // Deduct stock for new project
+      materials.forEach(mat => {
+        const product = products.find(p => p.id === mat.productId);
+        if (product) {
+          updateProduct(product.id, { stok: product.stok - mat.qty });
+        }
+      });
+
+      addProject(projectData);
       toast.success('Proyek baru berhasil ditambahkan');
     }
 
@@ -520,6 +594,87 @@ export default function Proyek() {
                 rows={2}
               />
             </div>
+
+            {/* Material Section */}
+            <div className="col-span-2 border-t pt-4 mt-2">
+              <Label className="flex items-center gap-2 mb-3">
+                <Package className="w-4 h-4 text-primary" />
+                Material / Produk yang Digunakan
+              </Label>
+              
+              <div className="flex gap-2 mb-3">
+                <Select value={selectedProductId} onValueChange={setSelectedProductId}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Pilih produk..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {products.map(product => (
+                      <SelectItem key={product.id} value={product.id}>
+                        {product.nama} ({product.stok} {product.satuan})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="number"
+                  value={materialQty}
+                  onChange={(e) => setMaterialQty(Number(e.target.value))}
+                  className="w-24"
+                  min={1}
+                  placeholder="Qty"
+                />
+                <Button type="button" variant="secondary" onClick={handleAddMaterial}>
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+
+              {materials.length > 0 && (
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead>Produk</TableHead>
+                        <TableHead className="text-center">Qty</TableHead>
+                        <TableHead className="text-right">Harga</TableHead>
+                        <TableHead className="text-right">Subtotal</TableHead>
+                        <TableHead className="w-10"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {materials.map((mat) => (
+                        <TableRow key={mat.productId}>
+                          <TableCell className="font-medium">{mat.productName}</TableCell>
+                          <TableCell className="text-center">{mat.qty} {mat.satuan}</TableCell>
+                          <TableCell className="text-right">{formatRupiah(mat.harga)}</TableCell>
+                          <TableCell className="text-right font-medium">{formatRupiah(mat.qty * mat.harga)}</TableCell>
+                          <TableCell>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-7 w-7 text-destructive"
+                              onClick={() => handleRemoveMaterial(mat.productId)}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      <TableRow className="bg-muted/30">
+                        <TableCell colSpan={3} className="text-right font-bold">Total Biaya Material</TableCell>
+                        <TableCell className="text-right font-bold text-primary">{formatRupiah(totalMaterialCost)}</TableCell>
+                        <TableCell></TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {materials.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4 border rounded-lg border-dashed">
+                  Belum ada material ditambahkan
+                </p>
+              )}
+            </div>
           </div>
 
           <DialogFooter>
@@ -614,6 +769,42 @@ export default function Proyek() {
                 <div>
                   <p className="text-muted-foreground text-sm">Catatan</p>
                   <p className="text-sm bg-muted/30 p-3 rounded-lg">{viewingProject.catatan}</p>
+                </div>
+              )}
+
+              {/* Material Used */}
+              {viewingProject.materials && viewingProject.materials.length > 0 && (
+                <div>
+                  <p className="text-muted-foreground text-sm flex items-center gap-2 mb-2">
+                    <Package className="w-4 h-4" />
+                    Material yang Digunakan
+                  </p>
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead>Produk</TableHead>
+                          <TableHead className="text-center">Qty</TableHead>
+                          <TableHead className="text-right">Subtotal</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {viewingProject.materials.map((mat) => (
+                          <TableRow key={mat.productId}>
+                            <TableCell className="font-medium">{mat.productName}</TableCell>
+                            <TableCell className="text-center">{mat.qty} {mat.satuan}</TableCell>
+                            <TableCell className="text-right">{formatRupiah(mat.qty * mat.harga)}</TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow className="bg-muted/30">
+                          <TableCell colSpan={2} className="text-right font-bold">Total Material</TableCell>
+                          <TableCell className="text-right font-bold text-primary">
+                            {formatRupiah(viewingProject.materials.reduce((sum, m) => sum + (m.qty * m.harga), 0))}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
               )}
             </div>
