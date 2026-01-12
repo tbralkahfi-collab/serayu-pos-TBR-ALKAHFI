@@ -73,6 +73,14 @@ export interface Transaction {
   status: string;
 }
 
+export interface ProjectMaterial {
+  productId: string;
+  productName: string;
+  qty: number;
+  satuan: string;
+  harga: number;
+}
+
 export interface Project {
   id: string;
   namaProyek: string;
@@ -87,6 +95,7 @@ export interface Project {
   tanggalSelesai: string;
   status: 'Pending' | 'Berjalan' | 'Selesai' | 'Dibatalkan';
   catatan: string;
+  materials: ProjectMaterial[];
 }
 
 // Initial data
@@ -181,7 +190,12 @@ const initialProjects: Project[] = [
     tanggalMulai: '2024-01-15',
     tanggalSelesai: '2024-01-25',
     status: 'Selesai',
-    catatan: 'Termasuk material dan ongkos pasang'
+    catatan: 'Termasuk material dan ongkos pasang',
+    materials: [
+      { productId: 'PRD001', productName: 'Baja Ringan C75', qty: 50, satuan: 'batang', harga: 85000 },
+      { productId: 'PRD006', productName: 'Reng Baja Ringan', qty: 100, satuan: 'batang', harga: 28000 },
+      { productId: 'PRD008', productName: 'Sekrup Baja 12mm', qty: 500, satuan: 'pcs', harga: 350 },
+    ]
   },
   { 
     id: 'PRJ002', 
@@ -196,7 +210,12 @@ const initialProjects: Project[] = [
     tanggalMulai: '2024-01-12',
     tanggalSelesai: '',
     status: 'Berjalan',
-    catatan: 'Pembayaran 3 termin'
+    catatan: 'Pembayaran 3 termin',
+    materials: [
+      { productId: 'PRD002', productName: 'Baja Ringan C100', qty: 200, satuan: 'batang', harga: 95000 },
+      { productId: 'PRD005', productName: 'Hollow 4x4', qty: 100, satuan: 'batang', harga: 65000 },
+      { productId: 'PRD003', productName: 'Spandek 0.30mm', qty: 150, satuan: 'lembar', harga: 85000 },
+    ]
   },
   { 
     id: 'PRJ003', 
@@ -211,7 +230,8 @@ const initialProjects: Project[] = [
     tanggalMulai: '',
     tanggalSelesai: '',
     status: 'Pending',
-    catatan: 'Menunggu pembayaran DP'
+    catatan: 'Menunggu pembayaran DP',
+    materials: []
   },
 ];
 
