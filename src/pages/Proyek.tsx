@@ -27,12 +27,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { formatRupiah } from '@/components/RupiahIcon';
 import { toast } from 'sonner';
 import { useData, ProjectMaterial } from '@/contexts/DataContext';
@@ -42,7 +36,6 @@ import {
   Search,
   Edit,
   Trash2,
-  MoreHorizontal,
   Calendar,
   Wallet,
   CheckCircle2,
@@ -421,36 +414,35 @@ export default function Proyek() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => handleViewDetail(project)}
-                            className="gap-2 cursor-pointer"
-                          >
-                            <Eye className="w-4 h-4" />
-                            Lihat Detail
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleOpenEdit(project)}
-                            className="gap-2 cursor-pointer"
-                          >
-                            <Edit className="w-4 h-4" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleDelete(project.id)}
-                            className="gap-2 cursor-pointer text-destructive"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            Hapus
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handleViewDetail(project)}
+                          title="Lihat Detail"
+                        >
+                          <Eye className="w-4 h-4 text-muted-foreground" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handleOpenEdit(project)}
+                          title="Edit"
+                        >
+                          <Edit className="w-4 h-4 text-primary" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handleDelete(project.id)}
+                          title="Hapus"
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
