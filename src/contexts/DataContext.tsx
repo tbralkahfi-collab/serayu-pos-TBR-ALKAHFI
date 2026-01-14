@@ -5,10 +5,13 @@ export interface Product {
   id: string;
   nama: string;
   kategori: string;
-  harga: number;
+  hargaBeli: number;
+  hargaJual: number;
   stok: number;
   satuan: string;
   minStok?: number;
+  // Legacy support
+  harga?: number;
 }
 
 export interface Supplier {
@@ -43,6 +46,7 @@ export interface DebtRecord {
   jatuhTempo: string;
   keterangan: string;
   payments: PaymentHistory[];
+  projectId?: string; // Link to project
 }
 
 export interface PaymentHistory {
@@ -90,6 +94,7 @@ export interface Project {
   deskripsi: string;
   nilaiKontrak: number;
   dp: number;
+  biayaTenagaKerja: number;
   tanggalOrder: string;
   tanggalMulai: string;
   tanggalSelesai: string;
@@ -100,16 +105,16 @@ export interface Project {
 
 // Initial data
 const initialProducts: Product[] = [
-  { id: 'PRD001', nama: 'Baja Ringan C75', kategori: 'Rangka', harga: 85000, stok: 250, satuan: 'batang' },
-  { id: 'PRD002', nama: 'Baja Ringan C100', kategori: 'Rangka', harga: 95000, stok: 180, satuan: 'batang' },
-  { id: 'PRD003', nama: 'Spandek 0.30mm', kategori: 'Atap', harga: 85000, stok: 150, satuan: 'lembar' },
-  { id: 'PRD004', nama: 'Spandek 0.35mm', kategori: 'Atap', harga: 95000, stok: 8, satuan: 'lembar' },
-  { id: 'PRD005', nama: 'Hollow 4x4', kategori: 'Rangka', harga: 65000, stok: 120, satuan: 'batang' },
-  { id: 'PRD006', nama: 'Reng Baja Ringan', kategori: 'Rangka', harga: 28000, stok: 5, satuan: 'batang' },
-  { id: 'PRD007', nama: 'Genteng Metal', kategori: 'Atap', harga: 45000, stok: 200, satuan: 'lembar' },
-  { id: 'PRD008', nama: 'Sekrup Baja 12mm', kategori: 'Aksesoris', harga: 350, stok: 5000, satuan: 'pcs' },
-  { id: 'PRD009', nama: 'Dynabolt 10mm', kategori: 'Aksesoris', harga: 2500, stok: 800, satuan: 'pcs' },
-  { id: 'PRD010', nama: 'Talang Air PVC', kategori: 'Aksesoris', harga: 55000, stok: 50, satuan: 'batang' },
+  { id: 'PRD001', nama: 'Baja Ringan C75', kategori: 'Rangka', hargaBeli: 75000, hargaJual: 85000, stok: 250, satuan: 'batang' },
+  { id: 'PRD002', nama: 'Baja Ringan C100', kategori: 'Rangka', hargaBeli: 85000, hargaJual: 95000, stok: 180, satuan: 'batang' },
+  { id: 'PRD003', nama: 'Spandek 0.30mm', kategori: 'Atap', hargaBeli: 75000, hargaJual: 85000, stok: 150, satuan: 'lembar' },
+  { id: 'PRD004', nama: 'Spandek 0.35mm', kategori: 'Atap', hargaBeli: 85000, hargaJual: 95000, stok: 8, satuan: 'lembar' },
+  { id: 'PRD005', nama: 'Hollow 4x4', kategori: 'Rangka', hargaBeli: 55000, hargaJual: 65000, stok: 120, satuan: 'batang' },
+  { id: 'PRD006', nama: 'Reng Baja Ringan', kategori: 'Rangka', hargaBeli: 22000, hargaJual: 28000, stok: 5, satuan: 'batang' },
+  { id: 'PRD007', nama: 'Genteng Metal', kategori: 'Atap', hargaBeli: 38000, hargaJual: 45000, stok: 200, satuan: 'lembar' },
+  { id: 'PRD008', nama: 'Sekrup Baja 12mm', kategori: 'Aksesoris', hargaBeli: 280, hargaJual: 350, stok: 5000, satuan: 'pcs' },
+  { id: 'PRD009', nama: 'Dynabolt 10mm', kategori: 'Aksesoris', hargaBeli: 2000, hargaJual: 2500, stok: 800, satuan: 'pcs' },
+  { id: 'PRD010', nama: 'Talang Air PVC', kategori: 'Aksesoris', hargaBeli: 45000, hargaJual: 55000, stok: 50, satuan: 'batang' },
 ];
 
 const initialSuppliers: Supplier[] = [
@@ -127,6 +132,10 @@ const initialPurchases: Purchase[] = [
   { id: 'PO004', supplierId: 'SUP004', supplier: 'PT Atap Metal', date: '2024-01-12', total: 22500000, dp: 10000000, paymentMethod: 'transfer', status: 'Dikirim', items: 'Genteng Metal x 500lbr', notes: 'Est. tiba 3 hari' },
   { id: 'PO005', supplierId: 'SUP005', supplier: 'CV Fastener Indo', date: '2024-01-11', total: 8500000, dp: 0, paymentMethod: 'cash', status: 'Selesai', items: 'Sekrup & Dynabolt', notes: '' },
 ];
+
+const today = new Date().toISOString().split('T')[0];
+const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+const twoDaysAgo = new Date(Date.now() - 172800000).toISOString().split('T')[0];
 
 const initialDebts: DebtRecord[] = [
   { 
@@ -160,20 +169,21 @@ const initialDebts: DebtRecord[] = [
 ];
 
 const initialExpenses: Expense[] = [
-  { id: 'OP001', kategori: 'Listrik', deskripsi: 'Tagihan PLN Januari - Gudang & Toko', jumlah: 1850000, tanggal: '2024-01-15' },
-  { id: 'OP002', kategori: 'Air', deskripsi: 'Tagihan PDAM Januari', jumlah: 350000, tanggal: '2024-01-15' },
-  { id: 'OP003', kategori: 'Telepon', deskripsi: 'Tagihan Internet & Telepon Toko', jumlah: 650000, tanggal: '2024-01-10' },
-  { id: 'OP004', kategori: 'Transportasi', deskripsi: 'BBM Truk Pengiriman', jumlah: 2500000, tanggal: '2024-01-12' },
-  { id: 'OP005', kategori: 'Pemeliharaan', deskripsi: 'Service Forklift', jumlah: 850000, tanggal: '2024-01-08' },
-  { id: 'OP006', kategori: 'Sewa', deskripsi: 'Sewa Gudang Januari', jumlah: 8000000, tanggal: '2024-01-01' },
+  { id: 'OP001', kategori: 'Listrik', deskripsi: 'Tagihan PLN Januari - Gudang & Toko', jumlah: 1850000, tanggal: today },
+  { id: 'OP002', kategori: 'Air', deskripsi: 'Tagihan PDAM Januari', jumlah: 350000, tanggal: today },
+  { id: 'OP003', kategori: 'Telepon', deskripsi: 'Tagihan Internet & Telepon Toko', jumlah: 650000, tanggal: yesterday },
+  { id: 'OP004', kategori: 'Transportasi', deskripsi: 'BBM Truk Pengiriman', jumlah: 2500000, tanggal: yesterday },
+  { id: 'OP005', kategori: 'Pemeliharaan', deskripsi: 'Service Forklift', jumlah: 850000, tanggal: twoDaysAgo },
+  { id: 'OP006', kategori: 'Sewa', deskripsi: 'Sewa Gudang Januari', jumlah: 8000000, tanggal: twoDaysAgo },
 ];
 
 const initialTransactions: Transaction[] = [
-  { id: 'TRX001', tanggal: '2024-01-15 14:30', pelanggan: 'Pak Ahmad', items: 'Baja C75 x10, Spandek x20', total: 2750000, bayar: 3000000, kembalian: 250000, metode: 'Cash', status: 'Selesai' },
-  { id: 'TRX002', tanggal: '2024-01-15 11:20', pelanggan: 'CV Bangun Jaya', items: 'Hollow 4x4 x50, Sekrup x1000', total: 3600000, bayar: 3600000, kembalian: 0, metode: 'Transfer', status: 'Selesai' },
-  { id: 'TRX003', tanggal: '2024-01-14 16:45', pelanggan: 'Toko Maju', items: 'Reng x100, Genteng Metal x50', total: 5050000, bayar: 5100000, kembalian: 50000, metode: 'Cash', status: 'Selesai' },
-  { id: 'TRX004', tanggal: '2024-01-14 09:15', pelanggan: 'Pak Budi', items: 'Baja C100 x5', total: 475000, bayar: 500000, kembalian: 25000, metode: 'Cash', status: 'Selesai' },
-  { id: 'TRX005', tanggal: '2024-01-13 13:00', pelanggan: 'PT Konstruksi', items: 'Spandek 0.35mm x100', total: 9500000, bayar: 9500000, kembalian: 0, metode: 'Transfer', status: 'Selesai' },
+  { id: 'TRX001', tanggal: `${today} 14:30`, pelanggan: 'Pak Ahmad', items: 'Baja C75 x10, Spandek x20', total: 2750000, bayar: 3000000, kembalian: 250000, metode: 'Cash', status: 'Selesai' },
+  { id: 'TRX002', tanggal: `${today} 11:20`, pelanggan: 'CV Bangun Jaya', items: 'Hollow 4x4 x50, Sekrup x1000', total: 3600000, bayar: 3600000, kembalian: 0, metode: 'Transfer', status: 'Selesai' },
+  { id: 'TRX003', tanggal: `${today} 09:15`, pelanggan: 'Toko Maju', items: 'Reng x100, Genteng Metal x50', total: 5050000, bayar: 5100000, kembalian: 50000, metode: 'Cash', status: 'Selesai' },
+  { id: 'TRX004', tanggal: `${yesterday} 16:45`, pelanggan: 'Pak Budi', items: 'Baja C100 x5', total: 475000, bayar: 500000, kembalian: 25000, metode: 'Cash', status: 'Selesai' },
+  { id: 'TRX005', tanggal: `${yesterday} 13:00`, pelanggan: 'PT Konstruksi', items: 'Spandek 0.35mm x100', total: 9500000, bayar: 9500000, kembalian: 0, metode: 'Transfer', status: 'Selesai' },
+  { id: 'TRX006', tanggal: `${twoDaysAgo} 10:30`, pelanggan: 'UD Karya', items: 'Hollow 4x4 x30', total: 1950000, bayar: 2000000, kembalian: 50000, metode: 'Cash', status: 'Selesai' },
 ];
 
 const initialProjects: Project[] = [
@@ -186,6 +196,7 @@ const initialProjects: Project[] = [
     deskripsi: 'Pemasangan rangka atap baja ringan untuk rumah type 45',
     nilaiKontrak: 35000000,
     dp: 15000000,
+    biayaTenagaKerja: 5000000,
     tanggalOrder: '2024-01-10',
     tanggalMulai: '2024-01-15',
     tanggalSelesai: '2024-01-25',
@@ -206,6 +217,7 @@ const initialProjects: Project[] = [
     deskripsi: 'Konstruksi rangka gudang 20x30 meter',
     nilaiKontrak: 180000000,
     dp: 60000000,
+    biayaTenagaKerja: 25000000,
     tanggalOrder: '2024-01-05',
     tanggalMulai: '2024-01-12',
     tanggalSelesai: '',
@@ -226,6 +238,7 @@ const initialProjects: Project[] = [
     deskripsi: 'Ganti atap lama dengan spandek baru',
     nilaiKontrak: 25000000,
     dp: 0,
+    biayaTenagaKerja: 3500000,
     tanggalOrder: '2024-01-14',
     tanggalMulai: '',
     tanggalSelesai: '',
@@ -285,6 +298,10 @@ interface DataContextType {
   addProject: (project: Omit<Project, 'id'>) => void;
   updateProject: (id: string, project: Partial<Project>) => void;
   deleteProject: (id: string) => void;
+
+  // Project debt relation
+  getProjectDebts: (projectId: string) => DebtRecord[];
+  createProjectDebt: (projectId: string, projectName: string, amount: number, dueDate: string) => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -299,10 +316,36 @@ const STORAGE_KEYS = {
   projects: 'serayu_projects',
 };
 
+// Helper to migrate old product format to new
+const migrateProduct = (product: any): Product => {
+  if (product.hargaBeli !== undefined && product.hargaJual !== undefined) {
+    return product;
+  }
+  // Migrate old harga to hargaBeli and hargaJual
+  const harga = product.harga || 0;
+  return {
+    ...product,
+    hargaBeli: Math.round(harga * 0.85), // Assume 15% margin
+    hargaJual: harga,
+  };
+};
+
+// Helper to migrate old project format to new
+const migrateProject = (project: any): Project => {
+  return {
+    ...project,
+    biayaTenagaKerja: project.biayaTenagaKerja || 0,
+  };
+};
+
 export function DataProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.products);
-    return saved ? JSON.parse(saved) : initialProducts;
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return parsed.map(migrateProduct);
+    }
+    return initialProducts;
   });
   
   const [suppliers, setSuppliers] = useState<Supplier[]>(() => {
@@ -332,7 +375,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const [projects, setProjects] = useState<Project[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.projects);
-    return saved ? JSON.parse(saved) : initialProjects;
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return parsed.map(migrateProject);
+    }
+    return initialProjects;
   });
 
   // Save to localStorage whenever data changes
@@ -480,6 +527,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setProjects(prev => prev.filter(p => p.id !== id));
   };
 
+  // Project-Debt relation functions
+  const getProjectDebts = (projectId: string): DebtRecord[] => {
+    return debts.filter(d => d.projectId === projectId);
+  };
+
+  const createProjectDebt = (projectId: string, projectName: string, amount: number, dueDate: string) => {
+    const prefix = 'PTG';
+    const count = debts.filter(d => d.type === 'piutang').length + 1;
+    const id = `${prefix}${String(count).padStart(3, '0')}`;
+    const newDebt: DebtRecord = {
+      id,
+      type: 'piutang',
+      nama: projectName,
+      total: amount,
+      sisa: amount,
+      tanggal: new Date().toISOString().split('T')[0],
+      jatuhTempo: dueDate,
+      keterangan: `Piutang proyek: ${projectName}`,
+      payments: [],
+      projectId,
+    };
+    setDebts(prev => [...prev, newDebt]);
+  };
+
   return (
     <DataContext.Provider value={{
       products, setProducts, addProduct, updateProduct, deleteProduct,
@@ -489,6 +560,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       expenses, setExpenses, addExpense, updateExpense, deleteExpense,
       transactions, setTransactions, addTransaction, updateTransaction, deleteTransaction,
       projects, setProjects, addProject, updateProject, deleteProject,
+      getProjectDebts, createProjectDebt,
     }}>
       {children}
     </DataContext.Provider>
