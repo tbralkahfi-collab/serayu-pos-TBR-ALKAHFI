@@ -61,7 +61,8 @@ export default function Produk() {
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [formData, setFormData] = useState({
     nama: '',
-    harga: '',
+    hargaBeli: '',
+    hargaJual: '',
     stok: '',
     kategori: '',
     satuan: '',
@@ -75,7 +76,7 @@ export default function Produk() {
 
   const handleAddNew = () => {
     setEditingProduct(null);
-    setFormData({ nama: '', harga: '', stok: '', kategori: '', satuan: '' });
+    setFormData({ nama: '', hargaBeli: '', hargaJual: '', stok: '', kategori: '', satuan: '' });
     setShowDialog(true);
   };
 
@@ -83,7 +84,8 @@ export default function Produk() {
     setEditingProduct(product);
     setFormData({
       nama: product.nama,
-      harga: product.harga.toString(),
+      hargaBeli: product.hargaBeli.toString(),
+      hargaJual: product.hargaJual.toString(),
       stok: product.stok.toString(),
       kategori: product.kategori,
       satuan: product.satuan,
@@ -106,15 +108,24 @@ export default function Produk() {
   };
 
   const handleSave = () => {
-    if (!formData.nama || !formData.harga || !formData.stok || !formData.kategori || !formData.satuan) {
+    if (!formData.nama || !formData.hargaBeli || !formData.hargaJual || !formData.stok || !formData.kategori || !formData.satuan) {
       toast.error('Semua field harus diisi');
+      return;
+    }
+
+    const hargaBeli = parseInt(formData.hargaBeli);
+    const hargaJual = parseInt(formData.hargaJual);
+
+    if (hargaJual < hargaBeli) {
+      toast.error('Harga jual tidak boleh lebih kecil dari harga beli');
       return;
     }
 
     if (editingProduct) {
       updateProduct(editingProduct.id, {
         nama: formData.nama,
-        harga: parseInt(formData.harga),
+        hargaBeli,
+        hargaJual,
         stok: parseInt(formData.stok),
         kategori: formData.kategori,
         satuan: formData.satuan,
@@ -123,7 +134,8 @@ export default function Produk() {
     } else {
       addProduct({
         nama: formData.nama,
-        harga: parseInt(formData.harga),
+        hargaBeli,
+        hargaJual,
         stok: parseInt(formData.stok),
         kategori: formData.kategori,
         satuan: formData.satuan,
@@ -137,6 +149,12 @@ export default function Produk() {
   const availableStock = products.filter(p => p.stok > 10).length;
   const lowStock = products.filter(p => p.stok <= 10 && p.stok > 0).length;
   const outOfStock = products.filter(p => p.stok === 0).length;
+
+  // Calculate margin
+  const getMargin = (product: Product) => {
+    if (!product.hargaBeli || product.hargaBeli === 0) return 0;
+    return ((product.hargaJual - product.hargaBeli) / product.hargaBeli) * 100;
+  };
 
   return (
     <div className="p-8">
@@ -224,7 +242,9 @@ export default function Produk() {
               <TableRow>
                 <TableHead>Produk</TableHead>
                 <TableHead>Kategori</TableHead>
-                <TableHead className="text-right">Harga</TableHead>
+                <TableHead className="text-right">Harga Beli</TableHead>
+                <TableHead className="text-right">Harga Jual</TableHead>
+                <TableHead className="text-right">Margin</TableHead>
                 <TableHead className="text-right">Stok</TableHead>
                 <TableHead className="text-right">Aksi</TableHead>
               </TableRow>
@@ -236,8 +256,16 @@ export default function Produk() {
                   <TableCell>
                     <Badge variant="secondary">{product.kategori}</Badge>
                   </TableCell>
-                  <TableCell className="text-right font-medium">
-                    {formatRupiah(product.harga)}
+                  <TableCell className="text-right text-muted-foreground">
+                    {formatRupiah(product.hargaBeli)}
+                  </TableCell>
+                  <TableCell className="text-right font-medium text-secondary">
+                    {formatRupiah(product.hargaJual)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Badge variant="outline" className="text-secondary">
+                      {getMargin(product).toFixed(0)}%
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <span
@@ -330,23 +358,41 @@ export default function Produk() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Harga (Rp)</Label>
+                <Label>Harga Beli (Rp)</Label>
                 <Input
                   type="number"
                   placeholder="0"
-                  value={formData.harga}
-                  onChange={(e) => setFormData(prev => ({ ...prev, harga: e.target.value }))}
+                  value={formData.hargaBeli}
+                  onChange={(e) => setFormData(prev => ({ ...prev, hargaBeli: e.target.value }))}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Stok</Label>
+                <Label>Harga Jual (Rp)</Label>
                 <Input
                   type="number"
                   placeholder="0"
-                  value={formData.stok}
-                  onChange={(e) => setFormData(prev => ({ ...prev, stok: e.target.value }))}
+                  value={formData.hargaJual}
+                  onChange={(e) => setFormData(prev => ({ ...prev, hargaJual: e.target.value }))}
                 />
               </div>
+            </div>
+            {formData.hargaBeli && formData.hargaJual && (
+              <div className="p-3 bg-muted/50 rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  Margin: <span className="font-bold text-secondary">
+                    {(((parseInt(formData.hargaJual) - parseInt(formData.hargaBeli)) / parseInt(formData.hargaBeli)) * 100).toFixed(1)}%
+                  </span> ({formatRupiah(parseInt(formData.hargaJual) - parseInt(formData.hargaBeli))} per unit)
+                </p>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Stok</Label>
+              <Input
+                type="number"
+                placeholder="0"
+                value={formData.stok}
+                onChange={(e) => setFormData(prev => ({ ...prev, stok: e.target.value }))}
+              />
             </div>
           </div>
           <DialogFooter>

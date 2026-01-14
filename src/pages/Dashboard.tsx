@@ -16,12 +16,16 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   AlertTriangle,
+  Calendar,
+  CalendarDays,
+  CalendarRange,
+  Wallet,
 } from 'lucide-react';
 
 export default function Dashboard() {
   const { storeInfo, stockSettings } = useStore();
   const { user } = useAuth();
-  const { products, transactions, expenses } = useData();
+  const { products, transactions, expenses, projects, debts } = useData();
   const navigate = useNavigate();
 
   const currentHour = new Date().getHours();
@@ -30,50 +34,69 @@ export default function Dashboard() {
   else if (currentHour >= 15 && currentHour < 18) greeting = 'Selamat Sore';
   else if (currentHour >= 18) greeting = 'Selamat Malam';
 
-  // Calculate stats from real data
-  const stats = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
-    const todayTransactions = transactions.filter(t => t.tanggal.startsWith(today));
-    const totalSales = todayTransactions.reduce((sum, t) => sum + t.total, 0);
-    const totalTransactions = todayTransactions.length;
+  // Calculate real-time stats for today, this week, this month
+  const salesStats = useMemo(() => {
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    
+    // Get start of week (Monday)
+    const dayOfWeek = now.getDay();
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    const weekStart = startOfWeek.toISOString().split('T')[0];
+    
+    // Get start of month
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthStart = startOfMonth.toISOString().split('T')[0];
 
-    return [
-      {
-        title: 'Penjualan Hari Ini',
-        value: totalSales || transactions.reduce((sum, t) => sum + t.total, 0),
-        change: 12.5,
-        icon: TrendingUp,
-        positive: true,
-        color: 'secondary',
-      },
-      {
-        title: 'Transaksi',
-        value: totalTransactions || transactions.length,
-        change: 8.2,
-        icon: ShoppingCart,
-        positive: true,
-        isCount: true,
-        color: 'primary',
-      },
-      {
-        title: 'Total Produk',
-        value: products.length,
-        change: 0,
-        icon: Package,
-        positive: true,
-        isCount: true,
-        color: 'info',
-      },
-      {
-        title: 'Biaya Operasional',
-        value: expenses.reduce((sum, e) => sum + e.jumlah, 0),
-        change: 0,
-        icon: Users,
-        positive: false,
-        color: 'secondary',
-      },
-    ];
-  }, [transactions, products, expenses]);
+    // Filter transactions by period
+    const todayTransactions = transactions.filter(t => t.tanggal.startsWith(today));
+    const weekTransactions = transactions.filter(t => t.tanggal.split(' ')[0] >= weekStart);
+    const monthTransactions = transactions.filter(t => t.tanggal.split(' ')[0] >= monthStart);
+
+    // Calculate sales
+    const todaySales = todayTransactions.reduce((sum, t) => sum + t.total, 0);
+    const weekSales = weekTransactions.reduce((sum, t) => sum + t.total, 0);
+    const monthSales = monthTransactions.reduce((sum, t) => sum + t.total, 0);
+
+    // Filter expenses by period
+    const todayExpenses = expenses.filter(e => e.tanggal === today);
+    const weekExpenses = expenses.filter(e => e.tanggal >= weekStart);
+    const monthExpenses = expenses.filter(e => e.tanggal >= monthStart);
+
+    // Calculate operational costs
+    const todayOperational = todayExpenses.reduce((sum, e) => sum + e.jumlah, 0);
+    const weekOperational = weekExpenses.reduce((sum, e) => sum + e.jumlah, 0);
+    const monthOperational = monthExpenses.reduce((sum, e) => sum + e.jumlah, 0);
+
+    // Net profit (sales - operational)
+    const todayNet = todaySales - todayOperational;
+    const weekNet = weekSales - weekOperational;
+    const monthNet = monthSales - monthOperational;
+
+    return {
+      today: { sales: todaySales, transactions: todayTransactions.length, operational: todayOperational, net: todayNet },
+      week: { sales: weekSales, transactions: weekTransactions.length, operational: weekOperational, net: weekNet },
+      month: { sales: monthSales, transactions: monthTransactions.length, operational: monthOperational, net: monthNet },
+    };
+  }, [transactions, expenses]);
+
+  // Utang Piutang summary (real-time)
+  const debtSummary = useMemo(() => {
+    const totalUtang = debts.filter(d => d.type === 'utang' && d.sisa > 0).reduce((sum, d) => sum + d.sisa, 0);
+    const totalPiutang = debts.filter(d => d.type === 'piutang' && d.sisa > 0).reduce((sum, d) => sum + d.sisa, 0);
+    return { totalUtang, totalPiutang, net: totalPiutang - totalUtang };
+  }, [debts]);
+
+  // Project summary (real-time)
+  const projectSummary = useMemo(() => {
+    const active = projects.filter(p => p.status === 'Berjalan').length;
+    const pending = projects.filter(p => p.status === 'Pending').length;
+    const totalValue = projects.filter(p => p.status !== 'Dibatalkan').reduce((sum, p) => sum + p.nilaiKontrak, 0);
+    const totalDP = projects.reduce((sum, p) => sum + p.dp, 0);
+    const sisaBayar = totalValue - totalDP;
+    return { active, pending, totalValue, totalDP, sisaBayar };
+  }, [projects]);
 
   // Recent transactions from real data
   const recentTransactions = useMemo(() => {
@@ -141,49 +164,152 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {stats.map((stat, index) => (
-          <Card key={index} className={`hover:shadow-lg transition-shadow border-l-4 ${
-            stat.color === 'secondary' ? 'border-l-secondary' :
-            stat.color === 'primary' ? 'border-l-primary' :
-            'border-l-info'
-          } bg-card`}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                  stat.color === 'secondary' ? 'bg-secondary/10' :
-                  stat.color === 'primary' ? 'bg-primary/10' :
-                  'bg-info/10'
-                }`}>
-                  <stat.icon className={`w-6 h-6 ${
-                    stat.color === 'secondary' ? 'text-secondary' :
-                    stat.color === 'primary' ? 'text-primary' :
-                    'text-info'
-                  }`} />
-                </div>
-                <div
-                  className={`flex items-center gap-1 text-sm font-medium ${
-                    stat.positive ? 'text-secondary' : 'text-destructive'
-                  }`}
-                >
-                  {stat.positive ? (
-                    <ArrowUpRight className="w-4 h-4" />
-                  ) : (
-                    <ArrowDownRight className="w-4 h-4" />
-                  )}
-                  {Math.abs(stat.change)}%
-                </div>
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground">
-                  {stat.isCount ? stat.value : formatRupiah(stat.value)}
-                </p>
-                <p className="text-sm text-muted-foreground mt-1">{stat.title}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      {/* Sales Stats - Today, Week, Month */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        {/* Today */}
+        <Card className="border-l-4 border-l-secondary bg-card hover:shadow-lg transition-shadow">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <Calendar className="w-4 h-4" />
+              Hari Ini
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Penjualan</span>
+              <span className="text-lg font-bold text-secondary">{formatRupiah(salesStats.today.sales)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Transaksi</span>
+              <span className="font-medium">{salesStats.today.transactions} transaksi</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Operasional</span>
+              <span className="font-medium text-destructive">-{formatRupiah(salesStats.today.operational)}</span>
+            </div>
+            <div className="flex justify-between items-center pt-2 border-t">
+              <span className="text-sm font-medium">Laba Bersih</span>
+              <span className={`text-lg font-bold ${salesStats.today.net >= 0 ? 'text-secondary' : 'text-destructive'}`}>
+                {formatRupiah(salesStats.today.net)}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* This Week */}
+        <Card className="border-l-4 border-l-primary bg-card hover:shadow-lg transition-shadow">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <CalendarDays className="w-4 h-4" />
+              Minggu Ini
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Penjualan</span>
+              <span className="text-lg font-bold text-primary">{formatRupiah(salesStats.week.sales)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Transaksi</span>
+              <span className="font-medium">{salesStats.week.transactions} transaksi</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Operasional</span>
+              <span className="font-medium text-destructive">-{formatRupiah(salesStats.week.operational)}</span>
+            </div>
+            <div className="flex justify-between items-center pt-2 border-t">
+              <span className="text-sm font-medium">Laba Bersih</span>
+              <span className={`text-lg font-bold ${salesStats.week.net >= 0 ? 'text-secondary' : 'text-destructive'}`}>
+                {formatRupiah(salesStats.week.net)}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* This Month */}
+        <Card className="border-l-4 border-l-info bg-card hover:shadow-lg transition-shadow">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <CalendarRange className="w-4 h-4" />
+              Bulan Ini
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Penjualan</span>
+              <span className="text-lg font-bold text-info">{formatRupiah(salesStats.month.sales)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Transaksi</span>
+              <span className="font-medium">{salesStats.month.transactions} transaksi</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Operasional</span>
+              <span className="font-medium text-destructive">-{formatRupiah(salesStats.month.operational)}</span>
+            </div>
+            <div className="flex justify-between items-center pt-2 border-t">
+              <span className="text-sm font-medium">Laba Bersih</span>
+              <span className={`text-lg font-bold ${salesStats.month.net >= 0 ? 'text-secondary' : 'text-destructive'}`}>
+                {formatRupiah(salesStats.month.net)}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Summary Cards Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {/* Total Products */}
+        <Card className="bg-card">
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Package className="w-6 h-6 text-primary" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{products.length}</p>
+              <p className="text-sm text-muted-foreground">Total Produk</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Active Projects */}
+        <Card className="bg-card">
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-secondary/10 flex items-center justify-center">
+              <TrendingUp className="w-6 h-6 text-secondary" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{projectSummary.active}</p>
+              <p className="text-sm text-muted-foreground">Proyek Berjalan</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Total Piutang */}
+        <Card className="bg-card">
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-info/10 flex items-center justify-center">
+              <Wallet className="w-6 h-6 text-info" />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-info">{formatRupiah(debtSummary.totalPiutang)}</p>
+              <p className="text-sm text-muted-foreground">Total Piutang</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Total Utang */}
+        <Card className="bg-card">
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-destructive/10 flex items-center justify-center">
+              <Wallet className="w-6 h-6 text-destructive" />
+            </div>
+            <div>
+              <p className="text-lg font-bold text-destructive">{formatRupiah(debtSummary.totalUtang)}</p>
+              <p className="text-sm text-muted-foreground">Total Utang</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Low stock alert */}
@@ -228,26 +354,30 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentTransactions.map((tx) => (
-                <div
-                  key={tx.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center">
-                      <RupiahIcon size="sm" />
+              {recentTransactions.length === 0 ? (
+                <p className="text-center text-muted-foreground py-4">Belum ada transaksi hari ini</p>
+              ) : (
+                recentTransactions.map((tx) => (
+                  <div
+                    key={tx.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center">
+                        <RupiahIcon size="sm" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">{tx.customer}</p>
+                        <p className="text-xs text-muted-foreground">{tx.items}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium text-foreground">{tx.customer}</p>
-                      <p className="text-xs text-muted-foreground">{tx.items}</p>
+                    <div className="text-right">
+                      <p className="font-semibold text-secondary">{formatRupiah(tx.amount)}</p>
+                      <p className="text-sm text-muted-foreground">{tx.time}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-secondary">{formatRupiah(tx.amount)}</p>
-                    <p className="text-sm text-muted-foreground">{tx.time}</p>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
@@ -281,11 +411,11 @@ export default function Dashboard() {
                 <span className="font-semibold">Lihat Laporan</span>
               </button>
               <button 
-                onClick={() => navigate('/transaksi')}
+                onClick={() => navigate('/utang-piutang')}
                 className="p-6 rounded-xl bg-gradient-secondary text-secondary-foreground text-center hover:opacity-90 transition-opacity shadow-md"
               >
-                <Users className="w-8 h-8 mx-auto mb-2" />
-                <span className="font-semibold">Transaksi</span>
+                <Wallet className="w-8 h-8 mx-auto mb-2" />
+                <span className="font-semibold">Utang/Piutang</span>
               </button>
             </div>
           </CardContent>
