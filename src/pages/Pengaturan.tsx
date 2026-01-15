@@ -19,7 +19,23 @@ import {
   Printer,
   Package,
   CheckCircle,
+  Database,
+  AlertTriangle,
+  FileDown,
+  FileUp,
+  RefreshCw,
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
@@ -178,6 +194,10 @@ export default function Pengaturan() {
           <TabsTrigger value="stok" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Package className="w-4 h-4" />
             Stok
+          </TabsTrigger>
+          <TabsTrigger value="data" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <Database className="w-4 h-4" />
+            Data Lokal
           </TabsTrigger>
           <TabsTrigger value="aplikasi" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Download className="w-4 h-4" />
