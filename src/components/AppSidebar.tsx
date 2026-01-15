@@ -23,11 +23,11 @@ const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
   { icon: ShoppingCart, label: 'Kasir', path: '/kasir' },
   { icon: Package, label: 'Produk', path: '/produk' },
+  { icon: FileText, label: 'Penjualan', path: '/penjualan' },
   { icon: ShoppingBag, label: 'Pembelian', path: '/pembelian' },
   { icon: FolderKanban, label: 'Proyek', path: '/proyek' },
   { icon: Wallet, label: 'Utang/Piutang', path: '/utang-piutang' },
   { icon: Building2, label: 'Operasional', path: '/operasional' },
-  { icon: FileText, label: 'Transaksi', path: '/transaksi' },
   { icon: BarChart3, label: 'Laporan', path: '/laporan' },
   { icon: SettingsIcon, label: 'Pengaturan', path: '/pengaturan' },
 ];
