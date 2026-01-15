@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +17,7 @@ import {
   X,
   CreditCard,
   History,
+  FolderKanban,
 } from 'lucide-react';
 import {
   Table,
@@ -54,24 +55,35 @@ import {
 import type { DebtRecord } from '@/contexts/DataContext';
 
 export default function UtangPiutang() {
-  const { debts, addDebt, updateDebt, deleteDebt, addPayment } = useData();
+  const { debts, projects, addDebt, updateDebt, deleteDebt, addPayment, createProjectDebt } = useData();
   const [activeTab, setActiveTab] = useState<'utang' | 'piutang'>('utang');
   const [showDialog, setShowDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
+  const [showProjectDebtDialog, setShowProjectDebtDialog] = useState(false);
   const [editingRecord, setEditingRecord] = useState<DebtRecord | null>(null);
   const [recordToDelete, setRecordToDelete] = useState<DebtRecord | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<DebtRecord | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Transfer');
   const [paymentNote, setPaymentNote] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [projectDueDate, setProjectDueDate] = useState('');
   const [formData, setFormData] = useState({
     nama: '',
     total: '',
     jatuhTempo: '',
     keterangan: '',
   });
+
+  // Real-time sync: combine debts with project receivables
+  const projectsWithReceivables = useMemo(() => {
+    return projects.filter(p => 
+      p.status !== 'Dibatalkan' && 
+      (p.nilaiKontrak - p.dp) > 0
+    );
+  }, [projects]);
 
   const utangData = debts.filter(d => d.type === 'utang');
   const piutangData = debts.filter(d => d.type === 'piutang');
@@ -183,6 +195,22 @@ export default function UtangPiutang() {
 
   const getStatus = (record: DebtRecord) => record.sisa <= 0 ? 'Lunas' : 'Belum Lunas';
 
+  const handleAddProjectDebt = () => {
+    if (!selectedProjectId || !projectDueDate) {
+      toast.error('Pilih proyek dan tanggal jatuh tempo');
+      return;
+    }
+    const project = projects.find(p => p.id === selectedProjectId);
+    if (!project) return;
+    
+    const sisaProyek = project.nilaiKontrak - project.dp;
+    createProjectDebt(project.id, `${project.namaProyek} - ${project.pelanggan}`, sisaProyek, projectDueDate);
+    toast.success(`Piutang proyek "${project.namaProyek}" berhasil ditambahkan`);
+    setShowProjectDebtDialog(false);
+    setSelectedProjectId('');
+    setProjectDueDate('');
+  };
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
@@ -190,10 +218,22 @@ export default function UtangPiutang() {
           <h1 className="text-2xl font-bold text-foreground">Utang / Piutang</h1>
           <p className="text-muted-foreground">Kelola utang dan piutang usaha</p>
         </div>
-        <Button className="gap-2 bg-gradient-primary" onClick={handleAddNew}>
-          <Plus className="w-4 h-4" />
-          Tambah {activeTab === 'utang' ? 'Utang' : 'Piutang'}
-        </Button>
+        <div className="flex gap-2">
+          {activeTab === 'piutang' && (
+            <Button 
+              variant="outline" 
+              className="gap-2"
+              onClick={() => setShowProjectDebtDialog(true)}
+            >
+              <FolderKanban className="w-4 h-4" />
+              Dari Proyek
+            </Button>
+          )}
+          <Button className="gap-2 bg-gradient-primary" onClick={handleAddNew}>
+            <Plus className="w-4 h-4" />
+            Tambah {activeTab === 'utang' ? 'Utang' : 'Piutang'}
+          </Button>
+        </div>
       </div>
 
       {/* Summary */}
@@ -495,6 +535,80 @@ export default function UtangPiutang() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Project Debt Dialog */}
+      <Dialog open={showProjectDebtDialog} onOpenChange={setShowProjectDebtDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderKanban className="w-5 h-5 text-primary" />
+              Tambah Piutang dari Proyek
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Pilih Proyek</Label>
+              <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih proyek..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {projectsWithReceivables.map(project => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.namaProyek} - {project.pelanggan} ({formatRupiah(project.nilaiKontrak - project.dp)})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedProjectId && (() => {
+              const project = projects.find(p => p.id === selectedProjectId);
+              if (!project) return null;
+              return (
+                <div className="p-4 rounded-lg bg-muted/50 space-y-2">
+                  <p className="font-medium">{project.namaProyek}</p>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Pelanggan</p>
+                      <p className="font-medium">{project.pelanggan}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Nilai Kontrak</p>
+                      <p className="font-medium">{formatRupiah(project.nilaiKontrak)}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">DP Diterima</p>
+                      <p className="font-medium text-secondary">{formatRupiah(project.dp)}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Sisa Piutang</p>
+                      <p className="font-medium text-primary">{formatRupiah(project.nilaiKontrak - project.dp)}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="space-y-2">
+              <Label>Jatuh Tempo</Label>
+              <Input
+                type="date"
+                value={projectDueDate}
+                onChange={(e) => setProjectDueDate(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowProjectDebtDialog(false)}>
+              Batal
+            </Button>
+            <Button onClick={handleAddProjectDebt} className="bg-gradient-primary">
+              Tambah Piutang
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -537,7 +651,16 @@ function DebtTable({
           const paid = item.total - item.sisa;
           return (
             <TableRow key={item.id}>
-              <TableCell className="font-medium">{item.id}</TableCell>
+              <TableCell className="font-medium">
+                {item.id}
+                {item.projectId && (
+                  <Badge variant="outline" className="ml-2 text-xs">
+                    <FolderKanban className="w-3 h-3 mr-1" />
+                    Proyek
+                  </Badge>
+                )}
+              </TableCell>
+              <TableCell>{item.nama}</TableCell>
               <TableCell>{item.nama}</TableCell>
               <TableCell className="text-right">{formatRupiah(item.total)}</TableCell>
               <TableCell className="text-right text-secondary">{formatRupiah(paid)}</TableCell>

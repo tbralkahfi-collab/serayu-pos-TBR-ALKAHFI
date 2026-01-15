@@ -50,6 +50,8 @@ export default function Kasir() {
   const addToCart = (product: Product) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
+      // Use hargaJual (selling price) instead of harga
+      const sellingPrice = product.hargaJual || product.harga || 0;
       if (existing) {
         if (existing.qty >= product.stok) {
           toast.error(`Stok ${product.nama} tidak mencukupi`);
@@ -62,7 +64,7 @@ export default function Kasir() {
       return [...prev, { 
         id: product.id, 
         name: product.nama, 
-        price: product.harga, 
+        price: sellingPrice, 
         unit: product.satuan, 
         stock: product.stok,
         qty: 1 
@@ -284,7 +286,7 @@ export default function Kasir() {
                 <h3 className="font-medium text-foreground text-sm truncate">{product.nama}</h3>
                 <p className="text-xs text-muted-foreground">{product.kategori}</p>
                 <div className="flex items-center justify-between mt-2">
-                  <p className="text-sm font-bold text-primary">{formatRupiah(product.harga)}</p>
+                  <p className="text-sm font-bold text-primary">{formatRupiah(product.hargaJual || product.harga || 0)}</p>
                   <span className="text-xs text-muted-foreground">{product.stok} {product.satuan}</span>
                 </div>
               </CardContent>

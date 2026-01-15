@@ -534,6 +534,16 @@ export default function Proyek() {
             </div>
 
             <div>
+              <Label>Biaya Tenaga Kerja (Rp)</Label>
+              <Input
+                type="number"
+                value={formData.biayaTenagaKerja || ''}
+                onChange={(e) => setFormData({ ...formData, biayaTenagaKerja: Number(e.target.value) })}
+                placeholder="0"
+              />
+            </div>
+
+            <div>
               <Label>Tanggal Order *</Label>
               <Input
                 type="date"
@@ -738,6 +748,45 @@ export default function Proyek() {
                   <span className="text-muted-foreground">Sisa Pembayaran</span>
                   <span className="font-bold text-destructive">
                     {formatRupiah(viewingProject.nilaiKontrak - viewingProject.dp)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Project Cost & Profit Report */}
+              <div className="bg-primary/5 rounded-lg p-4 space-y-2 border border-primary/20">
+                <p className="font-medium text-primary mb-2">Laporan Biaya & Keuntungan</p>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Biaya Material</span>
+                  <span className="font-medium">
+                    {formatRupiah(viewingProject.materials?.reduce((sum, m) => sum + (m.qty * m.harga), 0) || 0)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Biaya Tenaga Kerja</span>
+                  <span className="font-medium">{formatRupiah(viewingProject.biayaTenagaKerja || 0)}</span>
+                </div>
+                <div className="flex justify-between text-sm border-t pt-2">
+                  <span className="text-muted-foreground">Total Biaya</span>
+                  <span className="font-bold text-destructive">
+                    {formatRupiah(
+                      (viewingProject.materials?.reduce((sum, m) => sum + (m.qty * m.harga), 0) || 0) + 
+                      (viewingProject.biayaTenagaKerja || 0)
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm border-t pt-2">
+                  <span className="text-muted-foreground font-medium">Keuntungan (Est.)</span>
+                  <span className={`font-bold ${
+                    viewingProject.nilaiKontrak - 
+                    ((viewingProject.materials?.reduce((sum, m) => sum + (m.qty * m.harga), 0) || 0) + 
+                    (viewingProject.biayaTenagaKerja || 0)) >= 0 
+                      ? 'text-secondary' : 'text-destructive'
+                  }`}>
+                    {formatRupiah(
+                      viewingProject.nilaiKontrak - 
+                      ((viewingProject.materials?.reduce((sum, m) => sum + (m.qty * m.harga), 0) || 0) + 
+                      (viewingProject.biayaTenagaKerja || 0))
+                    )}
                   </span>
                 </div>
               </div>
