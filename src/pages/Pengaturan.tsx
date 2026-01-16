@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useStore } from '@/contexts/StoreContext';
+import { useData } from '@/contexts/DataContext';
 import { toast } from 'sonner';
 import {
   Store,
@@ -24,6 +25,8 @@ import {
   FileDown,
   FileUp,
   RefreshCw,
+  HardDrive,
+  Calendar,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -39,8 +42,23 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
+const STORAGE_KEYS = {
+  products: 'serayu_products',
+  suppliers: 'serayu_suppliers',
+  purchases: 'serayu_purchases',
+  debts: 'serayu_debts',
+  expenses: 'serayu_expenses',
+  transactions: 'serayu_transactions',
+  projects: 'serayu_projects',
+  storeInfo: 'serayu_store_info',
+  printerSettings: 'serayu_printer_settings',
+  stockSettings: 'serayu_stock_settings',
+};
+
 export default function Pengaturan() {
   const { storeInfo, printerSettings, stockSettings, updateStoreInfo, updatePrinterSettings, updateStockSettings } = useStore();
+  const { products, suppliers, purchases, debts, expenses, transactions, projects } = useData();
+  
   const [formData, setFormData] = useState({
     name: storeInfo.name,
     address: storeInfo.address,
@@ -50,11 +68,44 @@ export default function Pengaturan() {
   const [isUploading, setIsUploading] = useState(false);
   const [minStock, setMinStock] = useState(stockSettings.minStockAlert.toString());
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   // Local printer settings state
   const [localPrinterType, setLocalPrinterType] = useState(printerSettings.type);
   const [localPaperWidth, setLocalPaperWidth] = useState(printerSettings.paperWidth);
   const [localAutoPrint, setLocalAutoPrint] = useState(printerSettings.autoPrint);
+
+  // Calculate storage usage
+  const storageInfo = React.useMemo(() => {
+    let totalSize = 0;
+    const details: { key: string; size: number; count: number }[] = [];
+    
+    Object.entries(STORAGE_KEYS).forEach(([name, key]) => {
+      const data = localStorage.getItem(key);
+      const size = data ? new Blob([data]).size : 0;
+      let count = 0;
+      
+      try {
+        const parsed = JSON.parse(data || '[]');
+        count = Array.isArray(parsed) ? parsed.length : 1;
+      } catch {
+        count = 0;
+      }
+      
+      totalSize += size;
+      details.push({ key: name, size, count });
+    });
+    
+    return { totalSize, details };
+  }, [products, suppliers, purchases, debts, expenses, transactions, projects]);
+
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -150,12 +201,71 @@ export default function Pengaturan() {
       paperWidth: localPaperWidth,
       autoPrint: localAutoPrint 
     });
-    toast.success('Pengaturan printer berhasil disimpan dan akan digunakan untuk cetak nota');
+    toast.success('Pengaturan printer berhasil disimpan');
   };
 
   const handleSaveStock = () => {
     updateStockSettings({ minStockAlert: parseInt(minStock) || 10 });
     toast.success('Pengaturan stok berhasil disimpan');
+  };
+
+  const handleExportData = () => {
+    const exportData: Record<string, any> = {};
+    
+    Object.entries(STORAGE_KEYS).forEach(([name, key]) => {
+      const data = localStorage.getItem(key);
+      if (data) {
+        try {
+          exportData[name] = JSON.parse(data);
+        } catch {
+          exportData[name] = data;
+        }
+      }
+    });
+
+    const dataStr = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `serayu_backup_${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    
+    toast.success('Data berhasil di-export');
+  };
+
+  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const importedData = JSON.parse(event.target?.result as string);
+        
+        Object.entries(STORAGE_KEYS).forEach(([name, key]) => {
+          if (importedData[name]) {
+            localStorage.setItem(key, JSON.stringify(importedData[name]));
+          }
+        });
+
+        toast.success('Data berhasil di-import. Halaman akan dimuat ulang...');
+        setTimeout(() => window.location.reload(), 1500);
+      } catch (error) {
+        toast.error('File tidak valid atau rusak');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleResetData = () => {
+    Object.values(STORAGE_KEYS).forEach(key => {
+      localStorage.removeItem(key);
+    });
+    
+    toast.success('Data berhasil direset. Halaman akan dimuat ulang...');
+    setTimeout(() => window.location.reload(), 1500);
   };
 
   const handleInstallPWA = async () => {
@@ -173,63 +283,62 @@ export default function Pengaturan() {
   };
 
   return (
-    <div className="p-8 bg-background min-h-screen">
+    <div className="p-4 md:p-6 lg:p-8 bg-background min-h-screen">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Pengaturan</h1>
-          <p className="text-muted-foreground">Kelola pengaturan toko dan aplikasi</p>
+          <h1 className="text-xl md:text-2xl font-bold text-foreground">Pengaturan</h1>
+          <p className="text-sm text-muted-foreground">Kelola pengaturan toko dan aplikasi</p>
         </div>
       </div>
 
-      <Tabs defaultValue="toko" className="space-y-6">
-        <TabsList className="bg-muted/50">
-          <TabsTrigger value="toko" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Store className="w-4 h-4" />
-            Informasi Toko
+      <Tabs defaultValue="toko" className="space-y-4 md:space-y-6">
+        <TabsList className="bg-muted/50 w-full flex-wrap h-auto gap-1 p-1">
+          <TabsTrigger value="toko" className="gap-1 md:gap-2 text-xs md:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <Store className="w-3 h-3 md:w-4 md:h-4" />
+            <span className="hidden sm:inline">Toko</span>
           </TabsTrigger>
-          <TabsTrigger value="printer" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Printer className="w-4 h-4" />
-            Printer
+          <TabsTrigger value="printer" className="gap-1 md:gap-2 text-xs md:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <Printer className="w-3 h-3 md:w-4 md:h-4" />
+            <span className="hidden sm:inline">Printer</span>
           </TabsTrigger>
-          <TabsTrigger value="stok" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Package className="w-4 h-4" />
-            Stok
+          <TabsTrigger value="stok" className="gap-1 md:gap-2 text-xs md:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <Package className="w-3 h-3 md:w-4 md:h-4" />
+            <span className="hidden sm:inline">Stok</span>
           </TabsTrigger>
-          <TabsTrigger value="data" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Database className="w-4 h-4" />
-            Data Lokal
+          <TabsTrigger value="data" className="gap-1 md:gap-2 text-xs md:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <Database className="w-3 h-3 md:w-4 md:h-4" />
+            <span className="hidden sm:inline">Data</span>
           </TabsTrigger>
-          <TabsTrigger value="aplikasi" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-            <Download className="w-4 h-4" />
-            Aplikasi
+          <TabsTrigger value="aplikasi" className="gap-1 md:gap-2 text-xs md:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <Download className="w-3 h-3 md:w-4 md:h-4" />
+            <span className="hidden sm:inline">Install</span>
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="toko" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Logo section with improved display */}
+        <TabsContent value="toko" className="space-y-4 md:space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+            {/* Logo section */}
             <Card className="bg-card border-t-4 border-t-primary">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+              <CardHeader className="pb-2 md:pb-4">
+                <CardTitle className="flex items-center gap-2 text-base">
                   <ImageIcon className="w-5 h-5 text-primary" />
                   Logo Toko
                 </CardTitle>
-                <CardDescription>
-                  Upload logo toko. Background putih akan dihapus otomatis.
+                <CardDescription className="text-xs md:text-sm">
+                  Upload logo. Background putih dihapus otomatis.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Improved logo preview */}
-                <div className="relative w-44 h-44 mx-auto">
+                <div className="relative w-32 h-32 md:w-44 md:h-44 mx-auto">
                   <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/10 via-secondary/10 to-transparent" />
                   <div className="relative w-full h-full rounded-2xl bg-card border-2 border-dashed border-primary/30 flex items-center justify-center overflow-hidden shadow-lg">
                     {isUploading ? (
                       <div className="flex flex-col items-center gap-2">
-                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                        <span className="text-sm text-muted-foreground">Processing...</span>
+                        <Loader2 className="w-6 h-6 md:w-8 md:h-8 animate-spin text-primary" />
+                        <span className="text-xs text-muted-foreground">Processing...</span>
                       </div>
                     ) : previewLogo ? (
-                      <div className="w-full h-full p-4 flex items-center justify-center bg-gradient-to-br from-secondary/5 to-primary/5">
+                      <div className="w-full h-full p-3 md:p-4 flex items-center justify-center bg-gradient-to-br from-secondary/5 to-primary/5">
                         <img
                           src={previewLogo}
                           alt="Logo Preview"
@@ -238,8 +347,8 @@ export default function Pengaturan() {
                       </div>
                     ) : (
                       <div className="text-center p-4">
-                        <ImageIcon className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
-                        <span className="text-sm text-muted-foreground">Belum ada logo</span>
+                        <ImageIcon className="w-10 h-10 md:w-12 md:h-12 mx-auto text-muted-foreground mb-2" />
+                        <span className="text-xs text-muted-foreground">Belum ada logo</span>
                       </div>
                     )}
                   </div>
@@ -256,7 +365,7 @@ export default function Pengaturan() {
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
-                    className="flex-1 gap-2 border-primary/30 hover:bg-primary/5"
+                    className="flex-1 gap-2 border-primary/30 hover:bg-primary/5 text-sm"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isUploading}
                   >
@@ -278,18 +387,18 @@ export default function Pengaturan() {
 
             {/* Store info section */}
             <Card className="lg:col-span-2 bg-card border-t-4 border-t-secondary">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+              <CardHeader className="pb-2 md:pb-4">
+                <CardTitle className="flex items-center gap-2 text-base">
                   <Store className="w-5 h-5 text-secondary" />
                   Informasi Toko
                 </CardTitle>
-                <CardDescription>
-                  Informasi ini akan ditampilkan di dashboard dan struk
+                <CardDescription className="text-xs md:text-sm">
+                  Ditampilkan di dashboard dan struk
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
+              <CardContent className="space-y-4 md:space-y-6">
                 <div className="space-y-2">
-                  <Label htmlFor="name" className="flex items-center gap-2">
+                  <Label htmlFor="name" className="flex items-center gap-2 text-sm">
                     <Store className="w-4 h-4 text-primary" />
                     Nama Toko
                   </Label>
@@ -304,7 +413,7 @@ export default function Pengaturan() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="address" className="flex items-center gap-2">
+                  <Label htmlFor="address" className="flex items-center gap-2 text-sm">
                     <MapPin className="w-4 h-4 text-secondary" />
                     Alamat
                   </Label>
@@ -319,7 +428,7 @@ export default function Pengaturan() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="phone" className="flex items-center gap-2">
+                  <Label htmlFor="phone" className="flex items-center gap-2 text-sm">
                     <Phone className="w-4 h-4 text-info" />
                     Nomor Telepon
                   </Label>
@@ -341,16 +450,15 @@ export default function Pengaturan() {
             </Card>
           </div>
 
-          {/* Preview with SERAYU POS label */}
+          {/* Preview */}
           <Card className="bg-card">
-            <CardHeader>
-              <CardTitle>Preview</CardTitle>
-              <CardDescription>Tampilan informasi toko di dashboard</CardDescription>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Preview</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center gap-5 p-5 rounded-xl bg-gradient-to-r from-primary/5 via-background to-secondary/5 border">
+              <div className="flex items-center gap-4 md:gap-5 p-4 md:p-5 rounded-xl bg-gradient-to-r from-primary/5 via-background to-secondary/5 border">
                 {previewLogo ? (
-                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/10 to-secondary/10 p-2 flex items-center justify-center ring-2 ring-primary/30 shadow-md">
+                  <div className="w-14 h-14 md:w-20 md:h-20 rounded-2xl bg-gradient-to-br from-primary/10 to-secondary/10 p-2 flex items-center justify-center ring-2 ring-primary/30 shadow-md flex-shrink-0">
                     <img
                       src={previewLogo}
                       alt="Logo"
@@ -358,19 +466,19 @@ export default function Pengaturan() {
                     />
                   </div>
                 ) : (
-                  <div className="w-20 h-20 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-md">
-                    <span className="text-2xl font-bold text-primary-foreground">SP</span>
+                  <div className="w-14 h-14 md:w-20 md:h-20 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-md flex-shrink-0">
+                    <span className="text-xl md:text-2xl font-bold text-primary-foreground">SP</span>
                   </div>
                 )}
-                <div>
-                  <h3 className="font-bold text-lg">{formData.name || 'Nama Toko'}</h3>
-                  <p className="text-xs font-medium text-primary mb-2">SERAYU POS</p>
-                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <MapPin className="w-3.5 h-3.5 text-secondary" />
-                    <span>{formData.address || 'Alamat toko'}</span>
+                <div className="min-w-0">
+                  <h3 className="font-bold text-base md:text-lg truncate">{formData.name || 'Nama Toko'}</h3>
+                  <p className="text-xs font-medium text-primary mb-1">SERAYU POS</p>
+                  <div className="flex items-center gap-1.5 text-xs md:text-sm text-muted-foreground">
+                    <MapPin className="w-3 h-3 md:w-3.5 md:h-3.5 shrink-0 text-secondary" />
+                    <span className="truncate">{formData.address || 'Alamat toko'}</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <Phone className="w-3.5 h-3.5 text-info" />
+                  <div className="flex items-center gap-1.5 text-xs md:text-sm text-muted-foreground">
+                    <Phone className="w-3 h-3 md:w-3.5 md:h-3.5 shrink-0 text-info" />
                     <span>{formData.phone || 'Nomor telepon'}</span>
                   </div>
                 </div>
@@ -379,91 +487,75 @@ export default function Pengaturan() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="printer" className="space-y-6">
+        <TabsContent value="printer" className="space-y-4 md:space-y-6">
           <Card className="bg-card border-t-4 border-t-primary">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+            <CardHeader className="pb-2 md:pb-4">
+              <CardTitle className="flex items-center gap-2 text-base">
                 <Printer className="w-5 h-5 text-primary" />
                 Pengaturan Printer
               </CardTitle>
-              <CardDescription>
-                Atur jenis printer dan ukuran kertas untuk cetak nota. Pengaturan akan langsung tersimpan dan digunakan saat cetak.
+              <CardDescription className="text-xs md:text-sm">
+                Atur jenis printer dan ukuran kertas untuk cetak nota
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-4 md:space-y-6">
               <div className="space-y-3">
-                <Label className="text-base font-semibold">Jenis Printer</Label>
+                <Label className="text-sm font-semibold">Jenis Printer</Label>
                 <RadioGroup 
                   value={localPrinterType} 
                   onValueChange={(v) => setLocalPrinterType(v as any)}
-                  className="grid grid-cols-2 gap-4"
+                  className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4"
                 >
-                  <div className={`flex items-center space-x-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${localPrinterType === 'thermal' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-muted/50'}`}>
+                  <div className={`flex items-center space-x-3 p-3 md:p-4 border-2 rounded-lg cursor-pointer transition-all ${localPrinterType === 'thermal' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-muted/50'}`}>
                     <RadioGroupItem value="thermal" id="thermal" />
                     <Label htmlFor="thermal" className="cursor-pointer flex-1">
-                      <div className="font-medium">Printer Thermal</div>
-                      <div className="text-sm text-muted-foreground">Untuk nota struk kecil (58mm/80mm)</div>
+                      <div className="font-medium text-sm">Printer Thermal</div>
+                      <div className="text-xs text-muted-foreground">Nota struk (58mm/80mm)</div>
                     </Label>
-                    {localPrinterType === 'thermal' && <CheckCircle className="w-5 h-5 text-primary" />}
+                    {localPrinterType === 'thermal' && <CheckCircle className="w-4 h-4 md:w-5 md:h-5 text-primary" />}
                   </div>
-                  <div className={`flex items-center space-x-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${localPrinterType === 'regular' ? 'border-secondary bg-secondary/5' : 'border-border hover:border-secondary/50 hover:bg-muted/50'}`}>
+                  <div className={`flex items-center space-x-3 p-3 md:p-4 border-2 rounded-lg cursor-pointer transition-all ${localPrinterType === 'regular' ? 'border-secondary bg-secondary/5' : 'border-border hover:border-secondary/50 hover:bg-muted/50'}`}>
                     <RadioGroupItem value="regular" id="regular" />
                     <Label htmlFor="regular" className="cursor-pointer flex-1">
-                      <div className="font-medium">Printer Biasa / A4</div>
-                      <div className="text-sm text-muted-foreground">Untuk invoice ukuran A4</div>
+                      <div className="font-medium text-sm">Printer Biasa / A4</div>
+                      <div className="text-xs text-muted-foreground">Invoice ukuran A4</div>
                     </Label>
-                    {localPrinterType === 'regular' && <CheckCircle className="w-5 h-5 text-secondary" />}
+                    {localPrinterType === 'regular' && <CheckCircle className="w-4 h-4 md:w-5 md:h-5 text-secondary" />}
                   </div>
                 </RadioGroup>
               </div>
 
               <div className="space-y-3">
-                <Label className="text-base font-semibold">Ukuran Kertas</Label>
+                <Label className="text-sm font-semibold">Ukuran Kertas</Label>
                 <RadioGroup 
                   value={localPaperWidth} 
                   onValueChange={(v) => setLocalPaperWidth(v as any)}
-                  className="grid grid-cols-3 gap-4"
+                  className="grid grid-cols-3 gap-2 md:gap-4"
                 >
-                  <div className={`flex items-center space-x-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${localPaperWidth === '58mm' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-muted/50'}`}>
+                  <div className={`flex items-center space-x-2 md:space-x-3 p-2 md:p-4 border-2 rounded-lg cursor-pointer transition-all ${localPaperWidth === '58mm' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-muted/50'}`}>
                     <RadioGroupItem value="58mm" id="58mm" />
-                    <Label htmlFor="58mm" className="cursor-pointer font-medium">58mm</Label>
+                    <Label htmlFor="58mm" className="cursor-pointer font-medium text-sm">58mm</Label>
                   </div>
-                  <div className={`flex items-center space-x-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${localPaperWidth === '80mm' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-muted/50'}`}>
+                  <div className={`flex items-center space-x-2 md:space-x-3 p-2 md:p-4 border-2 rounded-lg cursor-pointer transition-all ${localPaperWidth === '80mm' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-muted/50'}`}>
                     <RadioGroupItem value="80mm" id="80mm" />
-                    <Label htmlFor="80mm" className="cursor-pointer font-medium">80mm</Label>
+                    <Label htmlFor="80mm" className="cursor-pointer font-medium text-sm">80mm</Label>
                   </div>
-                  <div className={`flex items-center space-x-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${localPaperWidth === 'A4' ? 'border-secondary bg-secondary/5' : 'border-border hover:border-secondary/50 hover:bg-muted/50'}`}>
+                  <div className={`flex items-center space-x-2 md:space-x-3 p-2 md:p-4 border-2 rounded-lg cursor-pointer transition-all ${localPaperWidth === 'A4' ? 'border-secondary bg-secondary/5' : 'border-border hover:border-secondary/50 hover:bg-muted/50'}`}>
                     <RadioGroupItem value="A4" id="A4" />
-                    <Label htmlFor="A4" className="cursor-pointer font-medium">A4</Label>
+                    <Label htmlFor="A4" className="cursor-pointer font-medium text-sm">A4</Label>
                   </div>
                 </RadioGroup>
               </div>
 
-              <div className="flex items-center justify-between p-4 border-2 rounded-lg bg-muted/30">
+              <div className="flex items-center justify-between p-3 md:p-4 border-2 rounded-lg bg-muted/30">
                 <div>
-                  <Label className="font-medium">Auto Print</Label>
-                  <p className="text-sm text-muted-foreground">Cetak otomatis setelah transaksi selesai</p>
+                  <Label className="font-medium text-sm">Auto Print</Label>
+                  <p className="text-xs text-muted-foreground">Cetak otomatis setelah transaksi</p>
                 </div>
                 <Switch 
                   checked={localAutoPrint}
                   onCheckedChange={setLocalAutoPrint}
                 />
-              </div>
-
-              {/* Preview */}
-              <div className="p-4 rounded-lg bg-gradient-to-r from-primary/5 to-secondary/5 border">
-                <p className="text-sm font-medium mb-2">Pengaturan Saat Ini:</p>
-                <div className="flex flex-wrap gap-2">
-                  <span className="px-3 py-1 rounded-full text-sm bg-primary/10 text-primary">
-                    {localPrinterType === 'thermal' ? 'Printer Thermal' : 'Printer A4'}
-                  </span>
-                  <span className="px-3 py-1 rounded-full text-sm bg-secondary/10 text-secondary">
-                    Kertas {localPaperWidth}
-                  </span>
-                  <span className={`px-3 py-1 rounded-full text-sm ${localAutoPrint ? 'bg-secondary/10 text-secondary' : 'bg-muted text-muted-foreground'}`}>
-                    Auto Print: {localAutoPrint ? 'ON' : 'OFF'}
-                  </span>
-                </div>
               </div>
 
               <Button onClick={handleSavePrinter} className="w-full gap-2 bg-gradient-primary">
@@ -474,22 +566,22 @@ export default function Pengaturan() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="stok" className="space-y-6">
+        <TabsContent value="stok" className="space-y-4 md:space-y-6">
           <Card className="bg-card border-t-4 border-t-warning">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+            <CardHeader className="pb-2 md:pb-4">
+              <CardTitle className="flex items-center gap-2 text-base">
                 <Package className="w-5 h-5 text-warning" />
                 Pengaturan Stok
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs md:text-sm">
                 Atur batas minimal stok untuk peringatan restok
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-4 md:space-y-6">
               <div className="space-y-2">
-                <Label>Batas Minimal Stok</Label>
-                <p className="text-sm text-muted-foreground mb-2">
-                  Produk dengan stok di bawah angka ini akan muncul di peringatan restok di Dashboard
+                <Label className="text-sm">Batas Minimal Stok</Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Produk dengan stok di bawah angka ini akan muncul di peringatan
                 </p>
                 <Input
                   type="number"
@@ -501,10 +593,10 @@ export default function Pengaturan() {
                 />
               </div>
 
-              <div className="p-4 rounded-lg bg-warning/10 border border-warning/30">
-                <p className="text-sm">
+              <div className="p-3 md:p-4 rounded-lg bg-warning/10 border border-warning/30">
+                <p className="text-xs md:text-sm">
                   <span className="font-medium text-warning">Pengaturan saat ini:</span> Produk dengan stok kurang dari{' '}
-                  <span className="font-bold">{minStock || stockSettings.minStockAlert}</span> unit akan ditampilkan di Dashboard
+                  <span className="font-bold">{minStock || stockSettings.minStockAlert}</span> unit akan ditampilkan
                 </p>
               </div>
 
@@ -516,31 +608,178 @@ export default function Pengaturan() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="aplikasi" className="space-y-6">
+        <TabsContent value="data" className="space-y-4 md:space-y-6">
+          {/* Storage Info */}
           <Card className="bg-card border-t-4 border-t-info">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Download className="w-5 h-5 text-info" />
-                Install Aplikasi
+            <CardHeader className="pb-2 md:pb-4">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <HardDrive className="w-5 h-5 text-info" />
+                Penggunaan Penyimpanan
               </CardTitle>
-              <CardDescription>
-                Install SERAYU POS ke desktop atau home screen untuk akses cepat
+              <CardDescription className="text-xs md:text-sm">
+                Data tersimpan di penyimpanan lokal browser
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="p-4 rounded-lg bg-gradient-to-r from-primary/5 to-secondary/5 border">
-                <h4 className="font-medium mb-2">Keuntungan Install:</h4>
-                <ul className="text-sm text-muted-foreground space-y-1">
+              <div className="p-3 md:p-4 rounded-lg bg-info/10 border border-info/30">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium text-sm">Total Penyimpanan</span>
+                  <span className="font-bold text-info">{formatBytes(storageInfo.totalSize)}</span>
+                </div>
+                <div className="w-full h-2 bg-info/20 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-info rounded-full transition-all"
+                    style={{ width: `${Math.min((storageInfo.totalSize / (5 * 1024 * 1024)) * 100, 100)}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Dari maksimal ~5MB penyimpanan lokal</p>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+                <div className="p-2 md:p-3 bg-muted/50 rounded-lg text-center">
+                  <p className="text-lg md:text-xl font-bold text-primary">{products.length}</p>
+                  <p className="text-xs text-muted-foreground">Produk</p>
+                </div>
+                <div className="p-2 md:p-3 bg-muted/50 rounded-lg text-center">
+                  <p className="text-lg md:text-xl font-bold text-secondary">{transactions.length}</p>
+                  <p className="text-xs text-muted-foreground">Transaksi</p>
+                </div>
+                <div className="p-2 md:p-3 bg-muted/50 rounded-lg text-center">
+                  <p className="text-lg md:text-xl font-bold text-info">{projects.length}</p>
+                  <p className="text-xs text-muted-foreground">Proyek</p>
+                </div>
+                <div className="p-2 md:p-3 bg-muted/50 rounded-lg text-center">
+                  <p className="text-lg md:text-xl font-bold text-warning">{debts.length}</p>
+                  <p className="text-xs text-muted-foreground">Utang/Piutang</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Data Management */}
+          <Card className="bg-card border-t-4 border-t-secondary">
+            <CardHeader className="pb-2 md:pb-4">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Database className="w-5 h-5 text-secondary" />
+                Kelola Data Lokal
+              </CardTitle>
+              <CardDescription className="text-xs md:text-sm">
+                Export, import, atau reset semua data aplikasi
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Export */}
+              <div className="p-3 md:p-4 border rounded-lg space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-secondary/10 flex items-center justify-center flex-shrink-0">
+                    <FileDown className="w-5 h-5 text-secondary" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-sm">Export Data</h4>
+                    <p className="text-xs text-muted-foreground">Unduh semua data dalam format JSON sebagai backup</p>
+                  </div>
+                </div>
+                <Button onClick={handleExportData} variant="outline" className="w-full gap-2 border-secondary/30 hover:bg-secondary/5">
+                  <FileDown className="w-4 h-4" />
+                  Export Semua Data
+                </Button>
+              </div>
+
+              {/* Import */}
+              <div className="p-3 md:p-4 border rounded-lg space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-info/10 flex items-center justify-center flex-shrink-0">
+                    <FileUp className="w-5 h-5 text-info" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-sm">Import Data</h4>
+                    <p className="text-xs text-muted-foreground">Pulihkan data dari file backup JSON</p>
+                  </div>
+                </div>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".json"
+                  onChange={handleImportData}
+                  className="hidden"
+                />
+                <Button 
+                  onClick={() => importInputRef.current?.click()} 
+                  variant="outline" 
+                  className="w-full gap-2 border-info/30 hover:bg-info/5"
+                >
+                  <FileUp className="w-4 h-4" />
+                  Import dari File
+                </Button>
+              </div>
+
+              {/* Reset */}
+              <div className="p-3 md:p-4 border border-destructive/30 rounded-lg space-y-3 bg-destructive/5">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center flex-shrink-0">
+                    <AlertTriangle className="w-5 h-5 text-destructive" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-sm text-destructive">Reset Data</h4>
+                    <p className="text-xs text-muted-foreground">Hapus semua data dan kembali ke pengaturan awal</p>
+                  </div>
+                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" className="w-full gap-2">
+                      <RefreshCw className="w-4 h-4" />
+                      Reset Semua Data
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+                        <AlertTriangle className="w-5 h-5" />
+                        Konfirmasi Reset Data
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Tindakan ini akan menghapus SEMUA data aplikasi termasuk produk, transaksi, proyek, dan pengaturan. 
+                        Data yang sudah dihapus tidak dapat dikembalikan. Pastikan Anda sudah export backup terlebih dahulu.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Batal</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleResetData} className="bg-destructive hover:bg-destructive/90">
+                        Ya, Reset Semua Data
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="aplikasi" className="space-y-4 md:space-y-6">
+          <Card className="bg-card border-t-4 border-t-info">
+            <CardHeader className="pb-2 md:pb-4">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Download className="w-5 h-5 text-info" />
+                Install Aplikasi
+              </CardTitle>
+              <CardDescription className="text-xs md:text-sm">
+                Install SERAYU POS ke desktop atau home screen
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="p-3 md:p-4 rounded-lg bg-gradient-to-r from-primary/5 to-secondary/5 border">
+                <h4 className="font-medium mb-2 text-sm">Keuntungan Install:</h4>
+                <ul className="text-xs md:text-sm text-muted-foreground space-y-1">
                   <li className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-secondary" />
+                    <CheckCircle className="w-4 h-4 text-secondary flex-shrink-0" />
                     Akses cepat dari desktop atau home screen
                   </li>
                   <li className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-secondary" />
+                    <CheckCircle className="w-4 h-4 text-secondary flex-shrink-0" />
                     Tampilan fullscreen tanpa address bar
                   </li>
                   <li className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-secondary" />
+                    <CheckCircle className="w-4 h-4 text-secondary flex-shrink-0" />
                     Bekerja seperti aplikasi native
                   </li>
                 </ul>
@@ -548,8 +787,40 @@ export default function Pengaturan() {
 
               <Button onClick={handleInstallPWA} className="w-full gap-2 bg-gradient-primary">
                 <Download className="w-4 h-4" />
-                Install ke Desktop
+                Install ke Desktop / HP
               </Button>
+
+              <div className="p-3 md:p-4 rounded-lg border bg-muted/30">
+                <h4 className="font-medium mb-2 text-sm">Cara Install Manual:</h4>
+                <ul className="text-xs text-muted-foreground space-y-1">
+                  <li><strong>Desktop Chrome:</strong> Klik ikon ⊕ di address bar</li>
+                  <li><strong>iPhone Safari:</strong> Tap Share → Add to Home Screen</li>
+                  <li><strong>Android Chrome:</strong> Menu ⋮ → Install App</li>
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* App Info */}
+          <Card className="bg-card">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Informasi Aplikasi</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Nama Aplikasi</span>
+                  <span className="font-medium">SERAYU POS</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Versi</span>
+                  <span className="font-medium">1.0.0</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Tipe</span>
+                  <span className="font-medium">Progressive Web App</span>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
