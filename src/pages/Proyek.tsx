@@ -266,67 +266,68 @@ export default function Proyek() {
   };
 
   return (
-    <div className="p-8 bg-background min-h-screen">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 md:p-6 lg:p-8 bg-background min-h-screen">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Manajemen Proyek</h1>
-          <p className="text-muted-foreground">Kelola proyek dan kontrak pelanggan</p>
+          <h1 className="text-xl md:text-2xl font-bold text-foreground">Manajemen Proyek</h1>
+          <p className="text-sm text-muted-foreground">Kelola proyek dan kontrak pelanggan</p>
         </div>
-        <Button onClick={handleOpenAdd} className="gap-2 bg-gradient-primary">
+        <Button onClick={handleOpenAdd} className="gap-2 bg-gradient-primary text-sm">
           <Plus className="w-4 h-4" />
-          Tambah Proyek
+          <span className="hidden sm:inline">Tambah Proyek</span>
+          <span className="sm:hidden">Tambah</span>
         </Button>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 md:gap-4 mb-6">
         <Card className="bg-card">
-          <CardContent className="p-4 text-center">
-            <FolderKanban className="w-6 h-6 mx-auto text-primary mb-1" />
-            <p className="text-2xl font-bold">{stats.total}</p>
-            <p className="text-xs text-muted-foreground">Total Proyek</p>
+          <CardContent className="p-2 md:p-4 text-center">
+            <FolderKanban className="w-5 h-5 md:w-6 md:h-6 mx-auto text-primary mb-1" />
+            <p className="text-lg md:text-2xl font-bold">{stats.total}</p>
+            <p className="text-[10px] md:text-xs text-muted-foreground">Total</p>
           </CardContent>
         </Card>
         <Card className="bg-card">
-          <CardContent className="p-4 text-center">
-            <Clock className="w-6 h-6 mx-auto text-yellow-500 mb-1" />
-            <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
-            <p className="text-xs text-muted-foreground">Pending</p>
+          <CardContent className="p-2 md:p-4 text-center">
+            <Clock className="w-5 h-5 md:w-6 md:h-6 mx-auto text-yellow-500 mb-1" />
+            <p className="text-lg md:text-2xl font-bold text-yellow-600">{stats.pending}</p>
+            <p className="text-[10px] md:text-xs text-muted-foreground">Pending</p>
           </CardContent>
         </Card>
         <Card className="bg-card">
-          <CardContent className="p-4 text-center">
-            <PlayCircle className="w-6 h-6 mx-auto text-blue-500 mb-1" />
-            <p className="text-2xl font-bold text-blue-600">{stats.berjalan}</p>
-            <p className="text-xs text-muted-foreground">Berjalan</p>
+          <CardContent className="p-2 md:p-4 text-center">
+            <PlayCircle className="w-5 h-5 md:w-6 md:h-6 mx-auto text-blue-500 mb-1" />
+            <p className="text-lg md:text-2xl font-bold text-blue-600">{stats.berjalan}</p>
+            <p className="text-[10px] md:text-xs text-muted-foreground">Berjalan</p>
           </CardContent>
         </Card>
         <Card className="bg-card">
-          <CardContent className="p-4 text-center">
-            <CheckCircle2 className="w-6 h-6 mx-auto text-green-500 mb-1" />
-            <p className="text-2xl font-bold text-green-600">{stats.selesai}</p>
-            <p className="text-xs text-muted-foreground">Selesai</p>
+          <CardContent className="p-2 md:p-4 text-center">
+            <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6 mx-auto text-green-500 mb-1" />
+            <p className="text-lg md:text-2xl font-bold text-green-600">{stats.selesai}</p>
+            <p className="text-[10px] md:text-xs text-muted-foreground">Selesai</p>
           </CardContent>
         </Card>
         <Card className="bg-card">
-          <CardContent className="p-4 text-center">
-            <Wallet className="w-6 h-6 mx-auto text-secondary mb-1" />
-            <p className="text-lg font-bold text-secondary">{formatRupiah(stats.totalNilai)}</p>
-            <p className="text-xs text-muted-foreground">Total Nilai</p>
+          <CardContent className="p-2 md:p-4 text-center">
+            <Wallet className="w-5 h-5 md:w-6 md:h-6 mx-auto text-secondary mb-1" />
+            <p className="text-sm md:text-lg font-bold text-secondary truncate">{formatRupiah(stats.totalNilai)}</p>
+            <p className="text-[10px] md:text-xs text-muted-foreground">Total Nilai</p>
           </CardContent>
         </Card>
         <Card className="bg-card">
-          <CardContent className="p-4 text-center">
-            <Wallet className="w-6 h-6 mx-auto text-primary mb-1" />
-            <p className="text-lg font-bold text-primary">{formatRupiah(stats.totalDP)}</p>
-            <p className="text-xs text-muted-foreground">Total DP</p>
+          <CardContent className="p-2 md:p-4 text-center">
+            <Wallet className="w-5 h-5 md:w-6 md:h-6 mx-auto text-primary mb-1" />
+            <p className="text-sm md:text-lg font-bold text-primary truncate">{formatRupiah(stats.totalDP)}</p>
+            <p className="text-[10px] md:text-xs text-muted-foreground">Total DP</p>
           </CardContent>
         </Card>
-        <Card className="bg-card">
-          <CardContent className="p-4 text-center">
-            <AlertCircle className="w-6 h-6 mx-auto text-destructive mb-1" />
-            <p className="text-lg font-bold text-destructive">{formatRupiah(stats.sisaPembayaran)}</p>
-            <p className="text-xs text-muted-foreground">Sisa Bayar</p>
+        <Card className="bg-card col-span-2 sm:col-span-1">
+          <CardContent className="p-2 md:p-4 text-center">
+            <AlertCircle className="w-5 h-5 md:w-6 md:h-6 mx-auto text-destructive mb-1" />
+            <p className="text-sm md:text-lg font-bold text-destructive truncate">{formatRupiah(stats.sisaPembayaran)}</p>
+            <p className="text-[10px] md:text-xs text-muted-foreground">Sisa Bayar</p>
           </CardContent>
         </Card>
       </div>
@@ -822,6 +823,12 @@ export default function Proyek() {
                   <p className="text-muted-foreground text-sm flex items-center gap-2 mb-2">
                     <Package className="w-4 h-4" />
                     Material yang Digunakan
+                    {viewingProject.status !== 'Selesai' && (
+                      <Badge className="bg-yellow-100 text-yellow-800 text-[10px]">
+                        <Clock className="w-3 h-3 mr-1" />
+                        PENDING
+                      </Badge>
+                    )}
                   </p>
                   <div className="border rounded-lg overflow-hidden">
                     <Table>
@@ -830,14 +837,28 @@ export default function Proyek() {
                           <TableHead>Produk</TableHead>
                           <TableHead className="text-center">Qty</TableHead>
                           <TableHead className="text-right">Subtotal</TableHead>
+                          <TableHead className="text-center w-20">Status</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {viewingProject.materials.map((mat) => (
-                          <TableRow key={mat.productId}>
+                          <TableRow key={mat.productId} className={viewingProject.status !== 'Selesai' ? 'bg-yellow-50 dark:bg-yellow-900/10' : ''}>
                             <TableCell className="font-medium">{mat.productName}</TableCell>
                             <TableCell className="text-center">{mat.qty} {mat.satuan}</TableCell>
                             <TableCell className="text-right">{formatRupiah(mat.qty * mat.harga)}</TableCell>
+                            <TableCell className="text-center">
+                              {viewingProject.status === 'Selesai' ? (
+                                <Badge className="bg-green-100 text-green-800 text-[10px]">
+                                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                                  OK
+                                </Badge>
+                              ) : (
+                                <Badge className="bg-yellow-100 text-yellow-800 text-[10px]">
+                                  <Clock className="w-3 h-3 mr-1" />
+                                  Pending
+                                </Badge>
+                              )}
+                            </TableCell>
                           </TableRow>
                         ))}
                         <TableRow className="bg-muted/30">
@@ -845,6 +866,7 @@ export default function Proyek() {
                           <TableCell className="text-right font-bold text-primary">
                             {formatRupiah(viewingProject.materials.reduce((sum, m) => sum + (m.qty * m.harga), 0))}
                           </TableCell>
+                          <TableCell></TableCell>
                         </TableRow>
                       </TableBody>
                     </Table>
