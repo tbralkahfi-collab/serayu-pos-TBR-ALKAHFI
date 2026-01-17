@@ -209,7 +209,7 @@ export default function Pengaturan() {
     toast.success('Pengaturan stok berhasil disimpan');
   };
 
-  const handleExportData = () => {
+  const handleExportData = async () => {
     const exportData: Record<string, any> = {};
     
     Object.entries(STORAGE_KEYS).forEach(([name, key]) => {
@@ -224,19 +224,73 @@ export default function Pengaturan() {
     });
 
     const dataStr = JSON.stringify(exportData, null, 2);
+    const fileName = `serayu_backup_${new Date().toISOString().split('T')[0]}.json`;
+    
+    // Check if File System Access API is available
+    if ('showSaveFilePicker' in window) {
+      try {
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName: fileName,
+          types: [{
+            description: 'JSON File',
+            accept: { 'application/json': ['.json'] }
+          }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(dataStr);
+        await writable.close();
+        toast.success('Data berhasil di-export ke folder pilihan');
+        return;
+      } catch (err: any) {
+        if (err.name === 'AbortError') return;
+        // Fallback to traditional download
+      }
+    }
+    
+    // Fallback for browsers without File System Access API
     const blob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `serayu_backup_${new Date().toISOString().split('T')[0]}.json`;
+    link.download = fileName;
     link.click();
     URL.revokeObjectURL(url);
     
     toast.success('Data berhasil di-export');
   };
 
-  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleImportData = async (e?: React.ChangeEvent<HTMLInputElement>) => {
+    // Check if File System Access API is available for custom folder
+    if (!e && 'showOpenFilePicker' in window) {
+      try {
+        const [handle] = await (window as any).showOpenFilePicker({
+          types: [{
+            description: 'JSON File',
+            accept: { 'application/json': ['.json'] }
+          }]
+        });
+        const file = await handle.getFile();
+        const content = await file.text();
+        
+        const importedData = JSON.parse(content);
+        Object.entries(STORAGE_KEYS).forEach(([name, key]) => {
+          if (importedData[name]) {
+            localStorage.setItem(key, JSON.stringify(importedData[name]));
+          }
+        });
+
+        toast.success('Data berhasil di-import. Halaman akan dimuat ulang...');
+        setTimeout(() => window.location.reload(), 1500);
+        return;
+      } catch (err: any) {
+        if (err.name === 'AbortError') return;
+        toast.error('File tidak valid atau rusak');
+        return;
+      }
+    }
+
+    // Traditional file input method
+    const file = e?.target?.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
@@ -260,11 +314,21 @@ export default function Pengaturan() {
   };
 
   const handleResetData = () => {
+    // Clear all localStorage
     Object.values(STORAGE_KEYS).forEach(key => {
       localStorage.removeItem(key);
     });
+
+    // Set empty arrays for all data keys
+    localStorage.setItem(STORAGE_KEYS.products, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.suppliers, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.purchases, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.debts, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.expenses, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.transactions, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.projects, JSON.stringify([]));
     
-    toast.success('Data berhasil direset. Halaman akan dimuat ulang...');
+    toast.success('Semua data berhasil direset ke 0. Halaman akan dimuat ulang...');
     setTimeout(() => window.location.reload(), 1500);
   };
 
@@ -675,13 +739,13 @@ export default function Pengaturan() {
                     <FileDown className="w-5 h-5 text-secondary" />
                   </div>
                   <div className="flex-1">
-                    <h4 className="font-medium text-sm">Export Data</h4>
-                    <p className="text-xs text-muted-foreground">Unduh semua data dalam format JSON sebagai backup</p>
+                    <h4 className="font-medium text-sm">Export Data ke Komputer</h4>
+                    <p className="text-xs text-muted-foreground">Simpan backup ke folder pilihan di hard disk Anda</p>
                   </div>
                 </div>
                 <Button onClick={handleExportData} variant="outline" className="w-full gap-2 border-secondary/30 hover:bg-secondary/5">
-                  <FileDown className="w-4 h-4" />
-                  Export Semua Data
+                  <HardDrive className="w-4 h-4" />
+                  Pilih Folder & Export
                 </Button>
               </div>
 
@@ -692,8 +756,8 @@ export default function Pengaturan() {
                     <FileUp className="w-5 h-5 text-info" />
                   </div>
                   <div className="flex-1">
-                    <h4 className="font-medium text-sm">Import Data</h4>
-                    <p className="text-xs text-muted-foreground">Pulihkan data dari file backup JSON</p>
+                    <h4 className="font-medium text-sm">Import Data dari Komputer</h4>
+                    <p className="text-xs text-muted-foreground">Pulihkan data dari file backup JSON di hard disk</p>
                   </div>
                 </div>
                 <input
@@ -704,12 +768,12 @@ export default function Pengaturan() {
                   className="hidden"
                 />
                 <Button 
-                  onClick={() => importInputRef.current?.click()} 
+                  onClick={() => 'showOpenFilePicker' in window ? handleImportData() : importInputRef.current?.click()} 
                   variant="outline" 
                   className="w-full gap-2 border-info/30 hover:bg-info/5"
                 >
-                  <FileUp className="w-4 h-4" />
-                  Import dari File
+                  <HardDrive className="w-4 h-4" />
+                  Pilih File dari Folder
                 </Button>
               </div>
 
@@ -737,9 +801,19 @@ export default function Pengaturan() {
                         <AlertTriangle className="w-5 h-5" />
                         Konfirmasi Reset Data
                       </AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Tindakan ini akan menghapus SEMUA data aplikasi termasuk produk, transaksi, proyek, dan pengaturan. 
-                        Data yang sudah dihapus tidak dapat dikembalikan. Pastikan Anda sudah export backup terlebih dahulu.
+                      <AlertDialogDescription className="space-y-2">
+                        <span className="block">Tindakan ini akan <strong className="text-destructive">menghapus SEMUA data</strong> aplikasi dan mengosongkan:</span>
+                        <ul className="list-disc list-inside text-sm space-y-1">
+                          <li>Semua produk menjadi 0</li>
+                          <li>Semua transaksi penjualan menjadi 0</li>
+                          <li>Semua pembelian menjadi 0</li>
+                          <li>Semua proyek menjadi 0</li>
+                          <li>Semua utang/piutang menjadi 0</li>
+                          <li>Semua supplier menjadi 0</li>
+                          <li>Semua biaya operasional menjadi 0</li>
+                        </ul>
+                        <span className="block text-destructive font-medium">Data yang sudah dihapus tidak dapat dikembalikan!</span>
+                        <span className="block">Pastikan Anda sudah export backup terlebih dahulu.</span>
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
