@@ -24,6 +24,9 @@ import {
   Users,
   Wallet,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   Dialog,
   DialogContent,
@@ -559,33 +562,367 @@ export default function Laporan() {
     printWindow.document.close();
   };
 
-  const exportLaporanExcel = () => {
-    const headers = ['Tanggal', 'ID', 'Pelanggan', 'Item', 'Total', 'Metode'];
-    const rows = filteredData.transactions.map(t => [
-      t.tanggal,
-      t.id,
-      t.pelanggan,
-      `"${t.items}"`,
-      t.total,
-      t.metode
-    ]);
+  const exportLaporanExcel = (type: 'penjualan' | 'pembelian' | 'stok' | 'labarugi' | 'proyek' | 'semua') => {
+    const workbook = XLSX.utils.book_new();
+    const dateNow = new Date().toISOString().split('T')[0];
+    
+    // Penjualan Sheet
+    if (type === 'penjualan' || type === 'semua') {
+      const penjualanData = [
+        ['LAPORAN PENJUALAN'],
+        [`Periode: ${activePeriod}`],
+        [`Toko: ${storeInfo.name}`],
+        [],
+        ['No', 'Tanggal', 'ID Transaksi', 'Pelanggan', 'Item', 'Total', 'Metode'],
+        ...filteredData.transactions.map((t, i) => [
+          i + 1,
+          t.tanggal.split(' ')[0],
+          t.id,
+          t.pelanggan,
+          t.items,
+          t.total,
+          t.metode
+        ]),
+        [],
+        ['', '', '', '', 'TOTAL PENJUALAN:', totalPenjualan, '']
+      ];
+      const wsPenjualan = XLSX.utils.aoa_to_sheet(penjualanData);
+      wsPenjualan['!cols'] = [{ wch: 5 }, { wch: 12 }, { wch: 15 }, { wch: 20 }, { wch: 40 }, { wch: 15 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(workbook, wsPenjualan, 'Penjualan');
+    }
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n');
+    // Pembelian Sheet
+    if (type === 'pembelian' || type === 'semua') {
+      const pembelianData = [
+        ['LAPORAN PEMBELIAN'],
+        [`Periode: ${activePeriod}`],
+        [],
+        ['No', 'Tanggal', 'ID PO', 'Supplier', 'Item', 'Total', 'DP', 'Status'],
+        ...filteredData.purchases.map((p, i) => [
+          i + 1,
+          p.date,
+          p.id,
+          p.supplier,
+          p.items,
+          p.total,
+          p.dp,
+          p.status
+        ]),
+        [],
+        ['', '', '', '', 'TOTAL PEMBELIAN:', totalPembelian, '', '']
+      ];
+      const wsPembelian = XLSX.utils.aoa_to_sheet(pembelianData);
+      wsPembelian['!cols'] = [{ wch: 5 }, { wch: 12 }, { wch: 15 }, { wch: 20 }, { wch: 40 }, { wch: 15 }, { wch: 15 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(workbook, wsPembelian, 'Pembelian');
+    }
 
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `laporan_penjualan_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
+    // Stok Sheet
+    if (type === 'stok' || type === 'semua') {
+      const stokData = [
+        ['LAPORAN STOK PRODUK'],
+        [`Tanggal Cetak: ${dateNow}`],
+        [],
+        ['No', 'ID Produk', 'Nama Produk', 'Kategori', 'Stok', 'Satuan', 'Harga Beli', 'Harga Jual', 'Nilai Stok'],
+        ...products.map((p, i) => [
+          i + 1,
+          p.id,
+          p.nama,
+          p.kategori,
+          p.stok,
+          p.satuan,
+          p.hargaBeli || 0,
+          p.hargaJual || p.harga || 0,
+          p.stok * (p.hargaBeli || 0)
+        ]),
+        [],
+        ['', '', '', 'TOTAL:', products.reduce((s, p) => s + p.stok, 0), '', '', '', products.reduce((s, p) => s + (p.stok * (p.hargaBeli || 0)), 0)]
+      ];
+      const wsStok = XLSX.utils.aoa_to_sheet(stokData);
+      wsStok['!cols'] = [{ wch: 5 }, { wch: 12 }, { wch: 30 }, { wch: 15 }, { wch: 8 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
+      XLSX.utils.book_append_sheet(workbook, wsStok, 'Stok');
+    }
 
-    toast.success('Laporan berhasil di-export ke Excel (CSV)');
+    // Laba Rugi Sheet
+    if (type === 'labarugi' || type === 'semua') {
+      const labaRugiData = [
+        ['LAPORAN LABA RUGI'],
+        [`Periode: ${activePeriod}`],
+        [],
+        ['KETERANGAN', 'JUMLAH'],
+        ['PENDAPATAN', ''],
+        ['Penjualan', totalPenjualan],
+        [],
+        ['PENGELUARAN', ''],
+        ['Pembelian Barang', totalPembelian],
+        ['Biaya Operasional', totalOperasional],
+        ['Total Pengeluaran', totalPembelian + totalOperasional],
+        [],
+        ['LABA KOTOR', labaKotor],
+        ['LABA BERSIH', labaBersih],
+        ['Margin Bersih (%)', marginBersih.toFixed(2)],
+        [],
+        ['RINCIAN BIAYA OPERASIONAL', ''],
+        ['Kategori', 'Deskripsi', 'Tanggal', 'Jumlah'],
+        ...filteredData.expenses.map(e => ['', e.kategori, e.deskripsi, e.tanggal, e.jumlah])
+      ];
+      const wsLabaRugi = XLSX.utils.aoa_to_sheet(labaRugiData);
+      wsLabaRugi['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 15 }];
+      XLSX.utils.book_append_sheet(workbook, wsLabaRugi, 'Laba Rugi');
+    }
+
+    // Proyek Sheet
+    if (type === 'proyek' || type === 'semua') {
+      const proyekData = [
+        ['LAPORAN PROYEK'],
+        [`Periode: ${activePeriod}`],
+        [],
+        ['RINGKASAN'],
+        ['Total Proyek', projectStats.total],
+        ['Pending', projectStats.pending],
+        ['Berjalan', projectStats.berjalan],
+        ['Selesai', projectStats.selesai],
+        ['Total Nilai Kontrak', projectStats.totalNilai],
+        ['Total DP', projectStats.totalDP],
+        ['Sisa Bayar', projectStats.sisaBayar],
+        ['Biaya Material', projectStats.totalMaterial],
+        ['Biaya Tenaga Kerja', projectStats.totalTenagaKerja],
+        ['Estimasi Keuntungan', projectStats.keuntungan],
+        [],
+        ['DAFTAR PROYEK'],
+        ['No', 'Nama Proyek', 'Pelanggan', 'Nilai Kontrak', 'Material', 'Tenaga Kerja', 'Keuntungan', 'Status'],
+        ...filteredData.projects.map((p, i) => {
+          const materialCost = p.materials?.reduce((sum, m) => sum + (m.qty * m.harga), 0) || 0;
+          const laborCost = p.biayaTenagaKerja || 0;
+          const profit = p.nilaiKontrak - materialCost - laborCost;
+          return [
+            i + 1,
+            p.namaProyek + (p.status !== 'Selesai' ? ' (PENDING)' : ''),
+            p.pelanggan,
+            p.nilaiKontrak,
+            materialCost,
+            laborCost,
+            profit,
+            p.status
+          ];
+        })
+      ];
+      const wsProyek = XLSX.utils.aoa_to_sheet(proyekData);
+      wsProyek['!cols'] = [{ wch: 5 }, { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(workbook, wsProyek, 'Proyek');
+    }
+
+    const fileName = type === 'semua' 
+      ? `Laporan_Lengkap_${storeInfo.name.replace(/\s+/g, '_')}_${dateNow}.xlsx`
+      : `Laporan_${type.charAt(0).toUpperCase() + type.slice(1)}_${dateNow}.xlsx`;
+    
+    XLSX.writeFile(workbook, fileName);
+    toast.success(`Laporan ${type === 'semua' ? 'Lengkap' : type} berhasil di-export ke Excel`);
   };
 
-  const exportLaporanPDF = () => {
-    handleQuickReport('labarugi');
+  const exportLaporanPDF = (type: 'penjualan' | 'pembelian' | 'stok' | 'labarugi' | 'proyek' | 'semua') => {
+    const doc = new jsPDF();
+    const dateNow = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
+    let yPos = 20;
+
+    const addHeader = (title: string) => {
+      doc.setFontSize(18);
+      doc.setTextColor(220, 38, 38);
+      doc.text(storeInfo.name || 'SERAYU POS', 105, yPos, { align: 'center' });
+      yPos += 6;
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(storeInfo.address || 'Alamat Toko', 105, yPos, { align: 'center' });
+      yPos += 4;
+      doc.text(`Telp: ${storeInfo.phone || '-'}`, 105, yPos, { align: 'center' });
+      yPos += 10;
+      doc.setFontSize(14);
+      doc.setTextColor(22, 163, 74);
+      doc.text(title, 105, yPos, { align: 'center' });
+      yPos += 6;
+      doc.setFontSize(10);
+      doc.setTextColor(0);
+      doc.text(`Periode: ${activePeriod}`, 14, yPos);
+      yPos += 8;
+    };
+
+    const addNewPage = () => {
+      doc.addPage();
+      yPos = 20;
+    };
+
+    // Penjualan
+    if (type === 'penjualan' || type === 'semua') {
+      addHeader('LAPORAN PENJUALAN');
+      autoTable(doc, {
+        startY: yPos,
+        head: [['No', 'Tanggal', 'ID', 'Pelanggan', 'Item', 'Total', 'Metode']],
+        body: filteredData.transactions.map((t, i) => [
+          i + 1,
+          t.tanggal.split(' ')[0],
+          t.id,
+          t.pelanggan,
+          t.items.length > 30 ? t.items.substring(0, 30) + '...' : t.items,
+          `Rp ${t.total.toLocaleString('id-ID')}`,
+          t.metode
+        ]),
+        foot: [['', '', '', '', 'TOTAL:', `Rp ${totalPenjualan.toLocaleString('id-ID')}`, '']],
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [22, 163, 74] },
+        footStyles: { fillColor: [220, 252, 231], textColor: [22, 163, 74], fontStyle: 'bold' },
+      });
+      if (type === 'semua') addNewPage();
+    }
+
+    // Pembelian
+    if (type === 'pembelian' || type === 'semua') {
+      if (type !== 'semua') addHeader('LAPORAN PEMBELIAN');
+      else {
+        addHeader('LAPORAN PEMBELIAN');
+      }
+      autoTable(doc, {
+        startY: yPos,
+        head: [['No', 'Tanggal', 'ID PO', 'Supplier', 'Item', 'Total', 'DP', 'Status']],
+        body: filteredData.purchases.map((p, i) => [
+          i + 1,
+          p.date,
+          p.id,
+          p.supplier,
+          p.items.length > 25 ? p.items.substring(0, 25) + '...' : p.items,
+          `Rp ${p.total.toLocaleString('id-ID')}`,
+          `Rp ${p.dp.toLocaleString('id-ID')}`,
+          p.status
+        ]),
+        foot: [['', '', '', '', 'TOTAL:', `Rp ${totalPembelian.toLocaleString('id-ID')}`, '', '']],
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [220, 38, 38] },
+        footStyles: { fillColor: [254, 242, 242], textColor: [220, 38, 38], fontStyle: 'bold' },
+      });
+      if (type === 'semua') addNewPage();
+    }
+
+    // Stok
+    if (type === 'stok' || type === 'semua') {
+      if (type !== 'semua') addHeader('LAPORAN STOK PRODUK');
+      else addHeader('LAPORAN STOK PRODUK');
+      autoTable(doc, {
+        startY: yPos,
+        head: [['No', 'ID', 'Nama Produk', 'Kategori', 'Stok', 'Satuan', 'Harga Beli', 'Harga Jual', 'Nilai Stok']],
+        body: products.map((p, i) => [
+          i + 1,
+          p.id,
+          p.nama.length > 20 ? p.nama.substring(0, 20) + '...' : p.nama,
+          p.kategori,
+          p.stok,
+          p.satuan,
+          `Rp ${(p.hargaBeli || 0).toLocaleString('id-ID')}`,
+          `Rp ${(p.hargaJual || p.harga || 0).toLocaleString('id-ID')}`,
+          `Rp ${(p.stok * (p.hargaBeli || 0)).toLocaleString('id-ID')}`
+        ]),
+        foot: [['', '', '', 'TOTAL:', products.reduce((s, p) => s + p.stok, 0), '', '', '', `Rp ${products.reduce((s, p) => s + (p.stok * (p.hargaBeli || 0)), 0).toLocaleString('id-ID')}`]],
+        styles: { fontSize: 7, cellPadding: 2 },
+        headStyles: { fillColor: [245, 158, 11] },
+        footStyles: { fillColor: [254, 243, 199], textColor: [217, 119, 6], fontStyle: 'bold' },
+      });
+      if (type === 'semua') addNewPage();
+    }
+
+    // Laba Rugi
+    if (type === 'labarugi' || type === 'semua') {
+      if (type !== 'semua') addHeader('LAPORAN LABA RUGI');
+      else addHeader('LAPORAN LABA RUGI');
+      autoTable(doc, {
+        startY: yPos,
+        head: [['KETERANGAN', 'JUMLAH']],
+        body: [
+          ['PENDAPATAN', ''],
+          ['    Penjualan', `Rp ${totalPenjualan.toLocaleString('id-ID')}`],
+          ['', ''],
+          ['PENGELUARAN', ''],
+          ['    Pembelian Barang', `Rp ${totalPembelian.toLocaleString('id-ID')}`],
+          ['    Biaya Operasional', `Rp ${totalOperasional.toLocaleString('id-ID')}`],
+          ['    Total Pengeluaran', `Rp ${(totalPembelian + totalOperasional).toLocaleString('id-ID')}`],
+          ['', ''],
+          ['LABA KOTOR', `Rp ${labaKotor.toLocaleString('id-ID')}`],
+          ['LABA BERSIH', `Rp ${labaBersih.toLocaleString('id-ID')}`],
+          ['Margin Bersih', `${marginBersih.toFixed(2)}%`],
+        ],
+        styles: { fontSize: 10, cellPadding: 4 },
+        headStyles: { fillColor: [14, 165, 233] },
+        columnStyles: {
+          0: { cellWidth: 100 },
+          1: { cellWidth: 60, halign: 'right' }
+        },
+      });
+      if (type === 'semua') addNewPage();
+    }
+
+    // Proyek
+    if (type === 'proyek' || type === 'semua') {
+      if (type !== 'semua') addHeader('LAPORAN PROYEK');
+      else addHeader('LAPORAN PROYEK');
+      
+      // Summary table
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Ringkasan Proyek', 'Jumlah']],
+        body: [
+          ['Total Proyek', projectStats.total.toString()],
+          ['Pending', projectStats.pending.toString()],
+          ['Berjalan', projectStats.berjalan.toString()],
+          ['Selesai', projectStats.selesai.toString()],
+          ['Total Nilai Kontrak', `Rp ${projectStats.totalNilai.toLocaleString('id-ID')}`],
+          ['Biaya Material', `Rp ${projectStats.totalMaterial.toLocaleString('id-ID')}`],
+          ['Biaya Tenaga Kerja', `Rp ${projectStats.totalTenagaKerja.toLocaleString('id-ID')}`],
+          ['Estimasi Keuntungan', `Rp ${projectStats.keuntungan.toLocaleString('id-ID')}`],
+        ],
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [139, 92, 246] },
+        columnStyles: {
+          0: { cellWidth: 80 },
+          1: { cellWidth: 60, halign: 'right' }
+        },
+      });
+      
+      yPos = (doc as any).lastAutoTable.finalY + 10;
+      
+      // Project list
+      autoTable(doc, {
+        startY: yPos,
+        head: [['No', 'Nama Proyek', 'Pelanggan', 'Nilai Kontrak', 'Material', 'Keuntungan', 'Status']],
+        body: filteredData.projects.map((p, i) => {
+          const materialCost = p.materials?.reduce((sum, m) => sum + (m.qty * m.harga), 0) || 0;
+          const laborCost = p.biayaTenagaKerja || 0;
+          const profit = p.nilaiKontrak - materialCost - laborCost;
+          return [
+            i + 1,
+            p.namaProyek + (p.status !== 'Selesai' ? ' (PENDING)' : ''),
+            p.pelanggan,
+            `Rp ${p.nilaiKontrak.toLocaleString('id-ID')}`,
+            `Rp ${materialCost.toLocaleString('id-ID')}`,
+            `Rp ${profit.toLocaleString('id-ID')}`,
+            p.status
+          ];
+        }),
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [139, 92, 246] },
+      });
+    }
+
+    // Footer
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(100);
+      doc.text(`Dicetak: ${dateNow} | ${storeInfo.name || 'SERAYU POS'} | Halaman ${i} dari ${pageCount}`, 105, 290, { align: 'center' });
+    }
+
+    const fileName = type === 'semua' 
+      ? `Laporan_Lengkap_${storeInfo.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`
+      : `Laporan_${type.charAt(0).toUpperCase() + type.slice(1)}_${new Date().toISOString().split('T')[0]}.pdf`;
+    
+    doc.save(fileName);
+    toast.success(`Laporan ${type === 'semua' ? 'Lengkap' : type} berhasil di-export ke PDF`);
   };
 
   return (
@@ -614,14 +951,58 @@ export default function Laporan() {
                 <span className="sm:hidden">Export</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={exportLaporanExcel} className="gap-2 cursor-pointer">
+            <DropdownMenuContent align="end" className="w-56">
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Export Excel (.xlsx)</div>
+              <DropdownMenuItem onClick={() => exportLaporanExcel('semua')} className="gap-2 cursor-pointer">
                 <FileSpreadsheet className="w-4 h-4 text-secondary" />
-                Export Excel (CSV)
+                Semua Laporan (Excel)
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={exportLaporanPDF} className="gap-2 cursor-pointer">
+              <DropdownMenuItem onClick={() => exportLaporanExcel('penjualan')} className="gap-2 cursor-pointer pl-6">
+                <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                Penjualan
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportLaporanExcel('pembelian')} className="gap-2 cursor-pointer pl-6">
+                <FileSpreadsheet className="w-4 h-4 text-red-600" />
+                Pembelian
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportLaporanExcel('stok')} className="gap-2 cursor-pointer pl-6">
+                <FileSpreadsheet className="w-4 h-4 text-yellow-600" />
+                Stok Produk
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportLaporanExcel('labarugi')} className="gap-2 cursor-pointer pl-6">
+                <FileSpreadsheet className="w-4 h-4 text-blue-600" />
+                Laba Rugi
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportLaporanExcel('proyek')} className="gap-2 cursor-pointer pl-6">
+                <FileSpreadsheet className="w-4 h-4 text-purple-600" />
+                Proyek
+              </DropdownMenuItem>
+              
+              <div className="border-t my-1" />
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Export PDF</div>
+              <DropdownMenuItem onClick={() => exportLaporanPDF('semua')} className="gap-2 cursor-pointer">
                 <File className="w-4 h-4 text-primary" />
-                Export PDF
+                Semua Laporan (PDF)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportLaporanPDF('penjualan')} className="gap-2 cursor-pointer pl-6">
+                <File className="w-4 h-4 text-green-600" />
+                Penjualan
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportLaporanPDF('pembelian')} className="gap-2 cursor-pointer pl-6">
+                <File className="w-4 h-4 text-red-600" />
+                Pembelian
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportLaporanPDF('stok')} className="gap-2 cursor-pointer pl-6">
+                <File className="w-4 h-4 text-yellow-600" />
+                Stok Produk
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportLaporanPDF('labarugi')} className="gap-2 cursor-pointer pl-6">
+                <File className="w-4 h-4 text-blue-600" />
+                Laba Rugi
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportLaporanPDF('proyek')} className="gap-2 cursor-pointer pl-6">
+                <File className="w-4 h-4 text-purple-600" />
+                Proyek
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
