@@ -341,43 +341,64 @@ const migrateProject = (project: any): Project => {
 export function DataProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.products);
-    if (saved) {
+    if (saved !== null) {
       const parsed = JSON.parse(saved);
-      return parsed.map(migrateProduct);
+      // Return empty array if reset, otherwise migrate
+      return Array.isArray(parsed) ? parsed.map(migrateProduct) : [];
     }
     return initialProducts;
   });
   
   const [suppliers, setSuppliers] = useState<Supplier[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.suppliers);
-    return saved ? JSON.parse(saved) : initialSuppliers;
+    if (saved !== null) {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+    return initialSuppliers;
   });
   
   const [purchases, setPurchases] = useState<Purchase[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.purchases);
-    return saved ? JSON.parse(saved) : initialPurchases;
+    if (saved !== null) {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+    return initialPurchases;
   });
   
   const [debts, setDebts] = useState<DebtRecord[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.debts);
-    return saved ? JSON.parse(saved) : initialDebts;
+    if (saved !== null) {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+    return initialDebts;
   });
   
   const [expenses, setExpenses] = useState<Expense[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.expenses);
-    return saved ? JSON.parse(saved) : initialExpenses;
+    if (saved !== null) {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+    return initialExpenses;
   });
   
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.transactions);
-    return saved ? JSON.parse(saved) : initialTransactions;
+    if (saved !== null) {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+    return initialTransactions;
   });
 
   const [projects, setProjects] = useState<Project[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.projects);
-    if (saved) {
+    if (saved !== null) {
       const parsed = JSON.parse(saved);
-      return parsed.map(migrateProject);
+      return Array.isArray(parsed) ? parsed.map(migrateProject) : [];
     }
     return initialProjects;
   });
