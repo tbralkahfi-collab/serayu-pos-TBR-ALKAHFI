@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { formatRupiah } from '@/components/RupiahIcon';
 import { toast } from 'sonner';
 import { useData } from '@/contexts/DataContext';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Search,
   FileText,
@@ -18,6 +19,8 @@ import {
   Edit,
   Trash2,
   X,
+  Users,
+  FolderKanban,
 } from 'lucide-react';
 import {
   Table,
@@ -74,8 +77,9 @@ const getMethodColor = (metode: string) => {
 };
 
 export default function Transaksi() {
-  const { transactions, updateTransaction, deleteTransaction } = useData();
+  const { transactions, updateTransaction, deleteTransaction, projects } = useData();
   const [search, setSearch] = useState('');
+  const [activeTab, setActiveTab] = useState('pelanggan');
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -87,13 +91,28 @@ export default function Transaksi() {
     status: '',
   });
 
-  const filteredTransactions = transactions.filter(
+  // Separate transactions by type - check if pelanggan matches a project name
+  const projectNames = useMemo(() => projects.map(p => p.namaProyek.toLowerCase()), [projects]);
+  
+  const pelangganTransactions = useMemo(() => 
+    transactions.filter(t => !projectNames.includes(t.pelanggan.toLowerCase())),
+    [transactions, projectNames]
+  );
+  
+  const proyekTransactions = useMemo(() => 
+    transactions.filter(t => projectNames.includes(t.pelanggan.toLowerCase())),
+    [transactions, projectNames]
+  );
+
+  const currentTransactions = activeTab === 'pelanggan' ? pelangganTransactions : proyekTransactions;
+
+  const filteredTransactions = currentTransactions.filter(
     (t) =>
       t.id.toLowerCase().includes(search.toLowerCase()) ||
       t.pelanggan.toLowerCase().includes(search.toLowerCase())
   );
 
-  const totalToday = transactions
+  const totalToday = currentTransactions
     .filter((t) => t.status === 'Selesai')
     .reduce((sum, t) => sum + t.total, 0);
 
@@ -273,7 +292,7 @@ export default function Transaksi() {
               <FileText className="w-6 h-6 text-primary" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{transactions.length}</p>
+              <p className="text-2xl font-bold">{currentTransactions.length}</p>
               <p className="text-sm text-muted-foreground">Total Transaksi</p>
             </div>
           </CardContent>
@@ -295,7 +314,7 @@ export default function Transaksi() {
               <Calendar className="w-6 h-6 text-info" />
             </div>
             <div>
-              <p className="text-xl font-bold">{formatRupiah(transactions.length > 0 ? Math.round(totalToday / transactions.length) : 0)}</p>
+              <p className="text-xl font-bold">{formatRupiah(currentTransactions.length > 0 ? Math.round(totalToday / currentTransactions.length) : 0)}</p>
               <p className="text-sm text-muted-foreground">Rata-rata</p>
             </div>
           </CardContent>
@@ -306,13 +325,26 @@ export default function Transaksi() {
               <FileText className="w-6 h-6 text-warning" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{transactions.filter(t => t.status === 'Pending').length}</p>
+              <p className="text-2xl font-bold">{currentTransactions.filter(t => t.status === 'Pending').length}</p>
               <p className="text-sm text-muted-foreground">Pending</p>
             </div>
           </CardContent>
         </Card>
       </div>
 
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="pelanggan" className="gap-2">
+            <Users className="w-4 h-4" />
+            Pelanggan ({pelangganTransactions.length})
+          </TabsTrigger>
+          <TabsTrigger value="proyek" className="gap-2">
+            <FolderKanban className="w-4 h-4" />
+            Proyek ({proyekTransactions.length})
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
       {/* Transaction list */}
       <Card className="bg-card">
         <CardHeader className="pb-4">
@@ -320,7 +352,7 @@ export default function Transaksi() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
               <Input
-                placeholder="Cari ID transaksi atau pelanggan..."
+                placeholder={activeTab === 'pelanggan' ? "Cari ID transaksi atau pelanggan..." : "Cari ID transaksi atau proyek..."}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-10 border-primary/20 focus:border-primary"
@@ -337,7 +369,7 @@ export default function Transaksi() {
             <TableHeader>
               <TableRow className="bg-muted/50">
                 <TableHead>ID Transaksi</TableHead>
-                <TableHead>Pelanggan</TableHead>
+                <TableHead>{activeTab === 'pelanggan' ? 'Pelanggan' : 'Proyek'}</TableHead>
                 <TableHead>Tanggal & Waktu</TableHead>
                 <TableHead>Items</TableHead>
                 <TableHead>Metode</TableHead>
