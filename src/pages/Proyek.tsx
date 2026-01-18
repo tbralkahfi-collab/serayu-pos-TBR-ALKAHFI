@@ -121,14 +121,26 @@ export default function Proyek() {
       return;
     }
     const product = products.find(p => p.id === selectedProductId);
-    if (!product) return;
+    if (!product) {
+      toast.error('Produk tidak ditemukan');
+      return;
+    }
+
+    // Check stock availability
+    if (materialQty > product.stok) {
+      toast.error(`Stok ${product.nama} tidak mencukupi (tersedia: ${product.stok} ${product.satuan})`);
+      return;
+    }
+
+    // Use hargaJual for selling price, fallback to harga for legacy support
+    const sellingPrice = product.hargaJual || product.harga || 0;
 
     // Check if already added
     const existing = materials.find(m => m.productId === selectedProductId);
     if (existing) {
       setMaterials(prev => prev.map(m => 
         m.productId === selectedProductId 
-          ? { ...m, qty: m.qty + materialQty }
+          ? { ...m, qty: m.qty + materialQty, harga: sellingPrice }
           : m
       ));
     } else {
@@ -137,20 +149,43 @@ export default function Proyek() {
         productName: product.nama,
         qty: materialQty,
         satuan: product.satuan,
-        harga: product.harga,
+        harga: sellingPrice,
       }]);
     }
     setSelectedProductId('');
     setMaterialQty(1);
+    toast.success(`${product.nama} ditambahkan ke material`);
   };
 
   const handleRemoveMaterial = (productId: string) => {
     setMaterials(prev => prev.filter(m => m.productId !== productId));
   };
 
+  // Helper function to get current product data (for real-time sync)
+  const getProductInfo = (productId: string) => {
+    const product = products.find(p => p.id === productId);
+    return product;
+  };
+
+  // Get synced material with current product data
+  const getSyncedMaterial = (mat: ProjectMaterial) => {
+    const product = getProductInfo(mat.productId);
+    return {
+      ...mat,
+      productName: product?.nama || mat.productName,
+      harga: product?.hargaJual || product?.harga || mat.harga,
+      satuan: product?.satuan || mat.satuan,
+      currentStock: product?.stok || 0,
+      productExists: !!product,
+    };
+  };
+
   const totalMaterialCost = useMemo(() => {
-    return materials.reduce((sum, m) => sum + (m.qty * m.harga), 0);
-  }, [materials]);
+    return materials.reduce((sum, m) => {
+      const synced = getSyncedMaterial(m);
+      return sum + (m.qty * synced.harga);
+    }, 0);
+  }, [materials, products]);
 
   const handleOpenAdd = () => {
     resetForm();
@@ -614,11 +649,16 @@ export default function Proyek() {
                     <SelectValue placeholder="Pilih produk..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {products.map(product => (
+                    {products.filter(p => p.stok > 0).map(product => (
                       <SelectItem key={product.id} value={product.id}>
-                        {product.nama} ({product.stok} {product.satuan})
+                        {product.nama} - {formatRupiah(product.hargaJual || product.harga || 0)} ({product.stok} {product.satuan})
                       </SelectItem>
                     ))}
+                    {products.filter(p => p.stok > 0).length === 0 && (
+                      <div className="p-2 text-sm text-muted-foreground text-center">
+                        Tidak ada produk dengan stok tersedia
+                      </div>
+                    )}
                   </SelectContent>
                 </Select>
                 <Input
@@ -647,24 +687,32 @@ export default function Proyek() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {materials.map((mat) => (
-                        <TableRow key={mat.productId}>
-                          <TableCell className="font-medium">{mat.productName}</TableCell>
-                          <TableCell className="text-center">{mat.qty} {mat.satuan}</TableCell>
-                          <TableCell className="text-right">{formatRupiah(mat.harga)}</TableCell>
-                          <TableCell className="text-right font-medium">{formatRupiah(mat.qty * mat.harga)}</TableCell>
-                          <TableCell>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-7 w-7 text-destructive"
-                              onClick={() => handleRemoveMaterial(mat.productId)}
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {materials.map((mat) => {
+                        const synced = getSyncedMaterial(mat);
+                        return (
+                          <TableRow key={mat.productId} className={!synced.productExists ? 'bg-destructive/10' : ''}>
+                            <TableCell className="font-medium">
+                              {synced.productName}
+                              {!synced.productExists && (
+                                <Badge variant="destructive" className="ml-2 text-[10px]">Produk Dihapus</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-center">{mat.qty} {synced.satuan}</TableCell>
+                            <TableCell className="text-right">{formatRupiah(synced.harga)}</TableCell>
+                            <TableCell className="text-right font-medium">{formatRupiah(mat.qty * synced.harga)}</TableCell>
+                            <TableCell>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-7 w-7 text-destructive"
+                                onClick={() => handleRemoveMaterial(mat.productId)}
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                       <TableRow className="bg-muted/30">
                         <TableCell colSpan={3} className="text-right font-bold">Total Biaya Material</TableCell>
                         <TableCell className="text-right font-bold text-primary">{formatRupiah(totalMaterialCost)}</TableCell>
@@ -759,7 +807,10 @@ export default function Proyek() {
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Biaya Material</span>
                   <span className="font-medium">
-                    {formatRupiah(viewingProject.materials?.reduce((sum, m) => sum + (m.qty * m.harga), 0) || 0)}
+                    {formatRupiah(viewingProject.materials?.reduce((sum, m) => {
+                      const synced = getSyncedMaterial(m);
+                      return sum + (m.qty * synced.harga);
+                    }, 0) || 0)}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
@@ -770,25 +821,29 @@ export default function Proyek() {
                   <span className="text-muted-foreground">Total Biaya</span>
                   <span className="font-bold text-destructive">
                     {formatRupiah(
-                      (viewingProject.materials?.reduce((sum, m) => sum + (m.qty * m.harga), 0) || 0) + 
+                      (viewingProject.materials?.reduce((sum, m) => {
+                        const synced = getSyncedMaterial(m);
+                        return sum + (m.qty * synced.harga);
+                      }, 0) || 0) + 
                       (viewingProject.biayaTenagaKerja || 0)
                     )}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm border-t pt-2">
                   <span className="text-muted-foreground font-medium">Keuntungan (Est.)</span>
-                  <span className={`font-bold ${
-                    viewingProject.nilaiKontrak - 
-                    ((viewingProject.materials?.reduce((sum, m) => sum + (m.qty * m.harga), 0) || 0) + 
-                    (viewingProject.biayaTenagaKerja || 0)) >= 0 
-                      ? 'text-secondary' : 'text-destructive'
-                  }`}>
-                    {formatRupiah(
-                      viewingProject.nilaiKontrak - 
-                      ((viewingProject.materials?.reduce((sum, m) => sum + (m.qty * m.harga), 0) || 0) + 
-                      (viewingProject.biayaTenagaKerja || 0))
-                    )}
-                  </span>
+                  {(() => {
+                    const materialCost = viewingProject.materials?.reduce((sum, m) => {
+                      const synced = getSyncedMaterial(m);
+                      return sum + (m.qty * synced.harga);
+                    }, 0) || 0;
+                    const totalCost = materialCost + (viewingProject.biayaTenagaKerja || 0);
+                    const profit = viewingProject.nilaiKontrak - totalCost;
+                    return (
+                      <span className={`font-bold ${profit >= 0 ? 'text-secondary' : 'text-destructive'}`}>
+                        {formatRupiah(profit)}
+                      </span>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -841,30 +896,49 @@ export default function Proyek() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {viewingProject.materials.map((mat) => (
-                          <TableRow key={mat.productId} className={viewingProject.status !== 'Selesai' ? 'bg-yellow-50 dark:bg-yellow-900/10' : ''}>
-                            <TableCell className="font-medium">{mat.productName}</TableCell>
-                            <TableCell className="text-center">{mat.qty} {mat.satuan}</TableCell>
-                            <TableCell className="text-right">{formatRupiah(mat.qty * mat.harga)}</TableCell>
-                            <TableCell className="text-center">
-                              {viewingProject.status === 'Selesai' ? (
-                                <Badge className="bg-green-100 text-green-800 text-[10px]">
-                                  <CheckCircle2 className="w-3 h-3 mr-1" />
-                                  OK
-                                </Badge>
-                              ) : (
-                                <Badge className="bg-yellow-100 text-yellow-800 text-[10px]">
-                                  <Clock className="w-3 h-3 mr-1" />
-                                  Pending
-                                </Badge>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {viewingProject.materials.map((mat) => {
+                          const synced = getSyncedMaterial(mat);
+                          return (
+                            <TableRow 
+                              key={mat.productId} 
+                              className={`${viewingProject.status !== 'Selesai' ? 'bg-yellow-50 dark:bg-yellow-900/10' : ''} ${!synced.productExists ? 'bg-destructive/10' : ''}`}
+                            >
+                              <TableCell className="font-medium">
+                                {synced.productName}
+                                {!synced.productExists && (
+                                  <Badge variant="destructive" className="ml-2 text-[10px]">Dihapus</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-center">{mat.qty} {synced.satuan}</TableCell>
+                              <TableCell className="text-right">{formatRupiah(mat.qty * synced.harga)}</TableCell>
+                              <TableCell className="text-center">
+                                {!synced.productExists ? (
+                                  <Badge variant="destructive" className="text-[10px]">
+                                    <AlertCircle className="w-3 h-3 mr-1" />
+                                    Error
+                                  </Badge>
+                                ) : viewingProject.status === 'Selesai' ? (
+                                  <Badge className="bg-green-100 text-green-800 text-[10px]">
+                                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                                    OK
+                                  </Badge>
+                                ) : (
+                                  <Badge className="bg-yellow-100 text-yellow-800 text-[10px]">
+                                    <Clock className="w-3 h-3 mr-1" />
+                                    Pending
+                                  </Badge>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                         <TableRow className="bg-muted/30">
                           <TableCell colSpan={2} className="text-right font-bold">Total Material</TableCell>
                           <TableCell className="text-right font-bold text-primary">
-                            {formatRupiah(viewingProject.materials.reduce((sum, m) => sum + (m.qty * m.harga), 0))}
+                            {formatRupiah(viewingProject.materials.reduce((sum, m) => {
+                              const synced = getSyncedMaterial(m);
+                              return sum + (m.qty * synced.harga);
+                            }, 0))}
                           </TableCell>
                           <TableCell></TableCell>
                         </TableRow>
