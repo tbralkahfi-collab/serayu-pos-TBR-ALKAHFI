@@ -70,6 +70,9 @@ export interface Transaction {
   tanggal: string;
   pelanggan: string;
   items: string;
+  subtotal?: number;
+  diskon?: number;
+  diskonPersen?: number;
   total: number;
   bayar: number;
   kembalian: number;

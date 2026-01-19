@@ -8,7 +8,7 @@ import { useData, Product } from '@/contexts/DataContext';
 import { toast } from 'sonner';
 import { 
   Search, Plus, Minus, Trash2, ShoppingCart, CreditCard, Banknote, 
-  Printer, Save, X, User, Package
+  Printer, Save, X, User, Package, Percent, Tag
 } from 'lucide-react';
 import {
   Dialog,
@@ -39,6 +39,8 @@ export default function Kasir() {
   const [showCheckout, setShowCheckout] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'tunai' | 'transfer' | 'kartu'>('tunai');
   const [cashAmount, setCashAmount] = useState('');
+  const [diskonPersen, setDiskonPersen] = useState(0);
+  const [diskonNominal, setDiskonNominal] = useState(0);
   const printRef = useRef<HTMLDivElement>(null);
 
   const filteredProducts = useMemo(() => {
@@ -118,7 +120,11 @@ export default function Kasir() {
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
   const tax = 0; // No tax for baja ringan store
-  const total = subtotal + tax;
+  
+  // Calculate discount
+  const diskonFromPersen = Math.round(subtotal * (diskonPersen / 100));
+  const totalDiskon = diskonFromPersen + diskonNominal;
+  const total = Math.max(0, subtotal - totalDiskon + tax);
 
   const handleCheckout = () => {
     if (cart.length === 0) {
@@ -139,6 +145,8 @@ export default function Kasir() {
       customer: customerName || 'Umum',
       items: cart,
       subtotal,
+      diskon: totalDiskon,
+      diskonPersen: diskonPersen,
       tax,
       total,
       paymentMethod,
@@ -215,6 +223,7 @@ export default function Kasir() {
         <div class="divider"></div>
         <div class="total-section">
           <div class="item"><span>Subtotal:</span><span>Rp ${receipt.subtotal.toLocaleString('id-ID')}</span></div>
+          ${receipt.diskon > 0 ? `<div class="item" style="color: #dc2626;"><span>Diskon${receipt.diskonPersen > 0 ? ` (${receipt.diskonPersen}%)` : ''}:</span><span>-Rp ${receipt.diskon.toLocaleString('id-ID')}</span></div>` : ''}
           <div class="divider"></div>
           <div class="total-row"><span>TOTAL:</span><span>Rp ${receipt.total.toLocaleString('id-ID')}</span></div>
           <div class="item"><span>Bayar (${receipt.paymentMethod}):</span><span>Rp ${receipt.cashAmount.toLocaleString('id-ID')}</span></div>
@@ -251,6 +260,9 @@ export default function Kasir() {
       tanggal: `${dateStr} ${timeStr}`,
       pelanggan: receipt.customer,
       items: itemsStr,
+      subtotal: receipt.subtotal,
+      diskon: receipt.diskon,
+      diskonPersen: receipt.diskonPersen,
       total: receipt.total,
       bayar: receipt.cashAmount,
       kembalian: receipt.change,
@@ -270,6 +282,8 @@ export default function Kasir() {
     setCart([]);
     setCustomerName('');
     setCashAmount('');
+    setDiskonPersen(0);
+    setDiskonNominal(0);
     setShowCheckout(false);
   };
 
@@ -401,13 +415,52 @@ export default function Kasir() {
           )}
         </div>
 
-        {/* Totals and payment */}
+        {/* Discount & Totals */}
         <div className="p-3 md:p-4 border-t border-border space-y-3 md:space-y-4">
+          {/* Discount Section */}
+          {cart.length > 0 && (
+            <div className="space-y-2 p-2 bg-muted/50 rounded-lg">
+              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <Tag className="w-3 h-3" /> Diskon
+              </p>
+              <div className="flex gap-2">
+                <div className="flex-1 relative">
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    value={diskonPersen || ''}
+                    onChange={(e) => setDiskonPersen(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
+                    className="pr-7 text-xs h-8"
+                    min={0}
+                    max={100}
+                  />
+                  <Percent className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                </div>
+                <div className="flex-1 relative">
+                  <Input
+                    type="number"
+                    placeholder="Rp 0"
+                    value={diskonNominal || ''}
+                    onChange={(e) => setDiskonNominal(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="text-xs h-8"
+                    min={0}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+          
           <div className="space-y-1 md:space-y-2">
             <div className="flex justify-between text-xs md:text-sm">
               <span className="text-muted-foreground">Subtotal</span>
               <span className="font-medium">{formatRupiah(subtotal)}</span>
             </div>
+            {totalDiskon > 0 && (
+              <div className="flex justify-between text-xs md:text-sm text-destructive">
+                <span>Diskon{diskonPersen > 0 ? ` (${diskonPersen}%)` : ''}</span>
+                <span>-{formatRupiah(totalDiskon)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-base md:text-lg font-bold pt-2 border-t border-border">
               <span>Total</span>
               <span className="text-primary">{formatRupiah(total)}</span>
