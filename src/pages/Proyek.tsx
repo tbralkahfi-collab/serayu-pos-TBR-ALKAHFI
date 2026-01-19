@@ -64,7 +64,7 @@ const statusIcons: Record<string, React.ReactNode> = {
 };
 
 export default function Proyek() {
-  const { projects, products, addProject, updateProject, deleteProject, updateProduct } = useData();
+  const { projects, products, addProject, updateProject, deleteProject, updateProduct, addTransaction, setTransactions } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showDialog, setShowDialog] = useState(false);
@@ -226,7 +226,38 @@ export default function Proyek() {
 
     const projectData = { ...formData, materials };
 
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
+    const createProjectPaymentTransaction = (amount: number, label: string) => {
+      if (amount <= 0) return;
+      addTransaction({
+        tanggal: `${dateStr} ${timeStr}`,
+        // IMPORTANT: pelanggan diset ke nama proyek agar masuk tab "Proyek" di menu Transaksi
+        pelanggan: projectData.namaProyek,
+        items: `Pembayaran Proyek: ${projectData.namaProyek} (${projectData.pelanggan}) - ${label}`,
+        total: amount,
+        bayar: amount,
+        kembalian: 0,
+        metode: 'Transfer',
+        status: 'Selesai',
+      });
+    };
+
     if (editingProject) {
+      // Jika nama proyek berubah, sinkronkan semua transaksi proyek lama supaya link tidak putus
+      const oldProjectName = editingProject.namaProyek;
+      if (oldProjectName.trim().toLowerCase() !== projectData.namaProyek.trim().toLowerCase()) {
+        setTransactions(prev =>
+          prev.map(t =>
+            t.pelanggan.trim().toLowerCase() === oldProjectName.trim().toLowerCase()
+              ? { ...t, pelanggan: projectData.namaProyek }
+              : t
+          )
+        );
+      }
+
       // Restore stock from old materials
       editingProject.materials?.forEach(oldMat => {
         const product = products.find(p => p.id === oldMat.productId);
@@ -234,7 +265,7 @@ export default function Proyek() {
           updateProduct(product.id, { stok: product.stok + oldMat.qty });
         }
       });
-      
+
       // Deduct stock for new materials
       materials.forEach(mat => {
         const product = products.find(p => p.id === mat.productId);
@@ -242,6 +273,14 @@ export default function Proyek() {
           updateProduct(product.id, { stok: product.stok - mat.qty });
         }
       });
+
+      // Catat pembayaran tambahan proyek sebagai transaksi (delta DP)
+      const oldDP = editingProject.dp || 0;
+      const newDP = projectData.dp || 0;
+      const deltaDP = newDP - oldDP;
+      if (deltaDP > 0) {
+        createProjectPaymentTransaction(deltaDP, oldDP === 0 ? 'DP Proyek' : 'Pembayaran Termin');
+      }
 
       updateProject(editingProject.id, projectData);
       toast.success('Proyek berhasil diperbarui');
@@ -255,6 +294,12 @@ export default function Proyek() {
       });
 
       addProject(projectData);
+
+      // Catat DP awal proyek sebagai transaksi
+      if ((projectData.dp || 0) > 0) {
+        createProjectPaymentTransaction(projectData.dp, 'DP Proyek');
+      }
+
       toast.success('Proyek baru berhasil ditambahkan');
     }
 
