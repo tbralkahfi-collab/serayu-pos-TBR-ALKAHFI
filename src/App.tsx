@@ -13,11 +13,13 @@ import Kasir from "./pages/Kasir";
 import Produk from "./pages/Produk";
 import Pembelian from "./pages/Pembelian";
 import Proyek from "./pages/Proyek";
+import ProyekDashboard from "./pages/ProyekDashboard";
 import UtangPiutang from "./pages/UtangPiutang";
 import Operasional from "./pages/Operasional";
 import Penjualan from "./pages/Penjualan";
 import Laporan from "./pages/Laporan";
 import Pengaturan from "./pages/Pengaturan";
+import InstallApp from "./pages/InstallApp";
 import { Layout } from "./components/Layout";
 
 const queryClient = new QueryClient();
@@ -36,6 +38,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Index />} />
+      <Route path="/install" element={<InstallApp />} />
       <Route
         element={
           <ProtectedRoute>
@@ -48,6 +51,7 @@ function AppRoutes() {
         <Route path="/produk" element={<Produk />} />
         <Route path="/pembelian" element={<Pembelian />} />
         <Route path="/proyek" element={<Proyek />} />
+        <Route path="/proyek-dashboard" element={<ProyekDashboard />} />
         <Route path="/utang-piutang" element={<UtangPiutang />} />
         <Route path="/operasional" element={<Operasional />} />
         <Route path="/penjualan" element={<Penjualan />} />
