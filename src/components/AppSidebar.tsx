@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStore } from '@/contexts/StoreContext';
@@ -15,9 +15,13 @@ import {
   LogOut,
   ChevronRight,
   FolderKanban,
+  Menu,
+  X,
+  Smartphone,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
@@ -25,26 +29,27 @@ const menuItems = [
   { icon: Package, label: 'Produk', path: '/produk' },
   { icon: FileText, label: 'Penjualan', path: '/penjualan' },
   { icon: ShoppingBag, label: 'Pembelian', path: '/pembelian' },
-  { icon: FolderKanban, label: 'Proyek', path: '/proyek', submenu: true },
+  { icon: FolderKanban, label: 'Proyek', path: '/proyek' },
   { icon: BarChart3, label: 'Dashboard Proyek', path: '/proyek-dashboard' },
   { icon: Wallet, label: 'Utang/Piutang', path: '/utang-piutang' },
   { icon: Building2, label: 'Operasional', path: '/operasional' },
   { icon: BarChart3, label: 'Laporan', path: '/laporan' },
+  { icon: Smartphone, label: 'Install App', path: '/install-app' },
   { icon: SettingsIcon, label: 'Pengaturan', path: '/pengaturan' },
 ];
 
-export function AppSidebar() {
+function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const { user, logout } = useAuth();
   const { storeInfo } = useStore();
   const location = useLocation();
 
   return (
-    <aside className="w-64 h-screen bg-card flex flex-col border-r border-border shadow-lg">
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="p-6 border-b border-border bg-gradient-to-r from-primary/5 to-secondary/5">
+      <div className="p-4 md:p-6 border-b border-border bg-gradient-to-r from-primary/5 to-secondary/5">
         <div className="flex items-center gap-3">
           {storeInfo.logo ? (
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 p-1 flex items-center justify-center ring-2 ring-primary/20">
+            <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 p-1 flex items-center justify-center ring-2 ring-primary/20">
               <img
                 src={storeInfo.logo}
                 alt="Logo"
@@ -52,36 +57,37 @@ export function AppSidebar() {
               />
             </div>
           ) : (
-            <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">
-              <span className="text-lg font-bold text-primary-foreground">SP</span>
+            <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">
+              <span className="text-sm md:text-lg font-bold text-primary-foreground">SP</span>
             </div>
           )}
-          <div>
-            <h1 className="text-lg font-bold text-foreground">{storeInfo.name}</h1>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-base md:text-lg font-bold text-foreground truncate">{storeInfo.name}</h1>
             <p className="text-xs text-primary font-medium">SERAYU POS</p>
           </div>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+      <nav className="flex-1 p-2 md:p-4 space-y-1 overflow-y-auto">
         {menuItems.map((item) => {
           const isActive = location.pathname === item.path;
           return (
             <NavLink
               key={item.path}
               to={item.path}
+              onClick={onNavClick}
               className={cn(
-                'flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group',
+                'flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2.5 md:py-3 rounded-lg transition-all duration-200 group',
                 isActive
                   ? 'bg-primary text-primary-foreground shadow-md'
                   : 'text-muted-foreground hover:bg-secondary/10 hover:text-secondary'
               )}
             >
-              <item.icon className={cn('w-5 h-5', isActive && 'text-primary-foreground')} />
-              <span className="font-medium">{item.label}</span>
+              <item.icon className={cn('w-4 h-4 md:w-5 md:h-5 flex-shrink-0', isActive && 'text-primary-foreground')} />
+              <span className="font-medium text-sm md:text-base truncate">{item.label}</span>
               {isActive && (
-                <ChevronRight className="w-4 h-4 ml-auto" />
+                <ChevronRight className="w-4 h-4 ml-auto flex-shrink-0" />
               )}
             </NavLink>
           );
@@ -89,27 +95,55 @@ export function AppSidebar() {
       </nav>
 
       {/* User section */}
-      <div className="p-4 border-t border-border bg-muted/30">
-        <div className="flex items-center gap-3 mb-4 px-2">
-          <div className="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center ring-2 ring-secondary/30">
-            <span className="text-sm font-semibold text-secondary">
+      <div className="p-3 md:p-4 border-t border-border bg-muted/30">
+        <div className="flex items-center gap-2 md:gap-3 mb-3 md:mb-4 px-1 md:px-2">
+          <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-secondary/10 flex items-center justify-center ring-2 ring-secondary/30 flex-shrink-0">
+            <span className="text-xs md:text-sm font-semibold text-secondary">
               {user?.username.charAt(0).toUpperCase()}
             </span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground truncate">{user?.username}</p>
-            <p className="text-xs text-muted-foreground">{user?.role}</p>
+            <p className="text-xs md:text-sm font-medium text-foreground truncate">{user?.username}</p>
+            <p className="text-[10px] md:text-xs text-muted-foreground">{user?.role}</p>
           </div>
         </div>
         <Button
           variant="ghost"
           onClick={logout}
-          className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+          className="w-full justify-start gap-2 md:gap-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10 text-sm"
         >
-          <LogOut className="w-5 h-5" />
+          <LogOut className="w-4 h-4 md:w-5 md:h-5" />
           <span>Keluar</span>
         </Button>
       </div>
-    </aside>
+    </div>
+  );
+}
+
+export function AppSidebar() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      {/* Mobile Menu Button - Fixed at top */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-card border-b border-border px-4 py-3 flex items-center gap-3">
+        <Sheet open={open} onOpenChange={setOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-9 w-9">
+              <Menu className="w-5 h-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-72 p-0">
+            <SidebarContent onNavClick={() => setOpen(false)} />
+          </SheetContent>
+        </Sheet>
+        <span className="font-bold text-foreground">SERAYU POS</span>
+      </div>
+
+      {/* Desktop Sidebar */}
+      <aside className="hidden lg:flex w-64 h-screen bg-card flex-col border-r border-border shadow-lg sticky top-0">
+        <SidebarContent />
+      </aside>
+    </>
   );
 }

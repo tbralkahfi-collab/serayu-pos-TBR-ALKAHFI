@@ -79,6 +79,8 @@ export default function Proyek() {
     telepon: '',
     deskripsi: '',
     nilaiKontrak: 0,
+    diskonPersen: 0,
+    diskonNominal: 0,
     dp: 0,
     biayaTenagaKerja: 0,
     tanggalOrder: '',
@@ -93,6 +95,16 @@ export default function Proyek() {
   const [selectedProductId, setSelectedProductId] = useState('');
   const [materialQty, setMaterialQty] = useState(1);
 
+  // Calculate net contract value after discount
+  const getNilaiSetelahDiskon = (nilaiKontrak: number, diskonPersen: number, diskonNominal: number) => {
+    const diskonPersenValue = nilaiKontrak * (diskonPersen / 100);
+    return Math.max(0, nilaiKontrak - diskonPersenValue - diskonNominal);
+  };
+
+  const nilaiSetelahDiskon = useMemo(() => {
+    return getNilaiSetelahDiskon(formData.nilaiKontrak, formData.diskonPersen, formData.diskonNominal);
+  }, [formData.nilaiKontrak, formData.diskonPersen, formData.diskonNominal]);
+
   const resetForm = () => {
     setFormData({
       namaProyek: '',
@@ -101,6 +113,8 @@ export default function Proyek() {
       telepon: '',
       deskripsi: '',
       nilaiKontrak: 0,
+      diskonPersen: 0,
+      diskonNominal: 0,
       dp: 0,
       biayaTenagaKerja: 0,
       tanggalOrder: '',
@@ -201,6 +215,8 @@ export default function Proyek() {
       telepon: project.telepon,
       deskripsi: project.deskripsi,
       nilaiKontrak: project.nilaiKontrak,
+      diskonPersen: project.diskonPersen || 0,
+      diskonNominal: project.diskonNominal || 0,
       dp: project.dp,
       biayaTenagaKerja: project.biayaTenagaKerja || 0,
       tanggalOrder: project.tanggalOrder,
@@ -329,7 +345,10 @@ export default function Proyek() {
     const pending = projects.filter((p) => p.status === 'Pending').length;
     const berjalan = projects.filter((p) => p.status === 'Berjalan').length;
     const selesai = projects.filter((p) => p.status === 'Selesai').length;
-    const totalNilai = projects.reduce((sum, p) => sum + p.nilaiKontrak, 0);
+    const totalNilai = projects.reduce((sum, p) => {
+      const nilaiNet = getNilaiSetelahDiskon(p.nilaiKontrak, p.diskonPersen || 0, p.diskonNominal || 0);
+      return sum + nilaiNet;
+    }, 0);
     const totalDP = projects.reduce((sum, p) => sum + p.dp, 0);
     const sisaPembayaran = totalNilai - totalDP;
 
@@ -485,10 +504,17 @@ export default function Proyek() {
                         <p className="text-xs text-muted-foreground">{project.telepon}</p>
                       </div>
                     </TableCell>
-                    <TableCell className="font-medium">{formatRupiah(project.nilaiKontrak)}</TableCell>
+                    <TableCell className="font-medium">
+                      <div>
+                        <p>{formatRupiah(getNilaiSetelahDiskon(project.nilaiKontrak, project.diskonPersen || 0, project.diskonNominal || 0))}</p>
+                        {((project.diskonPersen || 0) > 0 || (project.diskonNominal || 0) > 0) && (
+                          <p className="text-xs text-muted-foreground line-through">{formatRupiah(project.nilaiKontrak)}</p>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-secondary font-medium">{formatRupiah(project.dp)}</TableCell>
                     <TableCell className="text-destructive font-medium">
-                      {formatRupiah(project.nilaiKontrak - project.dp)}
+                      {formatRupiah(getNilaiSetelahDiskon(project.nilaiKontrak, project.diskonPersen || 0, project.diskonNominal || 0) - project.dp)}
                     </TableCell>
                     <TableCell>{formatDate(project.tanggalOrder)}</TableCell>
                     <TableCell>
@@ -603,6 +629,53 @@ export default function Proyek() {
                 placeholder="0"
               />
             </div>
+
+            <div>
+              <Label>Diskon (%)</Label>
+              <Input
+                type="number"
+                value={formData.diskonPersen || ''}
+                onChange={(e) => setFormData({ ...formData, diskonPersen: Math.min(100, Math.max(0, Number(e.target.value))) })}
+                placeholder="0"
+                min={0}
+                max={100}
+              />
+            </div>
+
+            <div>
+              <Label>Diskon Nominal (Rp)</Label>
+              <Input
+                type="number"
+                value={formData.diskonNominal || ''}
+                onChange={(e) => setFormData({ ...formData, diskonNominal: Number(e.target.value) })}
+                placeholder="0"
+              />
+            </div>
+
+            {(formData.diskonPersen > 0 || formData.diskonNominal > 0) && (
+              <div className="col-span-2 bg-accent/50 rounded-lg p-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Nilai Kontrak</span>
+                  <span>{formatRupiah(formData.nilaiKontrak)}</span>
+                </div>
+                {formData.diskonPersen > 0 && (
+                  <div className="flex justify-between text-sm text-destructive">
+                    <span>Diskon {formData.diskonPersen}%</span>
+                    <span>- {formatRupiah(formData.nilaiKontrak * (formData.diskonPersen / 100))}</span>
+                  </div>
+                )}
+                {formData.diskonNominal > 0 && (
+                  <div className="flex justify-between text-sm text-destructive">
+                    <span>Diskon Nominal</span>
+                    <span>- {formatRupiah(formData.diskonNominal)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm font-bold border-t mt-2 pt-2">
+                  <span>Nilai Setelah Diskon</span>
+                  <span className="text-secondary">{formatRupiah(nilaiSetelahDiskon)}</span>
+                </div>
+              </div>
+            )}
 
             <div>
               <Label>DP / Uang Muka (Rp)</Label>
@@ -834,6 +907,28 @@ export default function Proyek() {
                   <span className="text-muted-foreground">Nilai Kontrak</span>
                   <span className="font-bold">{formatRupiah(viewingProject.nilaiKontrak)}</span>
                 </div>
+                {((viewingProject.diskonPersen || 0) > 0 || (viewingProject.diskonNominal || 0) > 0) && (
+                  <>
+                    {(viewingProject.diskonPersen || 0) > 0 && (
+                      <div className="flex justify-between text-destructive">
+                        <span>Diskon {viewingProject.diskonPersen}%</span>
+                        <span>- {formatRupiah(viewingProject.nilaiKontrak * ((viewingProject.diskonPersen || 0) / 100))}</span>
+                      </div>
+                    )}
+                    {(viewingProject.diskonNominal || 0) > 0 && (
+                      <div className="flex justify-between text-destructive">
+                        <span>Diskon Nominal</span>
+                        <span>- {formatRupiah(viewingProject.diskonNominal || 0)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between border-t pt-2">
+                      <span className="text-muted-foreground font-medium">Nilai Setelah Diskon</span>
+                      <span className="font-bold text-secondary">
+                        {formatRupiah(getNilaiSetelahDiskon(viewingProject.nilaiKontrak, viewingProject.diskonPersen || 0, viewingProject.diskonNominal || 0))}
+                      </span>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">DP / Uang Muka</span>
                   <span className="font-bold text-secondary">{formatRupiah(viewingProject.dp)}</span>
@@ -841,7 +936,7 @@ export default function Proyek() {
                 <div className="flex justify-between border-t pt-2">
                   <span className="text-muted-foreground">Sisa Pembayaran</span>
                   <span className="font-bold text-destructive">
-                    {formatRupiah(viewingProject.nilaiKontrak - viewingProject.dp)}
+                    {formatRupiah(getNilaiSetelahDiskon(viewingProject.nilaiKontrak, viewingProject.diskonPersen || 0, viewingProject.diskonNominal || 0) - viewingProject.dp)}
                   </span>
                 </div>
               </div>
@@ -882,7 +977,8 @@ export default function Proyek() {
                       return sum + (m.qty * synced.harga);
                     }, 0) || 0;
                     const totalCost = materialCost + (viewingProject.biayaTenagaKerja || 0);
-                    const profit = viewingProject.nilaiKontrak - totalCost;
+                    const nilaiNet = getNilaiSetelahDiskon(viewingProject.nilaiKontrak, viewingProject.diskonPersen || 0, viewingProject.diskonNominal || 0);
+                    const profit = nilaiNet - totalCost;
                     return (
                       <span className={`font-bold ${profit >= 0 ? 'text-secondary' : 'text-destructive'}`}>
                         {formatRupiah(profit)}
