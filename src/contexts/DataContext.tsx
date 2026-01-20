@@ -96,6 +96,8 @@ export interface Project {
   telepon: string;
   deskripsi: string;
   nilaiKontrak: number;
+  diskonPersen?: number;
+  diskonNominal?: number;
   dp: number;
   biayaTenagaKerja: number;
   tanggalOrder: string;
@@ -105,6 +107,10 @@ export interface Project {
   catatan: string;
   materials: ProjectMaterial[];
 }
+
+// Data version for migration tracking
+const DATA_VERSION = 'v2';
+const DATA_VERSION_KEY = 'serayu_data_version';
 
 // Initial data
 const initialProducts: Product[] = [
@@ -338,73 +344,74 @@ const migrateProject = (project: any): Project => {
   return {
     ...project,
     biayaTenagaKerja: project.biayaTenagaKerja || 0,
+    diskonPersen: project.diskonPersen || 0,
+    diskonNominal: project.diskonNominal || 0,
   };
 };
 
-export function DataProvider({ children }: { children: ReactNode }) {
-  const [products, setProducts] = useState<Product[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.products);
-    if (saved !== null) {
-      const parsed = JSON.parse(saved);
-      // Return empty array if reset, otherwise migrate
-      return Array.isArray(parsed) ? parsed.map(migrateProduct) : [];
-    }
-    return initialProducts;
-  });
-  
-  const [suppliers, setSuppliers] = useState<Supplier[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.suppliers);
-    if (saved !== null) {
-      const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? parsed : [];
-    }
-    return initialSuppliers;
-  });
-  
-  const [purchases, setPurchases] = useState<Purchase[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.purchases);
-    if (saved !== null) {
-      const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? parsed : [];
-    }
-    return initialPurchases;
-  });
-  
-  const [debts, setDebts] = useState<DebtRecord[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.debts);
-    if (saved !== null) {
-      const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? parsed : [];
-    }
-    return initialDebts;
-  });
-  
-  const [expenses, setExpenses] = useState<Expense[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.expenses);
-    if (saved !== null) {
-      const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? parsed : [];
-    }
-    return initialExpenses;
-  });
-  
-  const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.transactions);
-    if (saved !== null) {
-      const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? parsed : [];
-    }
-    return initialTransactions;
-  });
+// Check if user has existing data (to prevent overwriting with initial data on updates)
+const hasExistingData = (key: string): boolean => {
+  const saved = localStorage.getItem(key);
+  // Consider data exists if the key exists in localStorage (even if empty array)
+  return saved !== null;
+};
 
-  const [projects, setProjects] = useState<Project[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.projects);
-    if (saved !== null) {
+// Get saved data or initial data (only use initial if no saved data exists)
+const getSavedOrInitial = <T,>(key: string, initial: T[], migrateFn?: (item: any) => any): T[] => {
+  const savedVersion = localStorage.getItem(DATA_VERSION_KEY);
+  const saved = localStorage.getItem(key);
+  
+  // If user has saved data, always use it (protect customer data)
+  if (saved !== null) {
+    try {
       const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? parsed.map(migrateProject) : [];
+      if (Array.isArray(parsed)) {
+        return migrateFn ? parsed.map(migrateFn) : parsed;
+      }
+      return [];
+    } catch {
+      return [];
     }
-    return initialProjects;
-  });
+  }
+  
+  // Only use initial data for brand new installations
+  if (savedVersion === null) {
+    localStorage.setItem(DATA_VERSION_KEY, DATA_VERSION);
+    return initial;
+  }
+  
+  // If version exists but no data, return empty array (user cleared data intentionally)
+  return [];
+};
+
+export function DataProvider({ children }: { children: ReactNode }) {
+  const [products, setProducts] = useState<Product[]>(() => 
+    getSavedOrInitial(STORAGE_KEYS.products, initialProducts, migrateProduct)
+  );
+  
+  const [suppliers, setSuppliers] = useState<Supplier[]>(() => 
+    getSavedOrInitial(STORAGE_KEYS.suppliers, initialSuppliers)
+  );
+  
+  const [purchases, setPurchases] = useState<Purchase[]>(() => 
+    getSavedOrInitial(STORAGE_KEYS.purchases, initialPurchases)
+  );
+  
+  const [debts, setDebts] = useState<DebtRecord[]>(() => 
+    getSavedOrInitial(STORAGE_KEYS.debts, initialDebts)
+  );
+  
+  const [expenses, setExpenses] = useState<Expense[]>(() => 
+    getSavedOrInitial(STORAGE_KEYS.expenses, initialExpenses)
+  );
+  
+  const [transactions, setTransactions] = useState<Transaction[]>(() => 
+    getSavedOrInitial(STORAGE_KEYS.transactions, initialTransactions)
+  );
+
+  const [projects, setProjects] = useState<Project[]>(() => 
+    getSavedOrInitial(STORAGE_KEYS.projects, initialProjects, migrateProject)
+  );
 
   // Save to localStorage whenever data changes
   useEffect(() => {
