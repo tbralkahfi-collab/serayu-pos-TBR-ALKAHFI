@@ -28,6 +28,8 @@ interface CartItem {
   unit: string;
   stock: number;
   qty: number;
+  diskonPersen: number;
+  diskonNominal: number;
 }
 
 export default function Kasir() {
@@ -73,9 +75,39 @@ export default function Kasir() {
         costPrice: costPrice,
         unit: product.satuan, 
         stock: product.stok,
-        qty: 1 
+        qty: 1,
+        diskonPersen: 0,
+        diskonNominal: 0,
       }];
     });
+  };
+
+  const updateItemDiskon = (id: string, type: 'persen' | 'nominal', value: number) => {
+    setCart((prev) =>
+      prev.map((item) => {
+        if (item.id === id) {
+          if (type === 'persen') {
+            return { ...item, diskonPersen: Math.min(100, Math.max(0, value)) };
+          } else {
+            return { ...item, diskonNominal: Math.max(0, value) };
+          }
+        }
+        return item;
+      })
+    );
+  };
+
+  const getItemSubtotal = (item: CartItem) => {
+    const basePrice = item.price * item.qty;
+    const diskonFromPersen = Math.round(basePrice * (item.diskonPersen / 100));
+    const totalItemDiskon = diskonFromPersen + item.diskonNominal;
+    return Math.max(0, basePrice - totalItemDiskon);
+  };
+
+  const getItemTotalDiskon = (item: CartItem) => {
+    const basePrice = item.price * item.qty;
+    const diskonFromPersen = Math.round(basePrice * (item.diskonPersen / 100));
+    return diskonFromPersen + item.diskonNominal;
   };
 
   const updateQty = (id: string, delta: number) => {
@@ -118,13 +150,17 @@ export default function Kasir() {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
+  // Subtotal sebelum diskon global (setelah diskon per item)
+  const subtotalAfterItemDiskon = cart.reduce((sum, item) => sum + getItemSubtotal(item), 0);
+  const totalItemDiskon = cart.reduce((sum, item) => sum + getItemTotalDiskon(item), 0);
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
   const tax = 0; // No tax for baja ringan store
   
-  // Calculate discount
-  const diskonFromPersen = Math.round(subtotal * (diskonPersen / 100));
-  const totalDiskon = diskonFromPersen + diskonNominal;
-  const total = Math.max(0, subtotal - totalDiskon + tax);
+  // Calculate global discount
+  const diskonFromPersen = Math.round(subtotalAfterItemDiskon * (diskonPersen / 100));
+  const globalDiskon = diskonFromPersen + diskonNominal;
+  const totalDiskon = totalItemDiskon + globalDiskon;
+  const total = Math.max(0, subtotalAfterItemDiskon - globalDiskon + tax);
 
   const handleCheckout = () => {
     if (cart.length === 0) {
@@ -146,6 +182,8 @@ export default function Kasir() {
       items: cart,
       subtotal,
       diskon: totalDiskon,
+      itemDiskon: totalItemDiskon,
+      globalDiskon: globalDiskon,
       diskonPersen: diskonPersen,
       tax,
       total,
@@ -211,19 +249,25 @@ export default function Kasir() {
           <div class="item"><span>Pelanggan:</span><span>${receipt.customer}</span></div>
         </div>
         <div class="divider"></div>
-        ${receipt.items.map(item => `
+        ${receipt.items.map(item => {
+          const itemDiskon = (item.diskonPersen > 0 ? Math.round(item.price * item.qty * item.diskonPersen / 100) : 0) + (item.diskonNominal || 0);
+          const itemTotal = item.qty * item.price - itemDiskon;
+          return `
           <div>
             <div>${item.name}</div>
             <div class="item">
               <span class="item-detail">${item.qty} ${item.unit} x Rp ${item.price.toLocaleString('id-ID')}</span>
               <span>Rp ${(item.qty * item.price).toLocaleString('id-ID')}</span>
             </div>
+            ${itemDiskon > 0 ? `<div class="item" style="color: #dc2626; font-size: 8px;"><span>Disk${item.diskonPersen > 0 ? ` ${item.diskonPersen}%` : ''}:</span><span>-Rp ${itemDiskon.toLocaleString('id-ID')}</span></div>` : ''}
           </div>
-        `).join('')}
+          `;
+        }).join('')}
         <div class="divider"></div>
         <div class="total-section">
           <div class="item"><span>Subtotal:</span><span>Rp ${receipt.subtotal.toLocaleString('id-ID')}</span></div>
-          ${receipt.diskon > 0 ? `<div class="item" style="color: #dc2626;"><span>Diskon${receipt.diskonPersen > 0 ? ` (${receipt.diskonPersen}%)` : ''}:</span><span>-Rp ${receipt.diskon.toLocaleString('id-ID')}</span></div>` : ''}
+          ${receipt.itemDiskon > 0 ? `<div class="item" style="color: #dc2626;"><span>Diskon Item:</span><span>-Rp ${receipt.itemDiskon.toLocaleString('id-ID')}</span></div>` : ''}
+          ${receipt.globalDiskon > 0 ? `<div class="item" style="color: #dc2626;"><span>Diskon Global${receipt.diskonPersen > 0 ? ` (${receipt.diskonPersen}%)` : ''}:</span><span>-Rp ${receipt.globalDiskon.toLocaleString('id-ID')}</span></div>` : ''}
           <div class="divider"></div>
           <div class="total-row"><span>TOTAL:</span><span>Rp ${receipt.total.toLocaleString('id-ID')}</span></div>
           <div class="item"><span>Bayar (${receipt.paymentMethod}):</span><span>Rp ${receipt.cashAmount.toLocaleString('id-ID')}</span></div>
@@ -379,7 +423,7 @@ export default function Kasir() {
                     <Trash2 className="w-3 h-3 md:w-4 md:h-4" />
                   </Button>
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-1 md:gap-2">
                     <Button
                       variant="outline"
@@ -406,9 +450,40 @@ export default function Kasir() {
                       <Plus className="w-3 h-3 md:w-4 md:h-4" />
                     </Button>
                   </div>
-                  <p className="font-semibold text-foreground text-xs md:text-sm">
-                    {formatRupiah(item.price * item.qty)}
-                  </p>
+                  <div className="text-right">
+                    <p className="font-semibold text-foreground text-xs md:text-sm">
+                      {formatRupiah(item.price * item.qty)}
+                    </p>
+                    {getItemTotalDiskon(item) > 0 && (
+                      <p className="text-xs text-destructive">-{formatRupiah(getItemTotalDiskon(item))}</p>
+                    )}
+                  </div>
+                </div>
+                {/* Per-item discount */}
+                <div className="flex items-center gap-1 pt-1 border-t border-border/50">
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">Disk:</span>
+                  <div className="flex-1 relative">
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      value={item.diskonPersen || ''}
+                      onChange={(e) => updateItemDiskon(item.id, 'persen', parseInt(e.target.value) || 0)}
+                      className="pr-5 text-xs h-6"
+                      min={0}
+                      max={100}
+                    />
+                    <Percent className="absolute right-1.5 top-1/2 -translate-y-1/2 w-2.5 h-2.5 text-muted-foreground" />
+                  </div>
+                  <div className="flex-1">
+                    <Input
+                      type="number"
+                      placeholder="Rp"
+                      value={item.diskonNominal || ''}
+                      onChange={(e) => updateItemDiskon(item.id, 'nominal', parseInt(e.target.value) || 0)}
+                      className="text-xs h-6"
+                      min={0}
+                    />
+                  </div>
                 </div>
               </div>
             ))
@@ -421,7 +496,7 @@ export default function Kasir() {
           {cart.length > 0 && (
             <div className="space-y-2 p-2 bg-muted/50 rounded-lg">
               <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                <Tag className="w-3 h-3" /> Diskon
+                <Tag className="w-3 h-3" /> Diskon Global
               </p>
               <div className="flex gap-2">
                 <div className="flex-1 relative">
@@ -455,10 +530,16 @@ export default function Kasir() {
               <span className="text-muted-foreground">Subtotal</span>
               <span className="font-medium">{formatRupiah(subtotal)}</span>
             </div>
-            {totalDiskon > 0 && (
+            {totalItemDiskon > 0 && (
               <div className="flex justify-between text-xs md:text-sm text-destructive">
-                <span>Diskon{diskonPersen > 0 ? ` (${diskonPersen}%)` : ''}</span>
-                <span>-{formatRupiah(totalDiskon)}</span>
+                <span>Diskon Item</span>
+                <span>-{formatRupiah(totalItemDiskon)}</span>
+              </div>
+            )}
+            {globalDiskon > 0 && (
+              <div className="flex justify-between text-xs md:text-sm text-destructive">
+                <span>Diskon Global{diskonPersen > 0 ? ` (${diskonPersen}%)` : ''}</span>
+                <span>-{formatRupiah(globalDiskon)}</span>
               </div>
             )}
             <div className="flex justify-between text-base md:text-lg font-bold pt-2 border-t border-border">
