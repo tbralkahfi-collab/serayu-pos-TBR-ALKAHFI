@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +18,9 @@ import {
   X,
   Eye,
   Users,
+  Search,
+  Check,
+  PlusCircle,
 } from 'lucide-react';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -35,7 +38,31 @@ import {
 } from '@/components/ui/alert-dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { Purchase, Supplier } from '@/contexts/DataContext';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import type { Purchase, Supplier, Product } from '@/contexts/DataContext';
+
+interface PurchaseItem {
+  id: string;
+  productId: string;
+  nama: string;
+  qty: number;
+  satuan: string;
+  harga: number;
+  isManual: boolean;
+}
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -47,7 +74,7 @@ const getStatusColor = (status: string) => {
 };
 
 export default function Pembelian() {
-  const { purchases, addPurchase, updatePurchase, deletePurchase, suppliers, addSupplier, updateSupplier, deleteSupplier } = useData();
+  const { purchases, addPurchase, updatePurchase, deletePurchase, suppliers, addSupplier, updateSupplier, deleteSupplier, products, updateProduct } = useData();
   const [activeTab, setActiveTab] = useState('pembelian');
   const [showDialog, setShowDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -60,18 +87,100 @@ export default function Pembelian() {
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null);
   
+  // Item selection state
+  const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
+  const [openProductPopover, setOpenProductPopover] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
+  const [showManualInput, setShowManualInput] = useState(false);
+  const [manualItem, setManualItem] = useState({ nama: '', qty: 1, satuan: '', harga: 0 });
+  
   const [formData, setFormData] = useState({
     supplierId: '', supplier: '', date: '', total: '', dp: '',
-    paymentMethod: 'cash' as 'cash' | 'transfer', status: 'Pending', items: '', notes: '',
+    paymentMethod: 'cash' as 'cash' | 'transfer', status: 'Pending', notes: '',
   });
   
   const [supplierFormData, setSupplierFormData] = useState({
     nama: '', alamat: '', telepon: '', email: '', catatan: '',
   });
 
+  // Filter products based on search
+  const filteredProducts = useMemo(() => {
+    return products.filter(p => 
+      p.nama.toLowerCase().includes(productSearch.toLowerCase()) ||
+      p.kategori.toLowerCase().includes(productSearch.toLowerCase())
+    );
+  }, [products, productSearch]);
+
+  // Calculate total from items
+  const calculatedTotal = useMemo(() => {
+    return purchaseItems.reduce((sum, item) => sum + (item.qty * item.harga), 0);
+  }, [purchaseItems]);
+
+  const handleAddProduct = (product: Product) => {
+    const existingItem = purchaseItems.find(item => item.productId === product.id);
+    if (existingItem) {
+      setPurchaseItems(prev => prev.map(item => 
+        item.productId === product.id 
+          ? { ...item, qty: item.qty + 1 }
+          : item
+      ));
+    } else {
+      setPurchaseItems(prev => [...prev, {
+        id: `item-${Date.now()}`,
+        productId: product.id,
+        nama: product.nama,
+        qty: 1,
+        satuan: product.satuan,
+        harga: product.hargaBeli || product.harga || 0,
+        isManual: false,
+      }]);
+    }
+    setOpenProductPopover(false);
+    setProductSearch('');
+  };
+
+  const handleAddManualItem = () => {
+    if (!manualItem.nama || !manualItem.satuan || manualItem.harga <= 0) {
+      toast.error('Lengkapi data item manual');
+      return;
+    }
+    setPurchaseItems(prev => [...prev, {
+      id: `manual-${Date.now()}`,
+      productId: '',
+      nama: manualItem.nama,
+      qty: manualItem.qty,
+      satuan: manualItem.satuan,
+      harga: manualItem.harga,
+      isManual: true,
+    }]);
+    setManualItem({ nama: '', qty: 1, satuan: '', harga: 0 });
+    setShowManualInput(false);
+  };
+
+  const handleUpdateItemQty = (itemId: string, qty: number) => {
+    if (qty <= 0) {
+      setPurchaseItems(prev => prev.filter(item => item.id !== itemId));
+    } else {
+      setPurchaseItems(prev => prev.map(item => 
+        item.id === itemId ? { ...item, qty } : item
+      ));
+    }
+  };
+
+  const handleUpdateItemPrice = (itemId: string, harga: number) => {
+    setPurchaseItems(prev => prev.map(item => 
+      item.id === itemId ? { ...item, harga: Math.max(0, harga) } : item
+    ));
+  };
+
+  const handleRemoveItem = (itemId: string) => {
+    setPurchaseItems(prev => prev.filter(item => item.id !== itemId));
+  };
+
   const handleAddNew = () => {
     setEditingPurchase(null);
-    setFormData({ supplierId: '', supplier: '', date: '', total: '', dp: '', paymentMethod: 'cash', status: 'Pending', items: '', notes: '' });
+    setFormData({ supplierId: '', supplier: '', date: '', total: '', dp: '', paymentMethod: 'cash', status: 'Pending', notes: '' });
+    setPurchaseItems([]);
     setShowDialog(true);
   };
 
@@ -80,8 +189,38 @@ export default function Pembelian() {
     setFormData({
       supplierId: purchase.supplierId, supplier: purchase.supplier, date: purchase.date,
       total: purchase.total.toString(), dp: purchase.dp.toString(),
-      paymentMethod: purchase.paymentMethod, status: purchase.status, items: purchase.items, notes: purchase.notes,
+      paymentMethod: purchase.paymentMethod, status: purchase.status, notes: purchase.notes,
     });
+    // Parse items string to PurchaseItem array
+    const itemsArr: PurchaseItem[] = purchase.items.split(', ').map((itemStr, idx) => {
+      const match = itemStr.match(/(.+) x(\d+) (.+) @(.+)/);
+      if (match) {
+        const nama = match[1];
+        const qty = parseInt(match[2]);
+        const satuan = match[3];
+        const harga = parseInt(match[4].replace(/[^\d]/g, ''));
+        const product = products.find(p => p.nama.toLowerCase() === nama.toLowerCase());
+        return {
+          id: `item-${idx}`,
+          productId: product?.id || '',
+          nama,
+          qty,
+          satuan,
+          harga,
+          isManual: !product,
+        };
+      }
+      return {
+        id: `item-${idx}`,
+        productId: '',
+        nama: itemStr,
+        qty: 1,
+        satuan: 'pcs',
+        harga: 0,
+        isManual: true,
+      };
+    });
+    setPurchaseItems(itemsArr);
     setShowDialog(true);
   };
 
@@ -97,24 +236,46 @@ export default function Pembelian() {
   };
 
   const handleSave = () => {
-    if (!formData.supplier || !formData.date || !formData.total || !formData.items) {
-      toast.error('Lengkapi semua field yang diperlukan');
+    if (!formData.supplier || !formData.date || purchaseItems.length === 0) {
+      toast.error('Lengkapi supplier, tanggal, dan minimal 1 item');
       return;
     }
+    
+    // Build items string
+    const itemsStr = purchaseItems.map(item => 
+      `${item.nama} x${item.qty} ${item.satuan} @${formatRupiah(item.harga)}`
+    ).join(', ');
+    
+    const totalAmount = calculatedTotal;
+    
     if (editingPurchase) {
       updatePurchase(editingPurchase.id, {
         supplierId: formData.supplierId, supplier: formData.supplier, date: formData.date,
-        total: parseInt(formData.total), dp: parseInt(formData.dp) || 0,
-        paymentMethod: formData.paymentMethod, status: formData.status, items: formData.items, notes: formData.notes,
+        total: totalAmount, dp: parseInt(formData.dp) || 0,
+        paymentMethod: formData.paymentMethod, status: formData.status, items: itemsStr, notes: formData.notes,
       });
       toast.success('Pembelian berhasil diperbarui');
     } else {
       addPurchase({
         supplierId: formData.supplierId, supplier: formData.supplier, date: formData.date,
-        total: parseInt(formData.total), dp: parseInt(formData.dp) || 0,
-        paymentMethod: formData.paymentMethod, status: formData.status, items: formData.items, notes: formData.notes,
+        total: totalAmount, dp: parseInt(formData.dp) || 0,
+        paymentMethod: formData.paymentMethod, status: formData.status, items: itemsStr, notes: formData.notes,
       });
-      toast.success('Pembelian berhasil ditambahkan');
+      
+      // Update stock for non-manual items when purchase is completed
+      if (formData.status === 'Selesai') {
+        purchaseItems.forEach(item => {
+          if (!item.isManual && item.productId) {
+            const product = products.find(p => p.id === item.productId);
+            if (product) {
+              updateProduct(item.productId, { stok: product.stok + item.qty });
+            }
+          }
+        });
+        toast.success('Pembelian berhasil ditambahkan & stok diperbarui');
+      } else {
+        toast.success('Pembelian berhasil ditambahkan');
+      }
     }
     setShowDialog(false);
   };
@@ -170,49 +331,49 @@ export default function Pembelian() {
   const shippingCount = purchases.filter(p => p.status === 'Dikirim').length;
 
   return (
-    <div className="p-8 bg-background min-h-screen">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 md:p-8 bg-background min-h-screen">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Pembelian & Supplier</h1>
-          <p className="text-muted-foreground">Kelola pembelian dan data supplier baja ringan</p>
+          <h1 className="text-xl md:text-2xl font-bold text-foreground">Pembelian & Supplier</h1>
+          <p className="text-sm text-muted-foreground">Kelola pembelian dan data supplier baja ringan</p>
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="pembelian" className="gap-2"><ShoppingBag className="w-4 h-4" />Pembelian</TabsTrigger>
-          <TabsTrigger value="supplier" className="gap-2"><Users className="w-4 h-4" />Supplier</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 sm:w-auto sm:inline-grid">
+          <TabsTrigger value="pembelian" className="gap-2"><ShoppingBag className="w-4 h-4" /><span className="hidden sm:inline">Pembelian</span></TabsTrigger>
+          <TabsTrigger value="supplier" className="gap-2"><Users className="w-4 h-4" /><span className="hidden sm:inline">Supplier</span></TabsTrigger>
         </TabsList>
 
         <TabsContent value="pembelian" className="space-y-4">
           <div className="flex justify-end">
             <Button className="gap-2 bg-gradient-primary" onClick={handleAddNew}><Plus className="w-4 h-4" />Buat Pembelian</Button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card className="border-l-4 border-l-primary"><CardContent className="p-4 flex items-center gap-4"><div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center"><ShoppingBag className="w-6 h-6 text-primary" /></div><div><p className="text-2xl font-bold">{totalPurchases}</p><p className="text-sm text-muted-foreground">Total Pembelian</p></div></CardContent></Card>
-            <Card className="border-l-4 border-l-secondary"><CardContent className="p-4 flex items-center gap-4"><div className="w-12 h-12 rounded-xl bg-secondary/10 flex items-center justify-center"><TrendingUp className="w-6 h-6 text-secondary" /></div><div><p className="text-xl font-bold">{formatRupiah(totalAmount)}</p><p className="text-sm text-muted-foreground">Total Nilai</p></div></CardContent></Card>
-            <Card className="border-l-4 border-l-warning"><CardContent className="p-4 flex items-center gap-4"><div className="w-12 h-12 rounded-xl bg-warning/10 flex items-center justify-center"><Package className="w-6 h-6 text-warning" /></div><div><p className="text-2xl font-bold">{pendingCount}</p><p className="text-sm text-muted-foreground">Pending</p></div></CardContent></Card>
-            <Card className="border-l-4 border-l-info"><CardContent className="p-4 flex items-center gap-4"><div className="w-12 h-12 rounded-xl bg-info/10 flex items-center justify-center"><Truck className="w-6 h-6 text-info" /></div><div><p className="text-2xl font-bold">{shippingCount}</p><p className="text-sm text-muted-foreground">Dalam Pengiriman</p></div></CardContent></Card>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+            <Card className="border-l-4 border-l-primary"><CardContent className="p-3 md:p-4 flex items-center gap-3"><div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0"><ShoppingBag className="w-5 h-5 md:w-6 md:h-6 text-primary" /></div><div className="min-w-0"><p className="text-lg md:text-2xl font-bold">{totalPurchases}</p><p className="text-xs md:text-sm text-muted-foreground truncate">Total Pembelian</p></div></CardContent></Card>
+            <Card className="border-l-4 border-l-secondary"><CardContent className="p-3 md:p-4 flex items-center gap-3"><div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-secondary/10 flex items-center justify-center flex-shrink-0"><TrendingUp className="w-5 h-5 md:w-6 md:h-6 text-secondary" /></div><div className="min-w-0"><p className="text-sm md:text-xl font-bold truncate">{formatRupiah(totalAmount)}</p><p className="text-xs md:text-sm text-muted-foreground truncate">Total Nilai</p></div></CardContent></Card>
+            <Card className="border-l-4 border-l-warning"><CardContent className="p-3 md:p-4 flex items-center gap-3"><div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-warning/10 flex items-center justify-center flex-shrink-0"><Package className="w-5 h-5 md:w-6 md:h-6 text-warning" /></div><div className="min-w-0"><p className="text-lg md:text-2xl font-bold">{pendingCount}</p><p className="text-xs md:text-sm text-muted-foreground">Pending</p></div></CardContent></Card>
+            <Card className="border-l-4 border-l-info"><CardContent className="p-3 md:p-4 flex items-center gap-3"><div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-info/10 flex items-center justify-center flex-shrink-0"><Truck className="w-5 h-5 md:w-6 md:h-6 text-info" /></div><div className="min-w-0"><p className="text-lg md:text-2xl font-bold">{shippingCount}</p><p className="text-xs md:text-sm text-muted-foreground truncate">Pengiriman</p></div></CardContent></Card>
           </div>
-          <Card><CardHeader><CardTitle>Daftar Pembelian</CardTitle></CardHeader><CardContent>
+          <Card><CardHeader><CardTitle className="text-base md:text-lg">Daftar Pembelian</CardTitle></CardHeader><CardContent className="overflow-x-auto">
             <Table>
-              <TableHeader><TableRow className="bg-muted/50"><TableHead>No. PO</TableHead><TableHead>Supplier</TableHead><TableHead>Item</TableHead><TableHead>Tanggal</TableHead><TableHead className="text-right">Total</TableHead><TableHead className="text-right">DP</TableHead><TableHead>Pembayaran</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow className="bg-muted/50"><TableHead className="min-w-[80px]">No. PO</TableHead><TableHead className="min-w-[100px]">Supplier</TableHead><TableHead className="min-w-[150px] hidden md:table-cell">Item</TableHead><TableHead className="min-w-[90px]">Tanggal</TableHead><TableHead className="text-right min-w-[100px]">Total</TableHead><TableHead className="text-right min-w-[80px] hidden sm:table-cell">DP</TableHead><TableHead className="hidden lg:table-cell">Pembayaran</TableHead><TableHead>Status</TableHead><TableHead className="text-right min-w-[100px]">Aksi</TableHead></TableRow></TableHeader>
               <TableBody>
                 {purchases.map((purchase) => (
                   <TableRow key={purchase.id} className="hover:bg-muted/30">
-                    <TableCell className="font-medium text-primary">{purchase.id}</TableCell>
-                    <TableCell>{purchase.supplier}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{purchase.items}</TableCell>
-                    <TableCell className="text-muted-foreground">{purchase.date}</TableCell>
-                    <TableCell className="text-right font-medium">{formatRupiah(purchase.total)}</TableCell>
-                    <TableCell className="text-right font-medium text-warning">{purchase.dp > 0 ? formatRupiah(purchase.dp) : '-'}</TableCell>
-                    <TableCell><Badge variant="secondary" className={purchase.paymentMethod === 'transfer' ? 'bg-info/10 text-info' : 'bg-secondary/10 text-secondary'}>{purchase.paymentMethod === 'transfer' ? 'Transfer' : 'Cash'}</Badge></TableCell>
-                    <TableCell><Badge className={getStatusColor(purchase.status)} variant="secondary">{purchase.status}</Badge></TableCell>
+                    <TableCell className="font-medium text-primary text-xs md:text-sm">{purchase.id}</TableCell>
+                    <TableCell className="text-xs md:text-sm">{purchase.supplier}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate hidden md:table-cell">{purchase.items}</TableCell>
+                    <TableCell className="text-muted-foreground text-xs md:text-sm">{purchase.date}</TableCell>
+                    <TableCell className="text-right font-medium text-xs md:text-sm">{formatRupiah(purchase.total)}</TableCell>
+                    <TableCell className="text-right font-medium text-warning text-xs md:text-sm hidden sm:table-cell">{purchase.dp > 0 ? formatRupiah(purchase.dp) : '-'}</TableCell>
+                    <TableCell className="hidden lg:table-cell"><Badge variant="secondary" className={purchase.paymentMethod === 'transfer' ? 'bg-info/10 text-info' : 'bg-secondary/10 text-secondary'}>{purchase.paymentMethod === 'transfer' ? 'Transfer' : 'Cash'}</Badge></TableCell>
+                    <TableCell><Badge className={`${getStatusColor(purchase.status)} text-xs`} variant="secondary">{purchase.status}</Badge></TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-info/10 hover:text-info" onClick={() => handleView(purchase)}><Eye className="w-4 h-4" /></Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary/10 hover:text-secondary" onClick={() => handleEdit(purchase)}><Edit className="w-4 h-4" /></Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(purchase)}><Trash2 className="w-4 h-4" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 md:h-8 md:w-8 hover:bg-info/10 hover:text-info" onClick={() => handleView(purchase)}><Eye className="w-3 h-3 md:w-4 md:h-4" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 md:h-8 md:w-8 hover:bg-secondary/10 hover:text-secondary" onClick={() => handleEdit(purchase)}><Edit className="w-3 h-3 md:w-4 md:h-4" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 md:h-8 md:w-8 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(purchase)}><Trash2 className="w-3 h-3 md:w-4 md:h-4" /></Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -226,21 +387,21 @@ export default function Pembelian() {
           <div className="flex justify-end">
             <Button className="gap-2 bg-gradient-primary" onClick={handleAddSupplier}><Plus className="w-4 h-4" />Tambah Supplier</Button>
           </div>
-          <Card><CardHeader><CardTitle>Daftar Supplier</CardTitle></CardHeader><CardContent>
+          <Card><CardHeader><CardTitle className="text-base md:text-lg">Daftar Supplier</CardTitle></CardHeader><CardContent className="overflow-x-auto">
             <Table>
-              <TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Nama</TableHead><TableHead>Alamat</TableHead><TableHead>Telepon</TableHead><TableHead>Email</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead className="min-w-[60px]">ID</TableHead><TableHead className="min-w-[120px]">Nama</TableHead><TableHead className="min-w-[150px] hidden md:table-cell">Alamat</TableHead><TableHead className="min-w-[100px]">Telepon</TableHead><TableHead className="hidden sm:table-cell">Email</TableHead><TableHead className="text-right min-w-[80px]">Aksi</TableHead></TableRow></TableHeader>
               <TableBody>
                 {suppliers.map((supplier) => (
                   <TableRow key={supplier.id}>
-                    <TableCell className="font-medium">{supplier.id}</TableCell>
-                    <TableCell className="font-medium">{supplier.nama}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{supplier.alamat}</TableCell>
-                    <TableCell>{supplier.telepon}</TableCell>
-                    <TableCell className="text-muted-foreground">{supplier.email}</TableCell>
+                    <TableCell className="font-medium text-xs md:text-sm">{supplier.id}</TableCell>
+                    <TableCell className="font-medium text-xs md:text-sm">{supplier.nama}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate hidden md:table-cell">{supplier.alamat}</TableCell>
+                    <TableCell className="text-xs md:text-sm">{supplier.telepon}</TableCell>
+                    <TableCell className="text-muted-foreground text-xs md:text-sm hidden sm:table-cell">{supplier.email}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditSupplier(supplier)}><Edit className="w-4 h-4" /></Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeleteSupplier(supplier)}><Trash2 className="w-4 h-4" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 md:h-8 md:w-8" onClick={() => handleEditSupplier(supplier)}><Edit className="w-3 h-3 md:w-4 md:h-4" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 md:h-8 md:w-8 text-destructive" onClick={() => handleDeleteSupplier(supplier)}><Trash2 className="w-3 h-3 md:w-4 md:h-4" /></Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -253,40 +414,199 @@ export default function Pembelian() {
 
       {/* Purchase Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader><DialogTitle>{editingPurchase ? 'Edit Pembelian' : 'Buat Pembelian Baru'}</DialogTitle></DialogHeader>
-          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-            <div className="space-y-2">
-              <Label>Supplier</Label>
-              <Select value={formData.supplierId} onValueChange={handleSelectSupplier}>
-                <SelectTrigger><SelectValue placeholder="Pilih supplier" /></SelectTrigger>
-                <SelectContent>{suppliers.map(sup => (<SelectItem key={sup.id} value={sup.id}>{sup.nama}</SelectItem>))}</SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Tanggal</Label><Input type="date" value={formData.date} onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))} /></div>
-              <div className="space-y-2"><Label>Status</Label><Select value={formData.status} onValueChange={(v) => setFormData(prev => ({ ...prev, status: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Pending">Pending</SelectItem><SelectItem value="Dikirim">Dikirim</SelectItem><SelectItem value="Selesai">Selesai</SelectItem></SelectContent></Select></div>
-            </div>
-            <div className="space-y-2"><Label>Item Pembelian</Label><Input placeholder="Contoh: Baja Ringan C75 x 100btg" value={formData.items} onChange={(e) => setFormData(prev => ({ ...prev, items: e.target.value }))} /></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Total (Rp)</Label><Input type="number" placeholder="0" value={formData.total} onChange={(e) => setFormData(prev => ({ ...prev, total: e.target.value }))} /></div>
+          <ScrollArea className="flex-1 pr-4">
+            <div className="space-y-4 pb-4">
+              <div className="space-y-2">
+                <Label>Supplier</Label>
+                <Select value={formData.supplierId} onValueChange={handleSelectSupplier}>
+                  <SelectTrigger><SelectValue placeholder="Pilih supplier" /></SelectTrigger>
+                  <SelectContent>{suppliers.map(sup => (<SelectItem key={sup.id} value={sup.id}>{sup.nama}</SelectItem>))}</SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Tanggal</Label><Input type="date" value={formData.date} onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))} /></div>
+                <div className="space-y-2"><Label>Status</Label><Select value={formData.status} onValueChange={(v) => setFormData(prev => ({ ...prev, status: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Pending">Pending</SelectItem><SelectItem value="Dikirim">Dikirim</SelectItem><SelectItem value="Selesai">Selesai</SelectItem></SelectContent></Select></div>
+              </div>
+              
+              {/* Item Selection */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label>Item Pembelian</Label>
+                  <div className="flex gap-2">
+                    <Popover open={openProductPopover} onOpenChange={setOpenProductPopover}>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="gap-1">
+                          <Search className="w-3 h-3" />
+                          Pilih dari Stok
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80 p-0" align="end">
+                        <Command>
+                          <CommandInput 
+                            placeholder="Cari produk..." 
+                            value={productSearch}
+                            onValueChange={setProductSearch}
+                          />
+                          <CommandList>
+                            <CommandEmpty>
+                              <div className="p-4 text-center">
+                                <p className="text-sm text-muted-foreground mb-2">Produk tidak ditemukan</p>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => {
+                                    setOpenProductPopover(false);
+                                    setShowManualInput(true);
+                                    setManualItem(prev => ({ ...prev, nama: productSearch }));
+                                  }}
+                                >
+                                  <PlusCircle className="w-3 h-3 mr-1" />
+                                  Tambah Manual
+                                </Button>
+                              </div>
+                            </CommandEmpty>
+                            <CommandGroup heading="Produk Tersedia">
+                              {filteredProducts.map(product => (
+                                <CommandItem 
+                                  key={product.id} 
+                                  value={product.nama}
+                                  onSelect={() => handleAddProduct(product)}
+                                  className="cursor-pointer"
+                                >
+                                  <div className="flex items-center justify-between w-full">
+                                    <div>
+                                      <p className="font-medium text-sm">{product.nama}</p>
+                                      <p className="text-xs text-muted-foreground">{product.kategori} • Stok: {product.stok} {product.satuan}</p>
+                                    </div>
+                                    <p className="text-xs font-medium">{formatRupiah(product.hargaBeli || product.harga || 0)}</p>
+                                  </div>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                    <Button variant="outline" size="sm" className="gap-1" onClick={() => setShowManualInput(true)}>
+                      <PlusCircle className="w-3 h-3" />
+                      Manual
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Manual Input Form */}
+                {showManualInput && (
+                  <div className="p-3 border rounded-lg bg-muted/30 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium">Tambah Item Manual</p>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowManualInput(false)}>
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input 
+                        placeholder="Nama item" 
+                        value={manualItem.nama}
+                        onChange={(e) => setManualItem(prev => ({ ...prev, nama: e.target.value }))}
+                      />
+                      <Input 
+                        placeholder="Satuan (pcs, kg, btg)" 
+                        value={manualItem.satuan}
+                        onChange={(e) => setManualItem(prev => ({ ...prev, satuan: e.target.value }))}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input 
+                        type="number" 
+                        placeholder="Qty" 
+                        value={manualItem.qty}
+                        onChange={(e) => setManualItem(prev => ({ ...prev, qty: parseInt(e.target.value) || 1 }))}
+                      />
+                      <Input 
+                        type="number" 
+                        placeholder="Harga satuan" 
+                        value={manualItem.harga || ''}
+                        onChange={(e) => setManualItem(prev => ({ ...prev, harga: parseInt(e.target.value) || 0 }))}
+                      />
+                    </div>
+                    <Button size="sm" className="w-full gap-1" onClick={handleAddManualItem}>
+                      <Check className="w-3 h-3" />
+                      Tambahkan
+                    </Button>
+                  </div>
+                )}
+
+                {/* Selected Items List */}
+                {purchaseItems.length > 0 && (
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="bg-muted/50 px-3 py-2 text-xs font-medium grid grid-cols-12 gap-2">
+                      <span className="col-span-4">Item</span>
+                      <span className="col-span-2 text-center">Qty</span>
+                      <span className="col-span-2">Satuan</span>
+                      <span className="col-span-3 text-right">Harga</span>
+                      <span className="col-span-1"></span>
+                    </div>
+                    <div className="divide-y">
+                      {purchaseItems.map(item => (
+                        <div key={item.id} className="px-3 py-2 grid grid-cols-12 gap-2 items-center text-sm">
+                          <div className="col-span-4">
+                            <p className="font-medium truncate">{item.nama}</p>
+                            {item.isManual && <Badge variant="outline" className="text-xs mt-1">Manual</Badge>}
+                          </div>
+                          <div className="col-span-2">
+                            <Input 
+                              type="number" 
+                              value={item.qty}
+                              onChange={(e) => handleUpdateItemQty(item.id, parseInt(e.target.value) || 0)}
+                              className="h-7 text-center text-xs"
+                              min={1}
+                            />
+                          </div>
+                          <span className="col-span-2 text-muted-foreground text-xs">{item.satuan}</span>
+                          <div className="col-span-3">
+                            <Input 
+                              type="number" 
+                              value={item.harga}
+                              onChange={(e) => handleUpdateItemPrice(item.id, parseInt(e.target.value) || 0)}
+                              className="h-7 text-right text-xs"
+                              min={0}
+                            />
+                          </div>
+                          <div className="col-span-1 flex justify-end">
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleRemoveItem(item.id)}>
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="bg-muted/30 px-3 py-2 flex justify-between items-center border-t">
+                      <span className="text-sm font-medium">Total</span>
+                      <span className="text-base font-bold text-primary">{formatRupiah(calculatedTotal)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-2"><Label>DP / Uang Muka (Rp)</Label><Input type="number" placeholder="0 (opsional)" value={formData.dp} onChange={(e) => setFormData(prev => ({ ...prev, dp: e.target.value }))} /></div>
+              <div className="space-y-3"><Label>Metode Pembayaran</Label>
+                <RadioGroup value={formData.paymentMethod} onValueChange={(v) => setFormData(prev => ({ ...prev, paymentMethod: v as 'cash' | 'transfer' }))} className="grid grid-cols-2 gap-4">
+                  <div className="flex items-center space-x-3 p-3 md:p-4 border rounded-lg cursor-pointer hover:bg-secondary/5"><RadioGroupItem value="cash" id="cash" /><Label htmlFor="cash" className="cursor-pointer flex-1"><div className="font-medium text-sm">Cash / Tunai</div></Label></div>
+                  <div className="flex items-center space-x-3 p-3 md:p-4 border rounded-lg cursor-pointer hover:bg-info/5"><RadioGroupItem value="transfer" id="transfer" /><Label htmlFor="transfer" className="cursor-pointer flex-1"><div className="font-medium text-sm">Transfer Bank</div></Label></div>
+                </RadioGroup>
+              </div>
+              <div className="space-y-2"><Label>Catatan</Label><Textarea placeholder="Catatan tambahan (opsional)" value={formData.notes} onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))} /></div>
             </div>
-            <div className="space-y-3"><Label>Metode Pembayaran</Label>
-              <RadioGroup value={formData.paymentMethod} onValueChange={(v) => setFormData(prev => ({ ...prev, paymentMethod: v as 'cash' | 'transfer' }))} className="grid grid-cols-2 gap-4">
-                <div className="flex items-center space-x-3 p-4 border rounded-lg cursor-pointer hover:bg-secondary/5"><RadioGroupItem value="cash" id="cash" /><Label htmlFor="cash" className="cursor-pointer flex-1"><div className="font-medium">Cash / Tunai</div></Label></div>
-                <div className="flex items-center space-x-3 p-4 border rounded-lg cursor-pointer hover:bg-info/5"><RadioGroupItem value="transfer" id="transfer" /><Label htmlFor="transfer" className="cursor-pointer flex-1"><div className="font-medium">Transfer Bank</div></Label></div>
-              </RadioGroup>
-            </div>
-            <div className="space-y-2"><Label>Catatan</Label><Textarea placeholder="Catatan tambahan (opsional)" value={formData.notes} onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))} /></div>
-          </div>
-          <DialogFooter><Button variant="outline" onClick={() => setShowDialog(false)}><X className="w-4 h-4 mr-2" />Batal</Button><Button onClick={handleSave} className="bg-gradient-primary">{editingPurchase ? 'Simpan Perubahan' : 'Buat Pembelian'}</Button></DialogFooter>
+          </ScrollArea>
+          <DialogFooter className="border-t pt-4"><Button variant="outline" onClick={() => setShowDialog(false)}><X className="w-4 h-4 mr-2" />Batal</Button><Button onClick={handleSave} className="bg-gradient-primary">{editingPurchase ? 'Simpan Perubahan' : 'Buat Pembelian'}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Supplier Dialog */}
       <Dialog open={showSupplierDialog} onOpenChange={setShowSupplierDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>{editingSupplier ? 'Edit Supplier' : 'Tambah Supplier Baru'}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2"><Label>Nama Supplier *</Label><Input placeholder="Nama perusahaan" value={supplierFormData.nama} onChange={(e) => setSupplierFormData(prev => ({ ...prev, nama: e.target.value }))} /></div>
@@ -307,7 +627,7 @@ export default function Pembelian() {
           {selectedPurchase && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4"><div><p className="text-sm text-muted-foreground">Supplier</p><p className="font-medium">{selectedPurchase.supplier}</p></div><div><p className="text-sm text-muted-foreground">Tanggal</p><p className="font-medium">{selectedPurchase.date}</p></div></div>
-              <div><p className="text-sm text-muted-foreground">Items</p><p className="font-medium">{selectedPurchase.items}</p></div>
+              <div><p className="text-sm text-muted-foreground">Items</p><p className="font-medium text-sm">{selectedPurchase.items}</p></div>
               <div className="grid grid-cols-2 gap-4"><div><p className="text-sm text-muted-foreground">Total</p><p className="font-bold text-primary">{formatRupiah(selectedPurchase.total)}</p></div><div><p className="text-sm text-muted-foreground">DP</p><p className="font-medium text-warning">{formatRupiah(selectedPurchase.dp)}</p></div></div>
               <div className="grid grid-cols-2 gap-4"><div><p className="text-sm text-muted-foreground">Pembayaran</p><Badge variant="secondary">{selectedPurchase.paymentMethod === 'transfer' ? 'Transfer' : 'Cash'}</Badge></div><div><p className="text-sm text-muted-foreground">Status</p><Badge className={getStatusColor(selectedPurchase.status)}>{selectedPurchase.status}</Badge></div></div>
               {selectedPurchase.notes && <div><p className="text-sm text-muted-foreground">Catatan</p><p className="text-sm">{selectedPurchase.notes}</p></div>}

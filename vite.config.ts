@@ -23,26 +23,66 @@ export default defineConfig(({ mode }) => ({
         theme_color: '#dc2626',
         background_color: '#fef2f2',
         display: 'standalone',
-        orientation: 'portrait',
+        display_override: ['standalone', 'window-controls-overlay', 'minimal-ui'],
+        orientation: 'any',
         scope: '/',
         start_url: '/',
+        id: '/',
+        categories: ['business', 'finance', 'productivity'],
+        lang: 'id',
+        dir: 'ltr',
+        prefer_related_applications: false,
         icons: [
           {
             src: '/icon-192.png',
             sizes: '192x192',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'any'
+          },
+          {
+            src: '/icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'maskable'
           },
           {
             src: '/icon-512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'any'
+          },
+          {
+            src: '/icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable'
           }
-        ]
+        ],
+        screenshots: [
+          {
+            src: '/icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            form_factor: 'wide',
+            label: 'SERAYU POS Dashboard'
+          },
+          {
+            src: '/icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            form_factor: 'narrow',
+            label: 'SERAYU POS Mobile'
+          }
+        ],
+        launch_handler: {
+          client_mode: ['navigate-existing', 'auto']
+        },
+        edge_side_panel: {
+          preferred_width: 400
+        }
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,woff,ttf}'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -57,8 +97,28 @@ export default defineConfig(({ mode }) => ({
                 statuses: [0, 200]
               }
             }
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'gstatic-fonts-cache',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24 * 365
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
           }
-        ]
+        ],
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true
+      },
+      devOptions: {
+        enabled: false
       }
     })
   ].filter(Boolean),
