@@ -2,15 +2,46 @@
 <html lang="id">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>SERAYU POS - Aplikasi Kasir Toko Baja Ringan</title>
     <meta name="description" content="SERAYU POS - Sistem Point of Sale untuk Toko Baja Ringan. Kelola penjualan, stok, pembelian, dan laporan keuangan dengan mudah." />
     <meta name="author" content="SERAYU POS" />
     <meta name="theme-color" content="#dc2626" />
+    <meta name="color-scheme" content="light dark" />
+    
+    <!-- PWA Meta Tags for Cross-Platform Support -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="SERAYU POS" />
+    <meta name="application-name" content="SERAYU POS" />
+    <meta name="msapplication-TileColor" content="#dc2626" />
+    <meta name="msapplication-tap-highlight" content="no" />
+    <meta name="format-detection" content="telephone=no" />
+    
+    <!-- Windows/Edge PWA -->
+    <meta name="msapplication-starturl" content="/" />
+    <meta name="msapplication-navbutton-color" content="#dc2626" />
+    
+    <!-- Huawei/HarmonyOS -->
+    <meta name="huawei-capable" content="yes" />
+    <meta name="full-screen" content="yes" />
+    <meta name="x5-fullscreen" content="true" />
+    <meta name="x5-page-mode" content="app" />
+    
+    <!-- Android Chrome -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#dc2626" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#991b1b" />
     
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    
+    <!-- Preconnect for performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     
     <meta property="og:title" content="SERAYU POS - Aplikasi Kasir Toko Baja Ringan" />
     <meta property="og:description" content="Sistem Point of Sale untuk Toko Baja Ringan" />
@@ -20,6 +51,34 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="SERAYU POS" />
     <meta name="twitter:image" content="/icon-512.png" />
+
+    <style>
+      /* Standalone mode safe area support */
+      @supports (padding: env(safe-area-inset-top)) {
+        body {
+          padding-top: env(safe-area-inset-top);
+          padding-right: env(safe-area-inset-right);
+          padding-bottom: env(safe-area-inset-bottom);
+          padding-left: env(safe-area-inset-left);
+        }
+      }
+      
+      /* Disable pull-to-refresh in standalone mode */
+      html, body {
+        overscroll-behavior-y: contain;
+      }
+      
+      /* Hide scrollbar in standalone mode for cleaner look */
+      @media (display-mode: standalone) {
+        ::-webkit-scrollbar {
+          width: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+          background: rgba(0,0,0,0.2);
+          border-radius: 4px;
+        }
+      }
+    </style>
   </head>
 
   <body>
