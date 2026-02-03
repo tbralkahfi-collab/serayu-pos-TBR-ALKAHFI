@@ -180,7 +180,7 @@ export default function Dashboard() {
       <div className="flex flex-col lg:flex-row items-start justify-between mb-6 gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
-            {greeting}, {user?.username}! 👋
+            {greeting}, {user?.email?.split('@')[0]}! 👋
           </h1>
           <p className="text-muted-foreground text-sm md:text-base">
             Berikut ringkasan aktivitas toko Anda hari ini.

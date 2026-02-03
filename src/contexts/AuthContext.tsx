@@ -1,55 +1,99 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-
-interface User {
-  username: string;
-  role: string;
-}
+import { supabase } from '@/integrations/supabase/client';
+import { User, Session } from '@supabase/supabase-js';
 
 interface AuthContextType {
   user: User | null;
+  session: Session | null;
   isAuthenticated: boolean;
-  login: (username: string, password: string) => boolean;
-  logout: () => void;
+  isLoading: boolean;
+  login: (email: string, password: string) => Promise<{ error: string | null }>;
+  signup: (email: string, password: string, storeName: string) => Promise<{ error: string | null }>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const DEFAULT_USERS = [
-  { username: 'admin', password: 'admin123', role: 'Administrator' },
-  { username: 'kasir', password: 'kasir123', role: 'Kasir' },
-];
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('serayu_pos_user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
-  }, []);
-
-  const login = (username: string, password: string): boolean => {
-    const foundUser = DEFAULT_USERS.find(
-      (u) => u.username === username && u.password === password
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        setIsLoading(false);
+      }
     );
 
-    if (foundUser) {
-      const userData = { username: foundUser.username, role: foundUser.role };
-      setUser(userData);
-      localStorage.setItem('serayu_pos_user', JSON.stringify(userData));
-      return true;
+    // Then check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setIsLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const login = async (email: string, password: string): Promise<{ error: string | null }> => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      if (error.message.includes('Invalid login credentials')) {
+        return { error: 'Email atau password salah' };
+      }
+      if (error.message.includes('Email not confirmed')) {
+        return { error: 'Email belum dikonfirmasi. Silakan cek inbox email Anda.' };
+      }
+      return { error: error.message };
     }
-    return false;
+
+    return { error: null };
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('serayu_pos_user');
+  const signup = async (email: string, password: string, storeName: string): Promise<{ error: string | null }> => {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: window.location.origin,
+        data: {
+          store_name: storeName,
+        },
+      },
+    });
+
+    if (error) {
+      if (error.message.includes('already registered')) {
+        return { error: 'Email sudah terdaftar' };
+      }
+      return { error: error.message };
+    }
+
+    return { error: null };
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, logout }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      session,
+      isAuthenticated: !!session, 
+      isLoading,
+      login, 
+      signup,
+      logout 
+    }}>
       {children}
     </AuthContext.Provider>
   );

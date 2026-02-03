@@ -99,12 +99,12 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
         <div className="flex items-center gap-2 md:gap-3 mb-3 md:mb-4 px-1 md:px-2">
           <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-secondary/10 flex items-center justify-center ring-2 ring-secondary/30 flex-shrink-0">
             <span className="text-xs md:text-sm font-semibold text-secondary">
-              {user?.username.charAt(0).toUpperCase()}
+              {user?.email?.charAt(0).toUpperCase() || 'U'}
             </span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs md:text-sm font-medium text-foreground truncate">{user?.username}</p>
-            <p className="text-[10px] md:text-xs text-muted-foreground">{user?.role}</p>
+            <p className="text-xs md:text-sm font-medium text-foreground truncate">{user?.email}</p>
+            <p className="text-[10px] md:text-xs text-muted-foreground">User</p>
           </div>
         </div>
         <Button
