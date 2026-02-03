@@ -14,7 +14,347 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      debts: {
+        Row: {
+          created_at: string
+          id: string
+          jatuh_tempo: string | null
+          keterangan: string | null
+          nama: string
+          payments: Json
+          project_id: string | null
+          sisa: number
+          tanggal: string
+          total: number
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          jatuh_tempo?: string | null
+          keterangan?: string | null
+          nama: string
+          payments?: Json
+          project_id?: string | null
+          sisa?: number
+          tanggal?: string
+          total?: number
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          jatuh_tempo?: string | null
+          keterangan?: string | null
+          nama?: string
+          payments?: Json
+          project_id?: string | null
+          sisa?: number
+          tanggal?: string
+          total?: number
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      expenses: {
+        Row: {
+          created_at: string
+          deskripsi: string | null
+          id: string
+          jumlah: number
+          kategori: string
+          tanggal: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deskripsi?: string | null
+          id?: string
+          jumlah?: number
+          kategori: string
+          tanggal?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deskripsi?: string | null
+          id?: string
+          jumlah?: number
+          kategori?: string
+          tanggal?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      products: {
+        Row: {
+          created_at: string
+          harga_beli: number
+          harga_jual: number
+          id: string
+          kategori: string
+          min_stok: number | null
+          nama: string
+          satuan: string
+          stok: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          harga_beli?: number
+          harga_jual?: number
+          id?: string
+          kategori?: string
+          min_stok?: number | null
+          nama: string
+          satuan?: string
+          stok?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          harga_beli?: number
+          harga_jual?: number
+          id?: string
+          kategori?: string
+          min_stok?: number | null
+          nama?: string
+          satuan?: string
+          stok?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          id: string
+          store_name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          store_name?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          store_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      projects: {
+        Row: {
+          alamat: string | null
+          biaya_tenaga_kerja: number | null
+          catatan: string | null
+          created_at: string
+          deskripsi: string | null
+          diskon_nominal: number | null
+          diskon_persen: number | null
+          dp: number
+          id: string
+          materials: Json
+          nama_proyek: string
+          nilai_kontrak: number
+          pelanggan: string
+          status: string
+          tanggal_mulai: string | null
+          tanggal_order: string | null
+          tanggal_selesai: string | null
+          telepon: string | null
+          user_id: string
+        }
+        Insert: {
+          alamat?: string | null
+          biaya_tenaga_kerja?: number | null
+          catatan?: string | null
+          created_at?: string
+          deskripsi?: string | null
+          diskon_nominal?: number | null
+          diskon_persen?: number | null
+          dp?: number
+          id?: string
+          materials?: Json
+          nama_proyek: string
+          nilai_kontrak?: number
+          pelanggan: string
+          status?: string
+          tanggal_mulai?: string | null
+          tanggal_order?: string | null
+          tanggal_selesai?: string | null
+          telepon?: string | null
+          user_id: string
+        }
+        Update: {
+          alamat?: string | null
+          biaya_tenaga_kerja?: number | null
+          catatan?: string | null
+          created_at?: string
+          deskripsi?: string | null
+          diskon_nominal?: number | null
+          diskon_persen?: number | null
+          dp?: number
+          id?: string
+          materials?: Json
+          nama_proyek?: string
+          nilai_kontrak?: number
+          pelanggan?: string
+          status?: string
+          tanggal_mulai?: string | null
+          tanggal_order?: string | null
+          tanggal_selesai?: string | null
+          telepon?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      purchases: {
+        Row: {
+          catatan: string | null
+          created_at: string
+          dp: number
+          id: string
+          items: Json
+          metode_bayar: string
+          status: string
+          supplier_id: string | null
+          supplier_name: string
+          tanggal: string
+          total: number
+          user_id: string
+        }
+        Insert: {
+          catatan?: string | null
+          created_at?: string
+          dp?: number
+          id?: string
+          items?: Json
+          metode_bayar?: string
+          status?: string
+          supplier_id?: string | null
+          supplier_name: string
+          tanggal?: string
+          total?: number
+          user_id: string
+        }
+        Update: {
+          catatan?: string | null
+          created_at?: string
+          dp?: number
+          id?: string
+          items?: Json
+          metode_bayar?: string
+          status?: string
+          supplier_id?: string | null
+          supplier_name?: string
+          tanggal?: string
+          total?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchases_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      suppliers: {
+        Row: {
+          alamat: string | null
+          catatan: string | null
+          created_at: string
+          email: string | null
+          id: string
+          nama: string
+          telepon: string | null
+          user_id: string
+        }
+        Insert: {
+          alamat?: string | null
+          catatan?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          nama: string
+          telepon?: string | null
+          user_id: string
+        }
+        Update: {
+          alamat?: string | null
+          catatan?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          nama?: string
+          telepon?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      transactions: {
+        Row: {
+          bayar: number
+          created_at: string
+          diskon: number
+          diskon_persen: number
+          id: string
+          items: Json
+          kembalian: number
+          metode: string
+          pelanggan: string | null
+          status: string
+          subtotal: number
+          tanggal: string
+          total: number
+          user_id: string
+        }
+        Insert: {
+          bayar?: number
+          created_at?: string
+          diskon?: number
+          diskon_persen?: number
+          id?: string
+          items?: Json
+          kembalian?: number
+          metode?: string
+          pelanggan?: string | null
+          status?: string
+          subtotal?: number
+          tanggal?: string
+          total?: number
+          user_id: string
+        }
+        Update: {
+          bayar?: number
+          created_at?: string
+          diskon?: number
+          diskon_persen?: number
+          id?: string
+          items?: Json
+          kembalian?: number
+          metode?: string
+          pelanggan?: string | null
+          status?: string
+          subtotal?: number
+          tanggal?: string
+          total?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
