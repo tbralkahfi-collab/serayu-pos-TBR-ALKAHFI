@@ -290,20 +290,29 @@ export default function Kasir() {
     }, 250);
   };
 
-  const handleSaveTransaction = () => {
+  const handleSaveTransaction = async () => {
     const receipt = generateReceipt();
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
     const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
     
-    // Create items string
-    const itemsStr = cart.map(item => `${item.name} x${item.qty}`).join(', ');
+    // Build items data for database trigger (stock will be auto-updated by trigger)
+    const itemsData = cart.map(item => ({
+      productId: item.id,
+      nama: item.name,
+      qty: item.qty,
+      harga: item.price,
+      satuan: item.unit,
+      diskonPersen: item.diskonPersen,
+      diskonNominal: item.diskonNominal,
+    }));
     
-    // Add transaction to context (will be saved to localStorage)
-    addTransaction({
+    // Add transaction to database - stock update handled by trigger
+    await addTransaction({
       tanggal: `${dateStr} ${timeStr}`,
       pelanggan: receipt.customer,
-      items: itemsStr,
+      items: cart.map(item => `${item.name} x${item.qty}`).join(', '),
+      itemsData,
       subtotal: receipt.subtotal,
       diskon: receipt.diskon,
       diskonPersen: receipt.diskonPersen,
@@ -314,13 +323,7 @@ export default function Kasir() {
       status: 'Selesai',
     });
     
-    // Update stock for each product in cart
-    cart.forEach(item => {
-      const product = products.find(p => p.id === item.id);
-      if (product) {
-        updateProduct(item.id, { stok: product.stok - item.qty });
-      }
-    });
+    // NOTE: Stock is now automatically updated by database trigger
     
     toast.success(`Transaksi ${receipt.id} berhasil disimpan & stok diperbarui`);
     setCart([]);
@@ -331,9 +334,9 @@ export default function Kasir() {
     setShowCheckout(false);
   };
 
-  const handlePrintAndSave = () => {
+  const handlePrintAndSave = async () => {
     handlePrint();
-    handleSaveTransaction();
+    await handleSaveTransaction();
   };
 
   return (

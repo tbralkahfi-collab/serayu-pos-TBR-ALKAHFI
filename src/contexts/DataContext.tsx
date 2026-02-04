@@ -1,4 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from './AuthContext';
+import { toast } from 'sonner';
+import type { Json } from '@/integrations/supabase/types';
 
 // Types
 export interface Product {
@@ -10,8 +14,7 @@ export interface Product {
   stok: number;
   satuan: string;
   minStok?: number;
-  // Legacy support
-  harga?: number;
+  harga?: number; // Legacy support
 }
 
 export interface Supplier {
@@ -21,6 +24,15 @@ export interface Supplier {
   telepon: string;
   email: string;
   catatan: string;
+}
+
+export interface PurchaseItem {
+  productId: string;
+  nama: string;
+  qty: number;
+  satuan: string;
+  harga: number;
+  isManual: boolean;
 }
 
 export interface Purchase {
@@ -33,6 +45,7 @@ export interface Purchase {
   paymentMethod: 'cash' | 'transfer';
   status: string;
   items: string;
+  itemsData?: PurchaseItem[];
   notes: string;
 }
 
@@ -46,7 +59,7 @@ export interface DebtRecord {
   jatuhTempo: string;
   keterangan: string;
   payments: PaymentHistory[];
-  projectId?: string; // Link to project
+  projectId?: string;
 }
 
 export interface PaymentHistory {
@@ -65,11 +78,22 @@ export interface Expense {
   tanggal: string;
 }
 
+export interface TransactionItem {
+  productId: string;
+  nama: string;
+  qty: number;
+  harga: number;
+  satuan: string;
+  diskonPersen?: number;
+  diskonNominal?: number;
+}
+
 export interface Transaction {
   id: string;
   tanggal: string;
   pelanggan: string;
   items: string;
+  itemsData?: TransactionItem[];
   subtotal?: number;
   diskon?: number;
   diskonPersen?: number;
@@ -108,490 +132,682 @@ export interface Project {
   materials: ProjectMaterial[];
 }
 
-// Data version for migration tracking
-const DATA_VERSION = 'v2';
-const DATA_VERSION_KEY = 'serayu_data_version';
-
-// Initial data
-const initialProducts: Product[] = [
-  { id: 'PRD001', nama: 'Baja Ringan C75', kategori: 'Rangka', hargaBeli: 75000, hargaJual: 85000, stok: 250, satuan: 'batang' },
-  { id: 'PRD002', nama: 'Baja Ringan C100', kategori: 'Rangka', hargaBeli: 85000, hargaJual: 95000, stok: 180, satuan: 'batang' },
-  { id: 'PRD003', nama: 'Spandek 0.30mm', kategori: 'Atap', hargaBeli: 75000, hargaJual: 85000, stok: 150, satuan: 'lembar' },
-  { id: 'PRD004', nama: 'Spandek 0.35mm', kategori: 'Atap', hargaBeli: 85000, hargaJual: 95000, stok: 8, satuan: 'lembar' },
-  { id: 'PRD005', nama: 'Hollow 4x4', kategori: 'Rangka', hargaBeli: 55000, hargaJual: 65000, stok: 120, satuan: 'batang' },
-  { id: 'PRD006', nama: 'Reng Baja Ringan', kategori: 'Rangka', hargaBeli: 22000, hargaJual: 28000, stok: 5, satuan: 'batang' },
-  { id: 'PRD007', nama: 'Genteng Metal', kategori: 'Atap', hargaBeli: 38000, hargaJual: 45000, stok: 200, satuan: 'lembar' },
-  { id: 'PRD008', nama: 'Sekrup Baja 12mm', kategori: 'Aksesoris', hargaBeli: 280, hargaJual: 350, stok: 5000, satuan: 'pcs' },
-  { id: 'PRD009', nama: 'Dynabolt 10mm', kategori: 'Aksesoris', hargaBeli: 2000, hargaJual: 2500, stok: 800, satuan: 'pcs' },
-  { id: 'PRD010', nama: 'Talang Air PVC', kategori: 'Aksesoris', hargaBeli: 45000, hargaJual: 55000, stok: 50, satuan: 'batang' },
-];
-
-const initialSuppliers: Supplier[] = [
-  { id: 'SUP001', nama: 'PT Baja Steel Indonesia', alamat: 'Jl. Industri No. 45, Surabaya', telepon: '031-5551234', email: 'sales@bajasteel.co.id', catatan: 'Supplier utama baja ringan' },
-  { id: 'SUP002', nama: 'CV Spandek Jaya', alamat: 'Jl. Raya Sidoarjo No. 78', telepon: '031-8881234', email: 'order@spandekjaya.com', catatan: 'Spesialisasi spandek dan genteng' },
-  { id: 'SUP003', nama: 'UD Hollow Mandiri', alamat: 'Jl. Veteran No. 12, Gresik', telepon: '031-3991234', email: 'info@hollowmandiri.id', catatan: 'Hollow dan pipa besi' },
-  { id: 'SUP004', nama: 'PT Atap Metal', alamat: 'Jl. Industri Rungkut, Surabaya', telepon: '031-8712345', email: 'sales@atapmetal.co.id', catatan: 'Genteng metal premium' },
-  { id: 'SUP005', nama: 'CV Fastener Indo', alamat: 'Jl. Margomulyo No. 33, Surabaya', telepon: '031-7491234', email: 'order@fastenerindo.com', catatan: 'Sekrup dan dynabolt' },
-];
-
-const initialPurchases: Purchase[] = [
-  { id: 'PO001', supplierId: 'SUP001', supplier: 'PT Baja Steel Indonesia', date: '2024-01-15', total: 45000000, dp: 15000000, paymentMethod: 'transfer', status: 'Selesai', items: 'Baja Ringan C75 x 500btg', notes: '' },
-  { id: 'PO002', supplierId: 'SUP002', supplier: 'CV Spandek Jaya', date: '2024-01-14', total: 28500000, dp: 0, paymentMethod: 'cash', status: 'Selesai', items: 'Spandek 0.35mm x 300lbr', notes: '' },
-  { id: 'PO003', supplierId: 'SUP003', supplier: 'UD Hollow Mandiri', date: '2024-01-13', total: 13000000, dp: 5000000, paymentMethod: 'transfer', status: 'Pending', items: 'Hollow 4x4 x 200btg', notes: 'Menunggu konfirmasi' },
-  { id: 'PO004', supplierId: 'SUP004', supplier: 'PT Atap Metal', date: '2024-01-12', total: 22500000, dp: 10000000, paymentMethod: 'transfer', status: 'Dikirim', items: 'Genteng Metal x 500lbr', notes: 'Est. tiba 3 hari' },
-  { id: 'PO005', supplierId: 'SUP005', supplier: 'CV Fastener Indo', date: '2024-01-11', total: 8500000, dp: 0, paymentMethod: 'cash', status: 'Selesai', items: 'Sekrup & Dynabolt', notes: '' },
-];
-
-const today = new Date().toISOString().split('T')[0];
-const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-const twoDaysAgo = new Date(Date.now() - 172800000).toISOString().split('T')[0];
-
-const initialDebts: DebtRecord[] = [
-  { 
-    id: 'UTG001', type: 'utang', nama: 'PT Baja Steel Indonesia', 
-    total: 25000000, sisa: 15000000, tanggal: '2024-01-10', jatuhTempo: '2024-02-10', 
-    keterangan: 'Pembelian Baja Ringan C75 x 300 batang',
-    payments: [
-      { id: 'PAY001', tanggal: '2024-01-15', jumlah: 10000000, metode: 'Transfer', catatan: 'Pembayaran pertama' }
-    ]
-  },
-  { 
-    id: 'UTG002', type: 'utang', nama: 'CV Spandek Jaya', 
-    total: 18500000, sisa: 18500000, tanggal: '2024-01-12', jatuhTempo: '2024-02-12', 
-    keterangan: 'Pembelian Spandek 0.35mm x 200 lembar',
-    payments: []
-  },
-  { 
-    id: 'PTG001', type: 'piutang', nama: 'Toko Bangunan Maju', 
-    total: 35000000, sisa: 20000000, tanggal: '2024-01-05', jatuhTempo: '2024-02-05', 
-    keterangan: 'Penjualan material proyek perumahan',
-    payments: [
-      { id: 'PAY002', tanggal: '2024-01-10', jumlah: 15000000, metode: 'Transfer', catatan: 'DP awal' }
-    ]
-  },
-  { 
-    id: 'PTG002', type: 'piutang', nama: 'CV Konstruksi Jaya', 
-    total: 28000000, sisa: 28000000, tanggal: '2024-01-08', jatuhTempo: '2024-02-28', 
-    keterangan: 'Penjualan rangka atap proyek ruko',
-    payments: []
-  },
-];
-
-const initialExpenses: Expense[] = [
-  { id: 'OP001', kategori: 'Listrik', deskripsi: 'Tagihan PLN Januari - Gudang & Toko', jumlah: 1850000, tanggal: today },
-  { id: 'OP002', kategori: 'Air', deskripsi: 'Tagihan PDAM Januari', jumlah: 350000, tanggal: today },
-  { id: 'OP003', kategori: 'Telepon', deskripsi: 'Tagihan Internet & Telepon Toko', jumlah: 650000, tanggal: yesterday },
-  { id: 'OP004', kategori: 'Transportasi', deskripsi: 'BBM Truk Pengiriman', jumlah: 2500000, tanggal: yesterday },
-  { id: 'OP005', kategori: 'Pemeliharaan', deskripsi: 'Service Forklift', jumlah: 850000, tanggal: twoDaysAgo },
-  { id: 'OP006', kategori: 'Sewa', deskripsi: 'Sewa Gudang Januari', jumlah: 8000000, tanggal: twoDaysAgo },
-];
-
-const initialTransactions: Transaction[] = [
-  { id: 'TRX001', tanggal: `${today} 14:30`, pelanggan: 'Pak Ahmad', items: 'Baja C75 x10, Spandek x20', total: 2750000, bayar: 3000000, kembalian: 250000, metode: 'Cash', status: 'Selesai' },
-  { id: 'TRX002', tanggal: `${today} 11:20`, pelanggan: 'CV Bangun Jaya', items: 'Hollow 4x4 x50, Sekrup x1000', total: 3600000, bayar: 3600000, kembalian: 0, metode: 'Transfer', status: 'Selesai' },
-  { id: 'TRX003', tanggal: `${today} 09:15`, pelanggan: 'Toko Maju', items: 'Reng x100, Genteng Metal x50', total: 5050000, bayar: 5100000, kembalian: 50000, metode: 'Cash', status: 'Selesai' },
-  { id: 'TRX004', tanggal: `${yesterday} 16:45`, pelanggan: 'Pak Budi', items: 'Baja C100 x5', total: 475000, bayar: 500000, kembalian: 25000, metode: 'Cash', status: 'Selesai' },
-  { id: 'TRX005', tanggal: `${yesterday} 13:00`, pelanggan: 'PT Konstruksi', items: 'Spandek 0.35mm x100', total: 9500000, bayar: 9500000, kembalian: 0, metode: 'Transfer', status: 'Selesai' },
-  { id: 'TRX006', tanggal: `${twoDaysAgo} 10:30`, pelanggan: 'UD Karya', items: 'Hollow 4x4 x30', total: 1950000, bayar: 2000000, kembalian: 50000, metode: 'Cash', status: 'Selesai' },
-];
-
-const initialProjects: Project[] = [
-  { 
-    id: 'PRJ001', 
-    namaProyek: 'Atap Rumah Pak Ahmad', 
-    pelanggan: 'Pak Ahmad', 
-    alamat: 'Jl. Melati No. 45, Sidoarjo', 
-    telepon: '081234567890',
-    deskripsi: 'Pemasangan rangka atap baja ringan untuk rumah type 45',
-    nilaiKontrak: 35000000,
-    dp: 15000000,
-    biayaTenagaKerja: 5000000,
-    tanggalOrder: '2024-01-10',
-    tanggalMulai: '2024-01-15',
-    tanggalSelesai: '2024-01-25',
-    status: 'Selesai',
-    catatan: 'Termasuk material dan ongkos pasang',
-    materials: [
-      { productId: 'PRD001', productName: 'Baja Ringan C75', qty: 50, satuan: 'batang', harga: 85000 },
-      { productId: 'PRD006', productName: 'Reng Baja Ringan', qty: 100, satuan: 'batang', harga: 28000 },
-      { productId: 'PRD008', productName: 'Sekrup Baja 12mm', qty: 500, satuan: 'pcs', harga: 350 },
-    ]
-  },
-  { 
-    id: 'PRJ002', 
-    namaProyek: 'Gudang CV Maju Jaya', 
-    pelanggan: 'CV Maju Jaya', 
-    alamat: 'Kawasan Industri Rungkut, Surabaya', 
-    telepon: '031-8881234',
-    deskripsi: 'Konstruksi rangka gudang 20x30 meter',
-    nilaiKontrak: 180000000,
-    dp: 60000000,
-    biayaTenagaKerja: 25000000,
-    tanggalOrder: '2024-01-05',
-    tanggalMulai: '2024-01-12',
-    tanggalSelesai: '',
-    status: 'Berjalan',
-    catatan: 'Pembayaran 3 termin',
-    materials: [
-      { productId: 'PRD002', productName: 'Baja Ringan C100', qty: 200, satuan: 'batang', harga: 95000 },
-      { productId: 'PRD005', productName: 'Hollow 4x4', qty: 100, satuan: 'batang', harga: 65000 },
-      { productId: 'PRD003', productName: 'Spandek 0.30mm', qty: 150, satuan: 'lembar', harga: 85000 },
-    ]
-  },
-  { 
-    id: 'PRJ003', 
-    namaProyek: 'Renovasi Ruko Pasar', 
-    pelanggan: 'Toko Sembako Berkah', 
-    alamat: 'Pasar Tradisional Blok C-15, Gresik', 
-    telepon: '085678901234',
-    deskripsi: 'Ganti atap lama dengan spandek baru',
-    nilaiKontrak: 25000000,
-    dp: 0,
-    biayaTenagaKerja: 3500000,
-    tanggalOrder: '2024-01-14',
-    tanggalMulai: '',
-    tanggalSelesai: '',
-    status: 'Pending',
-    catatan: 'Menunggu pembayaran DP',
-    materials: []
-  },
-];
-
 interface DataContextType {
+  isLoading: boolean;
   // Products
   products: Product[];
-  setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
-  addProduct: (product: Omit<Product, 'id'>) => void;
-  updateProduct: (id: string, product: Partial<Product>) => void;
-  deleteProduct: (id: string) => void;
+  addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
+  updateProduct: (id: string, product: Partial<Product>) => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>;
   
   // Suppliers
   suppliers: Supplier[];
-  setSuppliers: React.Dispatch<React.SetStateAction<Supplier[]>>;
-  addSupplier: (supplier: Omit<Supplier, 'id'>) => Supplier;
-  updateSupplier: (id: string, supplier: Partial<Supplier>) => void;
-  deleteSupplier: (id: string) => void;
+  addSupplier: (supplier: Omit<Supplier, 'id'>) => Promise<Supplier>;
+  updateSupplier: (id: string, supplier: Partial<Supplier>) => Promise<void>;
+  deleteSupplier: (id: string) => Promise<void>;
   
   // Purchases
   purchases: Purchase[];
-  setPurchases: React.Dispatch<React.SetStateAction<Purchase[]>>;
-  addPurchase: (purchase: Omit<Purchase, 'id'>) => void;
-  updatePurchase: (id: string, purchase: Partial<Purchase>) => void;
-  deletePurchase: (id: string) => void;
+  addPurchase: (purchase: Omit<Purchase, 'id'>) => Promise<void>;
+  updatePurchase: (id: string, purchase: Partial<Purchase>) => Promise<void>;
+  deletePurchase: (id: string) => Promise<void>;
   
   // Debts
   debts: DebtRecord[];
-  setDebts: React.Dispatch<React.SetStateAction<DebtRecord[]>>;
-  addDebt: (debt: Omit<DebtRecord, 'id' | 'payments'>) => void;
-  updateDebt: (id: string, debt: Partial<DebtRecord>) => void;
-  deleteDebt: (id: string) => void;
-  addPayment: (debtId: string, payment: Omit<PaymentHistory, 'id'>) => void;
+  addDebt: (debt: Omit<DebtRecord, 'id' | 'payments'>) => Promise<void>;
+  updateDebt: (id: string, debt: Partial<DebtRecord>) => Promise<void>;
+  deleteDebt: (id: string) => Promise<void>;
+  addPayment: (debtId: string, payment: Omit<PaymentHistory, 'id'>) => Promise<void>;
   
   // Expenses
   expenses: Expense[];
-  setExpenses: React.Dispatch<React.SetStateAction<Expense[]>>;
-  addExpense: (expense: Omit<Expense, 'id'>) => void;
-  updateExpense: (id: string, expense: Partial<Expense>) => void;
-  deleteExpense: (id: string) => void;
+  addExpense: (expense: Omit<Expense, 'id'>) => Promise<void>;
+  updateExpense: (id: string, expense: Partial<Expense>) => Promise<void>;
+  deleteExpense: (id: string) => Promise<void>;
   
   // Transactions
   transactions: Transaction[];
-  setTransactions: React.Dispatch<React.SetStateAction<Transaction[]>>;
-  addTransaction: (transaction: Omit<Transaction, 'id'>) => void;
-  updateTransaction: (id: string, transaction: Partial<Transaction>) => void;
-  deleteTransaction: (id: string) => void;
+  addTransaction: (transaction: Omit<Transaction, 'id'>) => Promise<void>;
+  updateTransaction: (id: string, transaction: Partial<Transaction>) => Promise<void>;
+  deleteTransaction: (id: string) => Promise<void>;
 
   // Projects
   projects: Project[];
-  setProjects: React.Dispatch<React.SetStateAction<Project[]>>;
-  addProject: (project: Omit<Project, 'id'>) => void;
-  updateProject: (id: string, project: Partial<Project>) => void;
-  deleteProject: (id: string) => void;
+  addProject: (project: Omit<Project, 'id'>) => Promise<void>;
+  updateProject: (id: string, project: Partial<Project>) => Promise<void>;
+  deleteProject: (id: string) => Promise<void>;
 
   // Project debt relation
   getProjectDebts: (projectId: string) => DebtRecord[];
-  createProjectDebt: (projectId: string, projectName: string, amount: number, dueDate: string) => void;
+  createProjectDebt: (projectId: string, projectName: string, amount: number, dueDate: string) => Promise<void>;
+  
+  // Refresh
+  refreshData: () => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-const STORAGE_KEYS = {
-  products: 'serayu_products',
-  suppliers: 'serayu_suppliers',
-  purchases: 'serayu_purchases',
-  debts: 'serayu_debts',
-  expenses: 'serayu_expenses',
-  transactions: 'serayu_transactions',
-  projects: 'serayu_projects',
+// Helper to parse payment history
+const parsePayments = (payments: Json): PaymentHistory[] => {
+  if (!Array.isArray(payments)) return [];
+  return payments as unknown as PaymentHistory[];
 };
 
-// Helper to migrate old product format to new
-const migrateProduct = (product: any): Product => {
-  if (product.hargaBeli !== undefined && product.hargaJual !== undefined) {
-    return product;
-  }
-  // Migrate old harga to hargaBeli and hargaJual
-  const harga = product.harga || 0;
-  return {
-    ...product,
-    hargaBeli: Math.round(harga * 0.85), // Assume 15% margin
-    hargaJual: harga,
-  };
+// Helper to parse materials
+const parseMaterials = (materials: Json): ProjectMaterial[] => {
+  if (!Array.isArray(materials)) return [];
+  return materials as unknown as ProjectMaterial[];
 };
 
-// Helper to migrate old project format to new
-const migrateProject = (project: any): Project => {
-  return {
-    ...project,
-    biayaTenagaKerja: project.biayaTenagaKerja || 0,
-    diskonPersen: project.diskonPersen || 0,
-    diskonNominal: project.diskonNominal || 0,
-  };
+// Helper to parse purchase items from JSON
+const parsePurchaseItems = (items: Json): PurchaseItem[] => {
+  if (!Array.isArray(items)) return [];
+  return items as unknown as PurchaseItem[];
 };
 
-// Check if user has existing data (to prevent overwriting with initial data on updates)
-const hasExistingData = (key: string): boolean => {
-  const saved = localStorage.getItem(key);
-  // Consider data exists if the key exists in localStorage (even if empty array)
-  return saved !== null;
+// Helper to parse transaction items from JSON
+const parseTransactionItems = (items: Json): TransactionItem[] => {
+  if (!Array.isArray(items)) return [];
+  return items as unknown as TransactionItem[];
 };
 
-// Get saved data or initial data (only use initial if no saved data exists)
-const getSavedOrInitial = <T,>(key: string, initial: T[], migrateFn?: (item: any) => any): T[] => {
-  const savedVersion = localStorage.getItem(DATA_VERSION_KEY);
-  const saved = localStorage.getItem(key);
-  
-  // If user has saved data, always use it (protect customer data)
-  if (saved !== null) {
-    try {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) {
-        return migrateFn ? parsed.map(migrateFn) : parsed;
-      }
-      return [];
-    } catch {
-      return [];
-    }
-  }
-  
-  // Only use initial data for brand new installations
-  if (savedVersion === null) {
-    localStorage.setItem(DATA_VERSION_KEY, DATA_VERSION);
-    return initial;
-  }
-  
-  // If version exists but no data, return empty array (user cleared data intentionally)
-  return [];
+// Helper to format items string from items data
+const formatItemsString = (itemsData: PurchaseItem[] | TransactionItem[]): string => {
+  return itemsData.map(item => `${item.nama} x${item.qty}`).join(', ');
 };
 
 export function DataProvider({ children }: { children: ReactNode }) {
-  const [products, setProducts] = useState<Product[]>(() => 
-    getSavedOrInitial(STORAGE_KEYS.products, initialProducts, migrateProduct)
-  );
-  
-  const [suppliers, setSuppliers] = useState<Supplier[]>(() => 
-    getSavedOrInitial(STORAGE_KEYS.suppliers, initialSuppliers)
-  );
-  
-  const [purchases, setPurchases] = useState<Purchase[]>(() => 
-    getSavedOrInitial(STORAGE_KEYS.purchases, initialPurchases)
-  );
-  
-  const [debts, setDebts] = useState<DebtRecord[]>(() => 
-    getSavedOrInitial(STORAGE_KEYS.debts, initialDebts)
-  );
-  
-  const [expenses, setExpenses] = useState<Expense[]>(() => 
-    getSavedOrInitial(STORAGE_KEYS.expenses, initialExpenses)
-  );
-  
-  const [transactions, setTransactions] = useState<Transaction[]>(() => 
-    getSavedOrInitial(STORAGE_KEYS.transactions, initialTransactions)
-  );
+  const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [debts, setDebts] = useState<DebtRecord[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
 
-  const [projects, setProjects] = useState<Project[]>(() => 
-    getSavedOrInitial(STORAGE_KEYS.projects, initialProjects, migrateProject)
-  );
+  // Fetch all data
+  const fetchData = useCallback(async () => {
+    if (!user) {
+      setProducts([]);
+      setSuppliers([]);
+      setPurchases([]);
+      setDebts([]);
+      setExpenses([]);
+      setTransactions([]);
+      setProjects([]);
+      setIsLoading(false);
+      return;
+    }
 
-  // Save to localStorage whenever data changes
+    setIsLoading(true);
+    try {
+      const [
+        productsRes,
+        suppliersRes,
+        purchasesRes,
+        debtsRes,
+        expensesRes,
+        transactionsRes,
+        projectsRes,
+      ] = await Promise.all([
+        supabase.from('products').select('*').order('nama'),
+        supabase.from('suppliers').select('*').order('nama'),
+        supabase.from('purchases').select('*').order('tanggal', { ascending: false }),
+        supabase.from('debts').select('*').order('tanggal', { ascending: false }),
+        supabase.from('expenses').select('*').order('tanggal', { ascending: false }),
+        supabase.from('transactions').select('*').order('tanggal', { ascending: false }),
+        supabase.from('projects').select('*').order('created_at', { ascending: false }),
+      ]);
+
+      if (productsRes.data) {
+        setProducts(productsRes.data.map(p => ({
+          id: p.id,
+          nama: p.nama,
+          kategori: p.kategori,
+          hargaBeli: Number(p.harga_beli),
+          hargaJual: Number(p.harga_jual),
+          stok: p.stok,
+          satuan: p.satuan,
+          minStok: p.min_stok ?? undefined,
+        })));
+      }
+
+      if (suppliersRes.data) {
+        setSuppliers(suppliersRes.data.map(s => ({
+          id: s.id,
+          nama: s.nama,
+          alamat: s.alamat || '',
+          telepon: s.telepon || '',
+          email: s.email || '',
+          catatan: s.catatan || '',
+        })));
+      }
+
+      if (purchasesRes.data) {
+        setPurchases(purchasesRes.data.map(p => {
+          const itemsData = parsePurchaseItems(p.items);
+          return {
+            id: p.id,
+            supplierId: p.supplier_id || '',
+            supplier: p.supplier_name,
+            date: p.tanggal,
+            total: Number(p.total),
+            dp: Number(p.dp),
+            paymentMethod: p.metode_bayar as 'cash' | 'transfer',
+            status: p.status,
+            items: formatItemsString(itemsData),
+            itemsData,
+            notes: p.catatan || '',
+          };
+        }));
+      }
+
+      if (debtsRes.data) {
+        setDebts(debtsRes.data.map(d => ({
+          id: d.id,
+          type: d.type as 'utang' | 'piutang',
+          nama: d.nama,
+          total: Number(d.total),
+          sisa: Number(d.sisa),
+          tanggal: d.tanggal,
+          jatuhTempo: d.jatuh_tempo || '',
+          keterangan: d.keterangan || '',
+          payments: parsePayments(d.payments),
+          projectId: d.project_id ?? undefined,
+        })));
+      }
+
+      if (expensesRes.data) {
+        setExpenses(expensesRes.data.map(e => ({
+          id: e.id,
+          kategori: e.kategori,
+          deskripsi: e.deskripsi || '',
+          jumlah: Number(e.jumlah),
+          tanggal: e.tanggal,
+        })));
+      }
+
+      if (transactionsRes.data) {
+        setTransactions(transactionsRes.data.map(t => {
+          const itemsData = parseTransactionItems(t.items);
+          return {
+            id: t.id,
+            tanggal: t.tanggal,
+            pelanggan: t.pelanggan || 'Umum',
+            items: formatItemsString(itemsData),
+            itemsData,
+            subtotal: Number(t.subtotal),
+            diskon: Number(t.diskon),
+            diskonPersen: Number(t.diskon_persen),
+            total: Number(t.total),
+            bayar: Number(t.bayar),
+            kembalian: Number(t.kembalian),
+            metode: t.metode,
+            status: t.status,
+          };
+        }));
+      }
+
+      if (projectsRes.data) {
+        setProjects(projectsRes.data.map(p => ({
+          id: p.id,
+          namaProyek: p.nama_proyek,
+          pelanggan: p.pelanggan,
+          alamat: p.alamat || '',
+          telepon: p.telepon || '',
+          deskripsi: p.deskripsi || '',
+          nilaiKontrak: Number(p.nilai_kontrak),
+          diskonPersen: p.diskon_persen ? Number(p.diskon_persen) : undefined,
+          diskonNominal: p.diskon_nominal ? Number(p.diskon_nominal) : undefined,
+          dp: Number(p.dp),
+          biayaTenagaKerja: Number(p.biaya_tenaga_kerja || 0),
+          tanggalOrder: p.tanggal_order || '',
+          tanggalMulai: p.tanggal_mulai || '',
+          tanggalSelesai: p.tanggal_selesai || '',
+          status: p.status as Project['status'],
+          catatan: p.catatan || '',
+          materials: parseMaterials(p.materials),
+        })));
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      toast.error('Gagal memuat data');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
+
+  // Initial fetch
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.products, JSON.stringify(products));
-  }, [products]);
-  
+    fetchData();
+  }, [fetchData]);
+
+  // Setup realtime subscriptions
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.suppliers, JSON.stringify(suppliers));
-  }, [suppliers]);
-  
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.purchases, JSON.stringify(purchases));
-  }, [purchases]);
-  
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.debts, JSON.stringify(debts));
-  }, [debts]);
-  
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.expenses, JSON.stringify(expenses));
-  }, [expenses]);
-  
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.transactions, JSON.stringify(transactions));
-  }, [transactions]);
+    if (!user) return;
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.projects, JSON.stringify(projects));
-  }, [projects]);
+    const channel = supabase
+      .channel('db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'suppliers' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'purchases' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'debts' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => fetchData())
+      .subscribe();
 
-  // Product functions
-  const addProduct = (product: Omit<Product, 'id'>) => {
-    const id = `PRD${String(products.length + 1).padStart(3, '0')}`;
-    setProducts(prev => [...prev, { ...product, id }]);
-  };
-  
-  const updateProduct = (id: string, product: Partial<Product>) => {
-    setProducts(prev => prev.map(p => p.id === id ? { ...p, ...product } : p));
-  };
-  
-  const deleteProduct = (id: string) => {
-    setProducts(prev => prev.filter(p => p.id !== id));
-  };
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, fetchData]);
 
-  // Supplier functions
-  const addSupplier = (supplier: Omit<Supplier, 'id'>): Supplier => {
-    const id = `SUP${String(suppliers.length + 1).padStart(3, '0')}`;
-    const newSupplier = { ...supplier, id };
-    setSuppliers(prev => [...prev, newSupplier]);
-    return newSupplier;
-  };
-  
-  const updateSupplier = (id: string, supplier: Partial<Supplier>) => {
-    setSuppliers(prev => prev.map(s => s.id === id ? { ...s, ...supplier } : s));
-  };
-  
-  const deleteSupplier = (id: string) => {
-    setSuppliers(prev => prev.filter(s => s.id !== id));
+  // ==================== PRODUCTS ====================
+  const addProduct = async (product: Omit<Product, 'id'>) => {
+    if (!user) return;
+    const { error } = await supabase.from('products').insert({
+      user_id: user.id,
+      nama: product.nama,
+      kategori: product.kategori,
+      harga_beli: product.hargaBeli,
+      harga_jual: product.hargaJual,
+      stok: product.stok,
+      satuan: product.satuan,
+      min_stok: product.minStok ?? null,
+    });
+    if (error) {
+      toast.error('Gagal menambah produk');
+      console.error(error);
+    }
   };
 
-  // Purchase functions
-  const addPurchase = (purchase: Omit<Purchase, 'id'>) => {
-    const id = `PO${String(purchases.length + 1).padStart(3, '0')}`;
-    setPurchases(prev => [...prev, { ...purchase, id }]);
-  };
-  
-  const updatePurchase = (id: string, purchase: Partial<Purchase>) => {
-    setPurchases(prev => prev.map(p => p.id === id ? { ...p, ...purchase } : p));
-  };
-  
-  const deletePurchase = (id: string) => {
-    setPurchases(prev => prev.filter(p => p.id !== id));
+  const updateProduct = async (id: string, product: Partial<Product>) => {
+    const updateData: Record<string, unknown> = {};
+    if (product.nama !== undefined) updateData.nama = product.nama;
+    if (product.kategori !== undefined) updateData.kategori = product.kategori;
+    if (product.hargaBeli !== undefined) updateData.harga_beli = product.hargaBeli;
+    if (product.hargaJual !== undefined) updateData.harga_jual = product.hargaJual;
+    if (product.stok !== undefined) updateData.stok = product.stok;
+    if (product.satuan !== undefined) updateData.satuan = product.satuan;
+    if (product.minStok !== undefined) updateData.min_stok = product.minStok;
+
+    const { error } = await supabase.from('products').update(updateData).eq('id', id);
+    if (error) {
+      toast.error('Gagal memperbarui produk');
+      console.error(error);
+    }
   };
 
-  // Debt functions
-  const addDebt = (debt: Omit<DebtRecord, 'id' | 'payments'>) => {
-    const prefix = debt.type === 'utang' ? 'UTG' : 'PTG';
-    const count = debts.filter(d => d.type === debt.type).length + 1;
-    const id = `${prefix}${String(count).padStart(3, '0')}`;
-    setDebts(prev => [...prev, { ...debt, id, payments: [] }]);
-  };
-  
-  const updateDebt = (id: string, debt: Partial<DebtRecord>) => {
-    setDebts(prev => prev.map(d => d.id === id ? { ...d, ...debt } : d));
-  };
-  
-  const deleteDebt = (id: string) => {
-    setDebts(prev => prev.filter(d => d.id !== id));
-  };
-  
-  const addPayment = (debtId: string, payment: Omit<PaymentHistory, 'id'>) => {
-    setDebts(prev => prev.map(debt => {
-      if (debt.id !== debtId) return debt;
-      const paymentId = `PAY${String(debt.payments.length + 1).padStart(3, '0')}`;
-      const newPayment = { ...payment, id: paymentId };
-      const newSisa = debt.sisa - payment.jumlah;
-      return {
-        ...debt,
-        sisa: Math.max(0, newSisa),
-        payments: [...debt.payments, newPayment],
-      };
-    }));
+  const deleteProduct = async (id: string) => {
+    const { error } = await supabase.from('products').delete().eq('id', id);
+    if (error) {
+      toast.error('Gagal menghapus produk');
+      console.error(error);
+    }
   };
 
-  // Expense functions
-  const addExpense = (expense: Omit<Expense, 'id'>) => {
-    const id = `OP${String(expenses.length + 1).padStart(3, '0')}`;
-    setExpenses(prev => [...prev, { ...expense, id }]);
-  };
-  
-  const updateExpense = (id: string, expense: Partial<Expense>) => {
-    setExpenses(prev => prev.map(e => e.id === id ? { ...e, ...expense } : e));
-  };
-  
-  const deleteExpense = (id: string) => {
-    setExpenses(prev => prev.filter(e => e.id !== id));
-  };
-
-  // Transaction functions
-  const addTransaction = (transaction: Omit<Transaction, 'id'>) => {
-    const id = `TRX${String(transactions.length + 1).padStart(3, '0')}`;
-    setTransactions(prev => [...prev, { ...transaction, id }]);
-  };
-  
-  const updateTransaction = (id: string, transaction: Partial<Transaction>) => {
-    setTransactions(prev => prev.map(t => t.id === id ? { ...t, ...transaction } : t));
-  };
-  
-  const deleteTransaction = (id: string) => {
-    setTransactions(prev => prev.filter(t => t.id !== id));
+  // ==================== SUPPLIERS ====================
+  const addSupplier = async (supplier: Omit<Supplier, 'id'>): Promise<Supplier> => {
+    if (!user) throw new Error('Not authenticated');
+    const { data, error } = await supabase.from('suppliers').insert({
+      user_id: user.id,
+      nama: supplier.nama,
+      alamat: supplier.alamat,
+      telepon: supplier.telepon,
+      email: supplier.email,
+      catatan: supplier.catatan,
+    }).select().single();
+    
+    if (error) {
+      toast.error('Gagal menambah supplier');
+      throw error;
+    }
+    return {
+      id: data.id,
+      nama: data.nama,
+      alamat: data.alamat || '',
+      telepon: data.telepon || '',
+      email: data.email || '',
+      catatan: data.catatan || '',
+    };
   };
 
-  // Project functions
-  const addProject = (project: Omit<Project, 'id'>) => {
-    const id = `PRJ${String(projects.length + 1).padStart(3, '0')}`;
-    setProjects(prev => [...prev, { ...project, id }]);
-  };
-  
-  const updateProject = (id: string, project: Partial<Project>) => {
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, ...project } : p));
-  };
-  
-  const deleteProject = (id: string) => {
-    setProjects(prev => prev.filter(p => p.id !== id));
+  const updateSupplier = async (id: string, supplier: Partial<Supplier>) => {
+    const { error } = await supabase.from('suppliers').update(supplier).eq('id', id);
+    if (error) {
+      toast.error('Gagal memperbarui supplier');
+      console.error(error);
+    }
   };
 
-  // Project-Debt relation functions
-  const getProjectDebts = (projectId: string): DebtRecord[] => {
-    return debts.filter(d => d.projectId === projectId);
+  const deleteSupplier = async (id: string) => {
+    const { error } = await supabase.from('suppliers').delete().eq('id', id);
+    if (error) {
+      toast.error('Gagal menghapus supplier');
+      console.error(error);
+    }
   };
 
-  const createProjectDebt = (projectId: string, projectName: string, amount: number, dueDate: string) => {
-    const prefix = 'PTG';
-    const count = debts.filter(d => d.type === 'piutang').length + 1;
-    const id = `${prefix}${String(count).padStart(3, '0')}`;
-    const newDebt: DebtRecord = {
-      id,
+  // ==================== PURCHASES ====================
+  const addPurchase = async (purchase: Omit<Purchase, 'id'>) => {
+    if (!user) return;
+    
+    // Parse items string to JSON array for database trigger
+    const itemsData: PurchaseItem[] = purchase.itemsData || [];
+    
+    const { error } = await supabase.from('purchases').insert({
+      user_id: user.id,
+      supplier_id: purchase.supplierId || null,
+      supplier_name: purchase.supplier,
+      tanggal: purchase.date,
+      total: purchase.total,
+      dp: purchase.dp,
+      metode_bayar: purchase.paymentMethod,
+      status: purchase.status,
+      items: itemsData as unknown as Json,
+      catatan: purchase.notes,
+    });
+    if (error) {
+      toast.error('Gagal menambah pembelian');
+      console.error(error);
+    }
+  };
+
+  const updatePurchase = async (id: string, purchase: Partial<Purchase>) => {
+    const updateData: Record<string, unknown> = {};
+    if (purchase.supplierId !== undefined) updateData.supplier_id = purchase.supplierId || null;
+    if (purchase.supplier !== undefined) updateData.supplier_name = purchase.supplier;
+    if (purchase.date !== undefined) updateData.tanggal = purchase.date;
+    if (purchase.total !== undefined) updateData.total = purchase.total;
+    if (purchase.dp !== undefined) updateData.dp = purchase.dp;
+    if (purchase.paymentMethod !== undefined) updateData.metode_bayar = purchase.paymentMethod;
+    if (purchase.status !== undefined) updateData.status = purchase.status;
+    if (purchase.itemsData !== undefined) updateData.items = purchase.itemsData as unknown as Json;
+    if (purchase.notes !== undefined) updateData.catatan = purchase.notes;
+
+    const { error } = await supabase.from('purchases').update(updateData).eq('id', id);
+    if (error) {
+      toast.error('Gagal memperbarui pembelian');
+      console.error(error);
+    }
+  };
+
+  const deletePurchase = async (id: string) => {
+    const { error } = await supabase.from('purchases').delete().eq('id', id);
+    if (error) {
+      toast.error('Gagal menghapus pembelian');
+      console.error(error);
+    }
+  };
+
+  // ==================== DEBTS ====================
+  const addDebt = async (debt: Omit<DebtRecord, 'id' | 'payments'>) => {
+    if (!user) return;
+    const { error } = await supabase.from('debts').insert({
+      user_id: user.id,
+      type: debt.type,
+      nama: debt.nama,
+      total: debt.total,
+      sisa: debt.sisa,
+      tanggal: debt.tanggal,
+      jatuh_tempo: debt.jatuhTempo || null,
+      keterangan: debt.keterangan,
+      project_id: debt.projectId || null,
+      payments: [] as unknown as Json,
+    });
+    if (error) {
+      toast.error('Gagal menambah utang/piutang');
+      console.error(error);
+    }
+  };
+
+  const updateDebt = async (id: string, debt: Partial<DebtRecord>) => {
+    const updateData: Record<string, unknown> = {};
+    if (debt.type !== undefined) updateData.type = debt.type;
+    if (debt.nama !== undefined) updateData.nama = debt.nama;
+    if (debt.total !== undefined) updateData.total = debt.total;
+    if (debt.sisa !== undefined) updateData.sisa = debt.sisa;
+    if (debt.tanggal !== undefined) updateData.tanggal = debt.tanggal;
+    if (debt.jatuhTempo !== undefined) updateData.jatuh_tempo = debt.jatuhTempo;
+    if (debt.keterangan !== undefined) updateData.keterangan = debt.keterangan;
+    if (debt.payments !== undefined) updateData.payments = debt.payments as unknown as Json;
+    if (debt.projectId !== undefined) updateData.project_id = debt.projectId;
+
+    const { error } = await supabase.from('debts').update(updateData).eq('id', id);
+    if (error) {
+      toast.error('Gagal memperbarui utang/piutang');
+      console.error(error);
+    }
+  };
+
+  const deleteDebt = async (id: string) => {
+    const { error } = await supabase.from('debts').delete().eq('id', id);
+    if (error) {
+      toast.error('Gagal menghapus utang/piutang');
+      console.error(error);
+    }
+  };
+
+  const addPayment = async (debtId: string, payment: Omit<PaymentHistory, 'id'>) => {
+    const debt = debts.find(d => d.id === debtId);
+    if (!debt) return;
+
+    const newPayment: PaymentHistory = {
+      ...payment,
+      id: `PAY${Date.now()}`,
+    };
+    const updatedPayments = [...debt.payments, newPayment];
+    const newSisa = debt.sisa - payment.jumlah;
+
+    await updateDebt(debtId, { 
+      payments: updatedPayments,
+      sisa: Math.max(0, newSisa),
+    });
+  };
+
+  // ==================== EXPENSES ====================
+  const addExpense = async (expense: Omit<Expense, 'id'>) => {
+    if (!user) return;
+    const { error } = await supabase.from('expenses').insert({
+      user_id: user.id,
+      kategori: expense.kategori,
+      deskripsi: expense.deskripsi,
+      jumlah: expense.jumlah,
+      tanggal: expense.tanggal,
+    });
+    if (error) {
+      toast.error('Gagal menambah pengeluaran');
+      console.error(error);
+    }
+  };
+
+  const updateExpense = async (id: string, expense: Partial<Expense>) => {
+    const { error } = await supabase.from('expenses').update(expense).eq('id', id);
+    if (error) {
+      toast.error('Gagal memperbarui pengeluaran');
+      console.error(error);
+    }
+  };
+
+  const deleteExpense = async (id: string) => {
+    const { error } = await supabase.from('expenses').delete().eq('id', id);
+    if (error) {
+      toast.error('Gagal menghapus pengeluaran');
+      console.error(error);
+    }
+  };
+
+  // ==================== TRANSACTIONS ====================
+  const addTransaction = async (transaction: Omit<Transaction, 'id'>) => {
+    if (!user) return;
+    
+    // Build items data for database trigger
+    const itemsData: TransactionItem[] = transaction.itemsData || [];
+    
+    const { error } = await supabase.from('transactions').insert({
+      user_id: user.id,
+      tanggal: transaction.tanggal,
+      pelanggan: transaction.pelanggan || 'Umum',
+      items: itemsData as unknown as Json,
+      subtotal: transaction.subtotal || transaction.total,
+      diskon: transaction.diskon || 0,
+      diskon_persen: transaction.diskonPersen || 0,
+      total: transaction.total,
+      bayar: transaction.bayar,
+      kembalian: transaction.kembalian,
+      metode: transaction.metode,
+      status: transaction.status,
+    });
+    if (error) {
+      toast.error('Gagal menyimpan transaksi');
+      console.error(error);
+    }
+  };
+
+  const updateTransaction = async (id: string, transaction: Partial<Transaction>) => {
+    const updateData: Record<string, unknown> = {};
+    if (transaction.tanggal !== undefined) updateData.tanggal = transaction.tanggal;
+    if (transaction.pelanggan !== undefined) updateData.pelanggan = transaction.pelanggan;
+    if (transaction.itemsData !== undefined) updateData.items = transaction.itemsData as unknown as Json;
+    if (transaction.subtotal !== undefined) updateData.subtotal = transaction.subtotal;
+    if (transaction.diskon !== undefined) updateData.diskon = transaction.diskon;
+    if (transaction.diskonPersen !== undefined) updateData.diskon_persen = transaction.diskonPersen;
+    if (transaction.total !== undefined) updateData.total = transaction.total;
+    if (transaction.bayar !== undefined) updateData.bayar = transaction.bayar;
+    if (transaction.kembalian !== undefined) updateData.kembalian = transaction.kembalian;
+    if (transaction.metode !== undefined) updateData.metode = transaction.metode;
+    if (transaction.status !== undefined) updateData.status = transaction.status;
+
+    const { error } = await supabase.from('transactions').update(updateData).eq('id', id);
+    if (error) {
+      toast.error('Gagal memperbarui transaksi');
+      console.error(error);
+    }
+  };
+
+  const deleteTransaction = async (id: string) => {
+    const { error } = await supabase.from('transactions').delete().eq('id', id);
+    if (error) {
+      toast.error('Gagal menghapus transaksi');
+      console.error(error);
+    }
+  };
+
+  // ==================== PROJECTS ====================
+  const addProject = async (project: Omit<Project, 'id'>) => {
+    if (!user) return;
+    const { error } = await supabase.from('projects').insert({
+      user_id: user.id,
+      nama_proyek: project.namaProyek,
+      pelanggan: project.pelanggan,
+      alamat: project.alamat,
+      telepon: project.telepon,
+      deskripsi: project.deskripsi,
+      nilai_kontrak: project.nilaiKontrak,
+      diskon_persen: project.diskonPersen || 0,
+      diskon_nominal: project.diskonNominal || 0,
+      dp: project.dp,
+      biaya_tenaga_kerja: project.biayaTenagaKerja,
+      tanggal_order: project.tanggalOrder || null,
+      tanggal_mulai: project.tanggalMulai || null,
+      tanggal_selesai: project.tanggalSelesai || null,
+      status: project.status,
+      catatan: project.catatan,
+      materials: project.materials as unknown as Json,
+    });
+    if (error) {
+      toast.error('Gagal menambah proyek');
+      console.error(error);
+    }
+  };
+
+  const updateProject = async (id: string, project: Partial<Project>) => {
+    const updateData: Record<string, unknown> = {};
+    if (project.namaProyek !== undefined) updateData.nama_proyek = project.namaProyek;
+    if (project.pelanggan !== undefined) updateData.pelanggan = project.pelanggan;
+    if (project.alamat !== undefined) updateData.alamat = project.alamat;
+    if (project.telepon !== undefined) updateData.telepon = project.telepon;
+    if (project.deskripsi !== undefined) updateData.deskripsi = project.deskripsi;
+    if (project.nilaiKontrak !== undefined) updateData.nilai_kontrak = project.nilaiKontrak;
+    if (project.diskonPersen !== undefined) updateData.diskon_persen = project.diskonPersen;
+    if (project.diskonNominal !== undefined) updateData.diskon_nominal = project.diskonNominal;
+    if (project.dp !== undefined) updateData.dp = project.dp;
+    if (project.biayaTenagaKerja !== undefined) updateData.biaya_tenaga_kerja = project.biayaTenagaKerja;
+    if (project.tanggalOrder !== undefined) updateData.tanggal_order = project.tanggalOrder || null;
+    if (project.tanggalMulai !== undefined) updateData.tanggal_mulai = project.tanggalMulai || null;
+    if (project.tanggalSelesai !== undefined) updateData.tanggal_selesai = project.tanggalSelesai || null;
+    if (project.status !== undefined) updateData.status = project.status;
+    if (project.catatan !== undefined) updateData.catatan = project.catatan;
+    if (project.materials !== undefined) updateData.materials = project.materials as unknown as Json;
+
+    const { error } = await supabase.from('projects').update(updateData).eq('id', id);
+    if (error) {
+      toast.error('Gagal memperbarui proyek');
+      console.error(error);
+    }
+  };
+
+  const deleteProject = async (id: string) => {
+    const { error } = await supabase.from('projects').delete().eq('id', id);
+    if (error) {
+      toast.error('Gagal menghapus proyek');
+      console.error(error);
+    }
+  };
+
+  // Project debt helpers
+  const getProjectDebts = (projectId: string) => debts.filter(d => d.projectId === projectId);
+  
+  const createProjectDebt = async (projectId: string, projectName: string, amount: number, dueDate: string) => {
+    await addDebt({
       type: 'piutang',
       nama: projectName,
       total: amount,
       sisa: amount,
       tanggal: new Date().toISOString().split('T')[0],
       jatuhTempo: dueDate,
-      keterangan: `Piutang proyek: ${projectName}`,
-      payments: [],
+      keterangan: `Piutang dari proyek: ${projectName}`,
       projectId,
-    };
-    setDebts(prev => [...prev, newDebt]);
+    });
   };
 
   return (
     <DataContext.Provider value={{
-      products, setProducts, addProduct, updateProduct, deleteProduct,
-      suppliers, setSuppliers, addSupplier, updateSupplier, deleteSupplier,
-      purchases, setPurchases, addPurchase, updatePurchase, deletePurchase,
-      debts, setDebts, addDebt, updateDebt, deleteDebt, addPayment,
-      expenses, setExpenses, addExpense, updateExpense, deleteExpense,
-      transactions, setTransactions, addTransaction, updateTransaction, deleteTransaction,
-      projects, setProjects, addProject, updateProject, deleteProject,
-      getProjectDebts, createProjectDebt,
+      isLoading,
+      products,
+      addProduct,
+      updateProduct,
+      deleteProduct,
+      suppliers,
+      addSupplier,
+      updateSupplier,
+      deleteSupplier,
+      purchases,
+      addPurchase,
+      updatePurchase,
+      deletePurchase,
+      debts,
+      addDebt,
+      updateDebt,
+      deleteDebt,
+      addPayment,
+      expenses,
+      addExpense,
+      updateExpense,
+      deleteExpense,
+      transactions,
+      addTransaction,
+      updateTransaction,
+      deleteTransaction,
+      projects,
+      addProject,
+      updateProject,
+      deleteProject,
+      getProjectDebts,
+      createProjectDebt,
+      refreshData: fetchData,
     }}>
       {children}
     </DataContext.Provider>

@@ -115,9 +115,9 @@ export default function UtangPiutang() {
     setShowDeleteDialog(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (recordToDelete) {
-      deleteDebt(recordToDelete.id);
+      await deleteDebt(recordToDelete.id);
       toast.success(`Data berhasil dihapus`);
       setShowDeleteDialog(false);
       setRecordToDelete(null);
@@ -137,7 +137,7 @@ export default function UtangPiutang() {
     setShowHistoryDialog(true);
   };
 
-  const confirmPayment = () => {
+  const confirmPayment = async () => {
     if (!selectedRecord || !paymentAmount) return;
 
     const amount = parseInt(paymentAmount);
@@ -153,7 +153,7 @@ export default function UtangPiutang() {
       return;
     }
 
-    addPayment(selectedRecord.id, {
+    await addPayment(selectedRecord.id, {
       tanggal: new Date().toISOString().split('T')[0],
       jumlah: amount,
       metode: paymentMethod,
@@ -164,14 +164,14 @@ export default function UtangPiutang() {
     setShowPaymentDialog(false);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.nama || !formData.total || !formData.jatuhTempo) {
       toast.error('Lengkapi semua field yang diperlukan');
       return;
     }
 
     if (editingRecord) {
-      updateDebt(editingRecord.id, {
+      await updateDebt(editingRecord.id, {
         nama: formData.nama,
         total: parseInt(formData.total),
         jatuhTempo: formData.jatuhTempo,
@@ -179,7 +179,7 @@ export default function UtangPiutang() {
       });
       toast.success('Data berhasil diperbarui');
     } else {
-      addDebt({
+      await addDebt({
         type: activeTab,
         nama: formData.nama,
         total: parseInt(formData.total),
@@ -195,7 +195,7 @@ export default function UtangPiutang() {
 
   const getStatus = (record: DebtRecord) => record.sisa <= 0 ? 'Lunas' : 'Belum Lunas';
 
-  const handleAddProjectDebt = () => {
+  const handleAddProjectDebt = async () => {
     if (!selectedProjectId || !projectDueDate) {
       toast.error('Pilih proyek dan tanggal jatuh tempo');
       return;
@@ -204,7 +204,7 @@ export default function UtangPiutang() {
     if (!project) return;
     
     const sisaProyek = project.nilaiKontrak - project.dp;
-    createProjectDebt(project.id, `${project.namaProyek} - ${project.pelanggan}`, sisaProyek, projectDueDate);
+    await createProjectDebt(project.id, `${project.namaProyek} - ${project.pelanggan}`, sisaProyek, projectDueDate);
     toast.success(`Piutang proyek "${project.namaProyek}" berhasil ditambahkan`);
     setShowProjectDebtDialog(false);
     setSelectedProjectId('');

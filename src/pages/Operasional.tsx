@@ -125,23 +125,23 @@ export default function Operasional() {
     setShowDeleteDialog(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (expenseToDelete) {
-      deleteExpense(expenseToDelete.id);
+      await deleteExpense(expenseToDelete.id);
       toast.success(`Biaya "${expenseToDelete.deskripsi}" berhasil dihapus`);
       setShowDeleteDialog(false);
       setExpenseToDelete(null);
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.kategori || !formData.deskripsi || !formData.jumlah || !formData.tanggal) {
       toast.error('Lengkapi semua field');
       return;
     }
 
     if (editingExpense) {
-      updateExpense(editingExpense.id, {
+      await updateExpense(editingExpense.id, {
         kategori: formData.kategori,
         deskripsi: formData.deskripsi,
         jumlah: parseInt(formData.jumlah),
@@ -149,7 +149,7 @@ export default function Operasional() {
       });
       toast.success('Biaya berhasil diperbarui');
     } else {
-      addExpense({
+      await addExpense({
         kategori: formData.kategori,
         deskripsi: formData.deskripsi,
         jumlah: parseInt(formData.jumlah),

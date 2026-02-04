@@ -227,51 +227,55 @@ export default function Pembelian() {
   const handleView = (purchase: Purchase) => { setSelectedPurchase(purchase); setShowDetailDialog(true); };
   const handleDelete = (purchase: Purchase) => { setPurchaseToDelete(purchase); setShowDeleteDialog(true); };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (purchaseToDelete) {
-      deletePurchase(purchaseToDelete.id);
+      await deletePurchase(purchaseToDelete.id);
       toast.success(`Pembelian ${purchaseToDelete.id} berhasil dihapus`);
       setShowDeleteDialog(false);
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.supplier || !formData.date || purchaseItems.length === 0) {
       toast.error('Lengkapi supplier, tanggal, dan minimal 1 item');
       return;
     }
     
-    // Build items string
+    // Build items string for display
     const itemsStr = purchaseItems.map(item => 
       `${item.nama} x${item.qty} ${item.satuan} @${formatRupiah(item.harga)}`
     ).join(', ');
     
+    // Build items data for database trigger
+    const itemsData = purchaseItems.map(item => ({
+      productId: item.productId,
+      nama: item.nama,
+      qty: item.qty,
+      satuan: item.satuan,
+      harga: item.harga,
+      isManual: item.isManual,
+    }));
+    
     const totalAmount = calculatedTotal;
     
     if (editingPurchase) {
-      updatePurchase(editingPurchase.id, {
+      await updatePurchase(editingPurchase.id, {
         supplierId: formData.supplierId, supplier: formData.supplier, date: formData.date,
         total: totalAmount, dp: parseInt(formData.dp) || 0,
-        paymentMethod: formData.paymentMethod, status: formData.status, items: itemsStr, notes: formData.notes,
+        paymentMethod: formData.paymentMethod, status: formData.status, items: itemsStr, 
+        itemsData, notes: formData.notes,
       });
       toast.success('Pembelian berhasil diperbarui');
     } else {
-      addPurchase({
+      await addPurchase({
         supplierId: formData.supplierId, supplier: formData.supplier, date: formData.date,
         total: totalAmount, dp: parseInt(formData.dp) || 0,
-        paymentMethod: formData.paymentMethod, status: formData.status, items: itemsStr, notes: formData.notes,
+        paymentMethod: formData.paymentMethod, status: formData.status, items: itemsStr, 
+        itemsData, notes: formData.notes,
       });
       
-      // Update stock for non-manual items when purchase is completed
+      // NOTE: Stock is now automatically updated by database trigger when status = 'Selesai'
       if (formData.status === 'Selesai') {
-        purchaseItems.forEach(item => {
-          if (!item.isManual && item.productId) {
-            const product = products.find(p => p.id === item.productId);
-            if (product) {
-              updateProduct(item.productId, { stok: product.stok + item.qty });
-            }
-          }
-        });
         toast.success('Pembelian berhasil ditambahkan & stok diperbarui');
       } else {
         toast.success('Pembelian berhasil ditambahkan');
@@ -295,24 +299,24 @@ export default function Pembelian() {
 
   const handleDeleteSupplier = (supplier: Supplier) => { setSupplierToDelete(supplier); setShowDeleteSupplierDialog(true); };
 
-  const confirmDeleteSupplier = () => {
+  const confirmDeleteSupplier = async () => {
     if (supplierToDelete) {
-      deleteSupplier(supplierToDelete.id);
+      await deleteSupplier(supplierToDelete.id);
       toast.success(`Supplier "${supplierToDelete.nama}" berhasil dihapus`);
       setShowDeleteSupplierDialog(false);
     }
   };
 
-  const handleSaveSupplier = () => {
+  const handleSaveSupplier = async () => {
     if (!supplierFormData.nama || !supplierFormData.telepon) {
       toast.error('Nama dan telepon wajib diisi');
       return;
     }
     if (editingSupplier) {
-      updateSupplier(editingSupplier.id, supplierFormData);
+      await updateSupplier(editingSupplier.id, supplierFormData);
       toast.success('Supplier berhasil diperbarui');
     } else {
-      addSupplier(supplierFormData);
+      await addSupplier(supplierFormData);
       toast.success('Supplier berhasil ditambahkan');
     }
     setShowSupplierDialog(false);

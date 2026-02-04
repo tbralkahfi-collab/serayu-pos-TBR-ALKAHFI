@@ -148,10 +148,11 @@ export default function Transaksi() {
     setShowDeleteDialog(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (transactionToDelete) {
-      deleteTransaction(transactionToDelete.id);
-      toast.success(`Transaksi ${transactionToDelete.id} berhasil dihapus`);
+      // NOTE: Stock reversal is automatically handled by database trigger
+      await deleteTransaction(transactionToDelete.id);
+      toast.success(`Transaksi ${transactionToDelete.id} berhasil dihapus & stok dikembalikan`);
       setShowDeleteDialog(false);
       setTransactionToDelete(null);
     }
