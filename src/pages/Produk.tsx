@@ -98,16 +98,16 @@ export default function Produk() {
     setShowDeleteDialog(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (productToDelete) {
-      deleteProduct(productToDelete.id);
+      await deleteProduct(productToDelete.id);
       toast.success(`Produk ${productToDelete.nama} berhasil dihapus`);
       setShowDeleteDialog(false);
       setProductToDelete(null);
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.nama || !formData.hargaBeli || !formData.hargaJual || !formData.stok || !formData.kategori || !formData.satuan) {
       toast.error('Semua field harus diisi');
       return;
@@ -122,7 +122,7 @@ export default function Produk() {
     }
 
     if (editingProduct) {
-      updateProduct(editingProduct.id, {
+      await updateProduct(editingProduct.id, {
         nama: formData.nama,
         hargaBeli,
         hargaJual,
@@ -132,7 +132,7 @@ export default function Produk() {
       });
       toast.success('Produk berhasil diperbarui');
     } else {
-      addProduct({
+      await addProduct({
         nama: formData.nama,
         hargaBeli,
         hargaJual,

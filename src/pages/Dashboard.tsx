@@ -36,7 +36,7 @@ import {
 export default function Dashboard() {
   const { storeInfo, stockSettings } = useStore();
   const { user } = useAuth();
-  const { products, transactions, expenses, projects, debts } = useData();
+  const { products, transactions, expenses, projects, debts, isLoading } = useData();
   const navigate = useNavigate();
 
   const currentHour = new Date().getHours();
