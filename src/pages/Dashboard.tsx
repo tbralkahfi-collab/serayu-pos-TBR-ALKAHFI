@@ -62,8 +62,10 @@ export default function Dashboard() {
 
     // Filter transactions by period - handle both date formats
     const getTransactionDate = (t: { tanggal: string }) => {
-      // Handle format "2024-01-15 14:30" or "2024-01-15"
-      return t.tanggal.split(' ')[0];
+      const raw = t.tanggal || '';
+      // Handle ISO ("2026-02-05T01:23:45Z") and legacy ("2026-02-05 08:34") formats
+      if (raw.includes('T')) return raw.split('T')[0];
+      return raw.split(' ')[0];
     };
 
     const todayTransactions = transactions.filter(t => getTransactionDate(t) === today);
@@ -147,7 +149,14 @@ export default function Dashboard() {
       id: t.id,
       customer: t.pelanggan,
       amount: t.total,
-      time: t.tanggal.split(' ')[1] || t.tanggal,
+      time: t.tanggal.includes('T')
+        ? (() => {
+            const d = new Date(t.tanggal);
+            return isNaN(d.getTime())
+              ? t.tanggal
+              : d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+          })()
+        : (t.tanggal.split(' ')[1] || t.tanggal),
       items: t.items,
     }));
   }, [transactions]);
