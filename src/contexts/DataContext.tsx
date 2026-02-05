@@ -211,6 +211,26 @@ const parseTransactionItems = (items: Json): TransactionItem[] => {
   return items as unknown as TransactionItem[];
 };
 
+// Normalize timestamp input for timestamptz columns.
+// Fixes locale time separator like "08.34" -> "08:34".
+const normalizeTimestamptzInput = (value: string): string => {
+  const v = (value || '').trim();
+  if (!v) return v;
+  // If it's already ISO-ish, let it pass
+  if (v.includes('T')) return v;
+
+  // Match: YYYY-MM-DD HH.mm or YYYY-MM-DD HH:mm or with seconds
+  const m = v.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{1,2})[.:](\d{2})(?::(\d{2}))?$/);
+  if (m) {
+    const [, date, hh, mm, ss] = m;
+    const hh2 = hh.padStart(2, '0');
+    return `${date} ${hh2}:${mm}${ss ? `:${ss}` : ''}`;
+  }
+
+  // Fallback replace for the common dot separator
+  return v.replace(/(\d{4}-\d{2}-\d{2})\s+(\d{2})\.(\d{2})/, '$1 $2:$3');
+};
+
 // Helper to format items string from items data
 const formatItemsString = (itemsData: PurchaseItem[] | TransactionItem[]): string => {
   return itemsData.map(item => `${item.nama} x${item.qty}`).join(', ');
@@ -654,7 +674,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     
     const { error } = await supabase.from('transactions').insert({
       user_id: user.id,
-      tanggal: transaction.tanggal,
+      tanggal: normalizeTimestamptzInput(transaction.tanggal),
       pelanggan: transaction.pelanggan || 'Umum',
       items: itemsData as unknown as Json,
       subtotal: transaction.subtotal || transaction.total,
@@ -674,7 +694,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const updateTransaction = async (id: string, transaction: Partial<Transaction>) => {
     const updateData: Record<string, unknown> = {};
-    if (transaction.tanggal !== undefined) updateData.tanggal = transaction.tanggal;
+    if (transaction.tanggal !== undefined) updateData.tanggal = normalizeTimestamptzInput(transaction.tanggal);
     if (transaction.pelanggan !== undefined) updateData.pelanggan = transaction.pelanggan;
     if (transaction.itemsData !== undefined) updateData.items = transaction.itemsData as unknown as Json;
     if (transaction.subtotal !== undefined) updateData.subtotal = transaction.subtotal;

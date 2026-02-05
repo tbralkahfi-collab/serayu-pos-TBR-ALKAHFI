@@ -294,7 +294,8 @@ export default function Kasir() {
     const receipt = generateReceipt();
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
-    const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    // Avoid locale time separator that can be '.' (e.g. "08.34"), which breaks timestamptz parsing
+    const timeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
     
     // Build items data for database trigger (stock will be auto-updated by trigger)
     const itemsData = cart.map(item => ({
