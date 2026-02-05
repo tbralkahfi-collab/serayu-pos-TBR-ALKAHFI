@@ -230,6 +230,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // Fetch all data
   const fetchData = useCallback(async () => {
     if (!user) {
+      console.log('[DataContext] No user, clearing data');
       setProducts([]);
       setSuppliers([]);
       setPurchases([]);
@@ -242,6 +243,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
 
     setIsLoading(true);
+    console.log('[DataContext] Fetching data for user:', user.id);
     try {
       const [
         productsRes,
@@ -260,6 +262,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         supabase.from('transactions').select('*').order('tanggal', { ascending: false }),
         supabase.from('projects').select('*').order('created_at', { ascending: false }),
       ]);
+
+      console.log('[DataContext] Products response:', productsRes.error || `${productsRes.data?.length || 0} items`);
+      console.log('[DataContext] Transactions response:', transactionsRes.error || `${transactionsRes.data?.length || 0} items`);
+      console.log('[DataContext] Purchases response:', purchasesRes.error || `${purchasesRes.data?.length || 0} items`);
 
       if (productsRes.data) {
         setProducts(productsRes.data.map(p => ({
