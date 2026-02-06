@@ -1,1 +1,4 @@
 project_id = "qbibqjphzxamizlduvhy"
+
+[functions.auto-backup]
+verify_jwt = false
