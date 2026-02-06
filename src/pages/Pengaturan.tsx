@@ -7,6 +7,8 @@ import { Switch } from '@/components/ui/switch';
 import { useStore } from '@/contexts/StoreContext';
 import { useData } from '@/contexts/DataContext';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
+import { id as localeId } from 'date-fns/locale';
 import {
   Store,
   Upload,
@@ -27,6 +29,11 @@ import {
   RefreshCw,
   HardDrive,
   Calendar,
+  Cloud,
+  CloudOff,
+  History,
+  RotateCcw,
+  Shield,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -41,23 +48,24 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-
-const STORAGE_KEYS = {
-  products: 'serayu_products',
-  suppliers: 'serayu_suppliers',
-  purchases: 'serayu_purchases',
-  debts: 'serayu_debts',
-  expenses: 'serayu_expenses',
-  transactions: 'serayu_transactions',
-  projects: 'serayu_projects',
-  storeInfo: 'serayu_store_info',
-  printerSettings: 'serayu_printer_settings',
-  stockSettings: 'serayu_stock_settings',
-};
+import { Badge } from '@/components/ui/badge';
 
 export default function Pengaturan() {
-  const { storeInfo, printerSettings, stockSettings, updateStoreInfo, updatePrinterSettings, updateStockSettings } = useStore();
-  const { products, suppliers, purchases, debts, expenses, transactions, projects } = useData();
+  const { 
+    storeInfo, 
+    printerSettings, 
+    stockSettings, 
+    backups,
+    isLoading: isStoreLoading,
+    isSyncing,
+    updateStoreInfo, 
+    updatePrinterSettings, 
+    updateStockSettings,
+    triggerManualBackup,
+    restoreBackup,
+    fetchBackups,
+  } = useStore();
+  const { products, suppliers, purchases, debts, expenses, transactions, projects, refreshData } = useData();
   
   const [formData, setFormData] = useState({
     name: storeInfo.name,
@@ -66,6 +74,8 @@ export default function Pengaturan() {
   });
   const [previewLogo, setPreviewLogo] = useState<string | null>(storeInfo.logo);
   const [isUploading, setIsUploading] = useState(false);
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
   const [minStock, setMinStock] = useState(stockSettings.minStockAlert.toString());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -75,37 +85,25 @@ export default function Pengaturan() {
   const [localPaperWidth, setLocalPaperWidth] = useState(printerSettings.paperWidth);
   const [localAutoPrint, setLocalAutoPrint] = useState(printerSettings.autoPrint);
 
-  // Calculate storage usage
-  const storageInfo = React.useMemo(() => {
-    let totalSize = 0;
-    const details: { key: string; size: number; count: number }[] = [];
-    
-    Object.entries(STORAGE_KEYS).forEach(([name, key]) => {
-      const data = localStorage.getItem(key);
-      const size = data ? new Blob([data]).size : 0;
-      let count = 0;
-      
-      try {
-        const parsed = JSON.parse(data || '[]');
-        count = Array.isArray(parsed) ? parsed.length : 1;
-      } catch {
-        count = 0;
-      }
-      
-      totalSize += size;
-      details.push({ key: name, size, count });
+  // Sync form data when store info changes
+  React.useEffect(() => {
+    setFormData({
+      name: storeInfo.name,
+      address: storeInfo.address,
+      phone: storeInfo.phone,
     });
-    
-    return { totalSize, details };
-  }, [products, suppliers, purchases, debts, expenses, transactions, projects]);
+    setPreviewLogo(storeInfo.logo);
+  }, [storeInfo]);
 
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
+  React.useEffect(() => {
+    setLocalPrinterType(printerSettings.type);
+    setLocalPaperWidth(printerSettings.paperWidth);
+    setLocalAutoPrint(printerSettings.autoPrint);
+  }, [printerSettings]);
+
+  React.useEffect(() => {
+    setMinStock(stockSettings.minStockAlert.toString());
+  }, [stockSettings]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -187,16 +185,16 @@ export default function Pengaturan() {
     }
   };
 
-  const handleSave = () => {
-    updateStoreInfo({
+  const handleSave = async () => {
+    await updateStoreInfo({
       ...formData,
       logo: previewLogo,
     });
     toast.success('Pengaturan toko berhasil disimpan');
   };
 
-  const handleSavePrinter = () => {
-    updatePrinterSettings({ 
+  const handleSavePrinter = async () => {
+    await updatePrinterSettings({ 
       type: localPrinterType, 
       paperWidth: localPaperWidth,
       autoPrint: localAutoPrint 
@@ -204,29 +202,56 @@ export default function Pengaturan() {
     toast.success('Pengaturan printer berhasil disimpan');
   };
 
-  const handleSaveStock = () => {
-    updateStockSettings({ minStockAlert: parseInt(minStock) || 10 });
+  const handleSaveStock = async () => {
+    await updateStockSettings({ minStockAlert: parseInt(minStock) || 10 });
     toast.success('Pengaturan stok berhasil disimpan');
   };
 
+  const handleManualBackup = async () => {
+    setIsBackingUp(true);
+    try {
+      await triggerManualBackup();
+      toast.success('Backup berhasil dibuat');
+    } catch (error) {
+      console.error('Backup error:', error);
+      toast.error('Gagal membuat backup');
+    } finally {
+      setIsBackingUp(false);
+    }
+  };
+
+  const handleRestore = async (backupId: string) => {
+    setIsRestoring(true);
+    try {
+      await restoreBackup(backupId);
+      await refreshData();
+      toast.success('Data berhasil dipulihkan dari backup');
+    } catch (error) {
+      console.error('Restore error:', error);
+      toast.error('Gagal memulihkan data');
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
   const handleExportData = async () => {
-    const exportData: Record<string, any> = {};
-    
-    Object.entries(STORAGE_KEYS).forEach(([name, key]) => {
-      const data = localStorage.getItem(key);
-      if (data) {
-        try {
-          exportData[name] = JSON.parse(data);
-        } catch {
-          exportData[name] = data;
-        }
-      }
-    });
+    const exportData = {
+      products,
+      suppliers,
+      purchases,
+      debts,
+      expenses,
+      transactions,
+      projects,
+      storeInfo,
+      printerSettings,
+      stockSettings,
+      exportDate: new Date().toISOString(),
+    };
 
     const dataStr = JSON.stringify(exportData, null, 2);
     const fileName = `serayu_backup_${new Date().toISOString().split('T')[0]}.json`;
     
-    // Check if File System Access API is available
     if ('showSaveFilePicker' in window) {
       try {
         const handle = await (window as any).showSaveFilePicker({
@@ -243,11 +268,9 @@ export default function Pengaturan() {
         return;
       } catch (err: any) {
         if (err.name === 'AbortError') return;
-        // Fallback to traditional download
       }
     }
     
-    // Fallback for browsers without File System Access API
     const blob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -260,7 +283,6 @@ export default function Pengaturan() {
   };
 
   const handleImportData = async (e?: React.ChangeEvent<HTMLInputElement>) => {
-    // Check if File System Access API is available for custom folder
     if (!e && 'showOpenFilePicker' in window) {
       try {
         const [handle] = await (window as any).showOpenFilePicker({
@@ -273,14 +295,19 @@ export default function Pengaturan() {
         const content = await file.text();
         
         const importedData = JSON.parse(content);
-        Object.entries(STORAGE_KEYS).forEach(([name, key]) => {
-          if (importedData[name]) {
-            localStorage.setItem(key, JSON.stringify(importedData[name]));
-          }
-        });
+        
+        // For now, store to localStorage as fallback
+        if (importedData.storeInfo) {
+          await updateStoreInfo(importedData.storeInfo);
+        }
+        if (importedData.printerSettings) {
+          await updatePrinterSettings(importedData.printerSettings);
+        }
+        if (importedData.stockSettings) {
+          await updateStockSettings(importedData.stockSettings);
+        }
 
-        toast.success('Data berhasil di-import. Halaman akan dimuat ulang...');
-        setTimeout(() => window.location.reload(), 1500);
+        toast.success('Pengaturan berhasil di-import');
         return;
       } catch (err: any) {
         if (err.name === 'AbortError') return;
@@ -289,47 +316,30 @@ export default function Pengaturan() {
       }
     }
 
-    // Traditional file input method
     const file = e?.target?.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const importedData = JSON.parse(event.target?.result as string);
         
-        Object.entries(STORAGE_KEYS).forEach(([name, key]) => {
-          if (importedData[name]) {
-            localStorage.setItem(key, JSON.stringify(importedData[name]));
-          }
-        });
+        if (importedData.storeInfo) {
+          await updateStoreInfo(importedData.storeInfo);
+        }
+        if (importedData.printerSettings) {
+          await updatePrinterSettings(importedData.printerSettings);
+        }
+        if (importedData.stockSettings) {
+          await updateStockSettings(importedData.stockSettings);
+        }
 
-        toast.success('Data berhasil di-import. Halaman akan dimuat ulang...');
-        setTimeout(() => window.location.reload(), 1500);
+        toast.success('Pengaturan berhasil di-import');
       } catch (error) {
         toast.error('File tidak valid atau rusak');
       }
     };
     reader.readAsText(file);
-  };
-
-  const handleResetData = () => {
-    // Clear all localStorage
-    Object.values(STORAGE_KEYS).forEach(key => {
-      localStorage.removeItem(key);
-    });
-
-    // Set empty arrays for all data keys
-    localStorage.setItem(STORAGE_KEYS.products, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.suppliers, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.purchases, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.debts, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.expenses, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.transactions, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.projects, JSON.stringify([]));
-    
-    toast.success('Semua data berhasil direset ke 0. Halaman akan dimuat ulang...');
-    setTimeout(() => window.location.reload(), 1500);
   };
 
   const handleInstallPWA = async () => {
@@ -346,6 +356,22 @@ export default function Pengaturan() {
     }
   };
 
+  const formatBackupDate = (dateStr: string) => {
+    try {
+      return format(new Date(dateStr), "dd MMM yyyy, HH:mm", { locale: localeId });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  if (isStoreLoading) {
+    return (
+      <div className="p-8 flex items-center justify-center min-h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 md:p-6 lg:p-8 bg-background min-h-screen">
       <div className="flex items-center justify-between mb-6">
@@ -353,6 +379,12 @@ export default function Pengaturan() {
           <h1 className="text-xl md:text-2xl font-bold text-foreground">Pengaturan</h1>
           <p className="text-sm text-muted-foreground">Kelola pengaturan toko dan aplikasi</p>
         </div>
+        {isSyncing && (
+          <Badge variant="secondary" className="gap-1">
+            <Cloud className="w-3 h-3 animate-pulse" />
+            Menyinkronkan...
+          </Badge>
+        )}
       </div>
 
       <Tabs defaultValue="toko" className="space-y-4 md:space-y-6">
@@ -368,6 +400,10 @@ export default function Pengaturan() {
           <TabsTrigger value="stok" className="gap-1 md:gap-2 text-xs md:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Package className="w-3 h-3 md:w-4 md:h-4" />
             <span className="hidden sm:inline">Stok</span>
+          </TabsTrigger>
+          <TabsTrigger value="backup" className="gap-1 md:gap-2 text-xs md:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <Cloud className="w-3 h-3 md:w-4 md:h-4" />
+            <span className="hidden sm:inline">Backup</span>
           </TabsTrigger>
           <TabsTrigger value="data" className="gap-1 md:gap-2 text-xs md:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Database className="w-3 h-3 md:w-4 md:h-4" />
@@ -506,8 +542,8 @@ export default function Pengaturan() {
                   />
                 </div>
 
-                <Button onClick={handleSave} className="w-full gap-2 bg-gradient-primary">
-                  <Save className="w-4 h-4" />
+                <Button onClick={handleSave} className="w-full gap-2 bg-gradient-primary" disabled={isSyncing}>
+                  {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   Simpan Pengaturan
                 </Button>
               </CardContent>
@@ -622,8 +658,8 @@ export default function Pengaturan() {
                 />
               </div>
 
-              <Button onClick={handleSavePrinter} className="w-full gap-2 bg-gradient-primary">
-                <Save className="w-4 h-4" />
+              <Button onClick={handleSavePrinter} className="w-full gap-2 bg-gradient-primary" disabled={isSyncing}>
+                {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Simpan Pengaturan Printer
               </Button>
             </CardContent>
@@ -664,41 +700,149 @@ export default function Pengaturan() {
                 </p>
               </div>
 
-              <Button onClick={handleSaveStock} className="w-full gap-2 bg-gradient-secondary text-secondary-foreground">
-                <Save className="w-4 h-4" />
+              <Button onClick={handleSaveStock} className="w-full gap-2 bg-gradient-secondary text-secondary-foreground" disabled={isSyncing}>
+                {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Simpan Pengaturan Stok
               </Button>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="data" className="space-y-4 md:space-y-6">
-          {/* Storage Info */}
-          <Card className="bg-card border-t-4 border-t-info">
+        <TabsContent value="backup" className="space-y-4 md:space-y-6">
+          {/* Cloud Backup Status */}
+          <Card className="bg-card border-t-4 border-t-primary">
             <CardHeader className="pb-2 md:pb-4">
               <CardTitle className="flex items-center gap-2 text-base">
-                <HardDrive className="w-5 h-5 text-info" />
-                Penggunaan Penyimpanan
+                <Shield className="w-5 h-5 text-primary" />
+                Backup Otomatis Cloud
               </CardTitle>
               <CardDescription className="text-xs md:text-sm">
-                Data tersimpan di penyimpanan lokal browser
+                Data Anda di-backup otomatis setiap hari pukul 20:00 WIB
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="p-3 md:p-4 rounded-lg bg-info/10 border border-info/30">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium text-sm">Total Penyimpanan</span>
-                  <span className="font-bold text-info">{formatBytes(storageInfo.totalSize)}</span>
+              <div className="p-4 rounded-lg bg-primary/10 border border-primary/30">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
+                    <Cloud className="w-6 h-6 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-sm">Backup Cloud Aktif</h4>
+                    <p className="text-xs text-muted-foreground">
+                      Jadwal: Setiap hari pukul 20:00 WIB
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Retensi: 7 backup terakhir
+                    </p>
+                  </div>
+                  <CheckCircle className="w-6 h-6 text-secondary" />
                 </div>
-                <div className="w-full h-2 bg-info/20 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-info rounded-full transition-all"
-                    style={{ width: `${Math.min((storageInfo.totalSize / (5 * 1024 * 1024)) * 100, 100)}%` }}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">Dari maksimal ~5MB penyimpanan lokal</p>
               </div>
 
+              <Button 
+                onClick={handleManualBackup} 
+                className="w-full gap-2"
+                disabled={isBackingUp}
+              >
+                {isBackingUp ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Cloud className="w-4 h-4" />
+                )}
+                Backup Sekarang
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Backup History */}
+          <Card className="bg-card border-t-4 border-t-secondary">
+            <CardHeader className="pb-2 md:pb-4">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <History className="w-5 h-5 text-secondary" />
+                Riwayat Backup
+              </CardTitle>
+              <CardDescription className="text-xs md:text-sm">
+                Pulihkan data dari backup sebelumnya
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {backups.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <CloudOff className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-sm">Belum ada backup tersedia</p>
+                  <p className="text-xs">Klik "Backup Sekarang" untuk membuat backup pertama</p>
+                </div>
+              ) : (
+                backups.map((backup) => (
+                  <div key={backup.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${backup.backupType === 'auto' ? 'bg-primary/10' : 'bg-secondary/10'}`}>
+                        {backup.backupType === 'auto' ? (
+                          <Calendar className="w-5 h-5 text-primary" />
+                        ) : (
+                          <Cloud className="w-5 h-5 text-secondary" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm">
+                          {formatBackupDate(backup.createdAt)}
+                        </p>
+                        <Badge variant={backup.backupType === 'auto' ? 'default' : 'secondary'} className="text-xs">
+                          {backup.backupType === 'auto' ? 'Otomatis' : 'Manual'}
+                        </Badge>
+                      </div>
+                    </div>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" size="sm" className="gap-1" disabled={isRestoring}>
+                          <RotateCcw className="w-3 h-3" />
+                          Pulihkan
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle className="flex items-center gap-2">
+                            <RotateCcw className="w-5 h-5 text-warning" />
+                            Konfirmasi Pemulihan Data
+                          </AlertDialogTitle>
+                          <AlertDialogDescription className="space-y-2">
+                            <span className="block">
+                              Anda akan memulihkan data dari backup tanggal{' '}
+                              <strong>{formatBackupDate(backup.createdAt)}</strong>
+                            </span>
+                            <span className="block text-warning font-medium">
+                              Data saat ini akan diganti dengan data dari backup!
+                            </span>
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Batal</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => handleRestore(backup.id)}>
+                            Ya, Pulihkan Data
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="data" className="space-y-4 md:space-y-6">
+          {/* Data Stats */}
+          <Card className="bg-card border-t-4 border-t-info">
+            <CardHeader className="pb-2 md:pb-4">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Database className="w-5 h-5 text-info" />
+                Ringkasan Data
+              </CardTitle>
+              <CardDescription className="text-xs md:text-sm">
+                Data tersimpan di cloud dan tersinkron real-time
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
                 <div className="p-2 md:p-3 bg-muted/50 rounded-lg text-center">
                   <p className="text-lg md:text-xl font-bold text-primary">{products.length}</p>
@@ -720,19 +864,18 @@ export default function Pengaturan() {
             </CardContent>
           </Card>
 
-          {/* Data Management */}
+          {/* Export/Import */}
           <Card className="bg-card border-t-4 border-t-secondary">
             <CardHeader className="pb-2 md:pb-4">
               <CardTitle className="flex items-center gap-2 text-base">
-                <Database className="w-5 h-5 text-secondary" />
-                Kelola Data Lokal
+                <HardDrive className="w-5 h-5 text-secondary" />
+                Export/Import Lokal
               </CardTitle>
               <CardDescription className="text-xs md:text-sm">
-                Export, import, atau reset semua data aplikasi
+                Simpan atau pulihkan pengaturan ke file lokal
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Export */}
               <div className="p-3 md:p-4 border rounded-lg space-y-3">
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 rounded-lg bg-secondary/10 flex items-center justify-center flex-shrink-0">
@@ -749,15 +892,14 @@ export default function Pengaturan() {
                 </Button>
               </div>
 
-              {/* Import */}
               <div className="p-3 md:p-4 border rounded-lg space-y-3">
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 rounded-lg bg-info/10 flex items-center justify-center flex-shrink-0">
                     <FileUp className="w-5 h-5 text-info" />
                   </div>
                   <div className="flex-1">
-                    <h4 className="font-medium text-sm">Import Data dari Komputer</h4>
-                    <p className="text-xs text-muted-foreground">Pulihkan data dari file backup JSON di hard disk</p>
+                    <h4 className="font-medium text-sm">Import Pengaturan dari Komputer</h4>
+                    <p className="text-xs text-muted-foreground">Pulihkan pengaturan dari file backup JSON</p>
                   </div>
                 </div>
                 <input
@@ -775,55 +917,6 @@ export default function Pengaturan() {
                   <HardDrive className="w-4 h-4" />
                   Pilih File dari Folder
                 </Button>
-              </div>
-
-              {/* Reset */}
-              <div className="p-3 md:p-4 border border-destructive/30 rounded-lg space-y-3 bg-destructive/5">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center flex-shrink-0">
-                    <AlertTriangle className="w-5 h-5 text-destructive" />
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="font-medium text-sm text-destructive">Reset Data</h4>
-                    <p className="text-xs text-muted-foreground">Hapus semua data dan kembali ke pengaturan awal</p>
-                  </div>
-                </div>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive" className="w-full gap-2">
-                      <RefreshCw className="w-4 h-4" />
-                      Reset Semua Data
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle className="flex items-center gap-2 text-destructive">
-                        <AlertTriangle className="w-5 h-5" />
-                        Konfirmasi Reset Data
-                      </AlertDialogTitle>
-                      <AlertDialogDescription className="space-y-2">
-                        <span className="block">Tindakan ini akan <strong className="text-destructive">menghapus SEMUA data</strong> aplikasi dan mengosongkan:</span>
-                        <ul className="list-disc list-inside text-sm space-y-1">
-                          <li>Semua produk menjadi 0</li>
-                          <li>Semua transaksi penjualan menjadi 0</li>
-                          <li>Semua pembelian menjadi 0</li>
-                          <li>Semua proyek menjadi 0</li>
-                          <li>Semua utang/piutang menjadi 0</li>
-                          <li>Semua supplier menjadi 0</li>
-                          <li>Semua biaya operasional menjadi 0</li>
-                        </ul>
-                        <span className="block text-destructive font-medium">Data yang sudah dihapus tidak dapat dikembalikan!</span>
-                        <span className="block">Pastikan Anda sudah export backup terlebih dahulu.</span>
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Batal</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleResetData} className="bg-destructive hover:bg-destructive/90">
-                        Ya, Reset Semua Data
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
               </div>
             </CardContent>
           </Card>
@@ -888,11 +981,18 @@ export default function Pengaturan() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Versi</span>
-                  <span className="font-medium">1.0.0</span>
+                  <span className="font-medium">2.0.0</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Tipe</span>
                   <span className="font-medium">Progressive Web App</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Sinkronisasi</span>
+                  <Badge variant="default" className="gap-1">
+                    <Cloud className="w-3 h-3" />
+                    Cloud Realtime
+                  </Badge>
                 </div>
               </div>
             </CardContent>

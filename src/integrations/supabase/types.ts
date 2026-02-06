@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      backups: {
+        Row: {
+          backup_data: Json
+          backup_type: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          backup_data?: Json
+          backup_type?: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          backup_data?: Json
+          backup_type?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       debts: {
         Row: {
           created_at: string
@@ -133,21 +157,42 @@ export type Database = {
       }
       profiles: {
         Row: {
+          auto_print: boolean | null
           created_at: string
           id: string
+          min_stock_alert: number | null
+          paper_width: string | null
+          printer_type: string | null
+          store_address: string | null
+          store_logo: string | null
           store_name: string
+          store_phone: string | null
           updated_at: string
         }
         Insert: {
+          auto_print?: boolean | null
           created_at?: string
           id: string
+          min_stock_alert?: number | null
+          paper_width?: string | null
+          printer_type?: string | null
+          store_address?: string | null
+          store_logo?: string | null
           store_name?: string
+          store_phone?: string | null
           updated_at?: string
         }
         Update: {
+          auto_print?: boolean | null
           created_at?: string
           id?: string
+          min_stock_alert?: number | null
+          paper_width?: string | null
+          printer_type?: string | null
+          store_address?: string | null
+          store_logo?: string | null
           store_name?: string
+          store_phone?: string | null
           updated_at?: string
         }
         Relationships: []
