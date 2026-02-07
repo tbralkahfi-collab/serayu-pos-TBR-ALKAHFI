@@ -74,7 +74,7 @@ const getStatusColor = (status: string) => {
 };
 
 export default function Pembelian() {
-  const { purchases, addPurchase, updatePurchase, deletePurchase, suppliers, addSupplier, updateSupplier, deleteSupplier, products, updateProduct } = useData();
+  const { purchases, addPurchase, updatePurchase, deletePurchase, suppliers, addSupplier, updateSupplier, deleteSupplier, products, updateProduct, createPurchaseDebt, removeRelatedDebt } = useData();
   const [activeTab, setActiveTab] = useState('pembelian');
   const [showDialog, setShowDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -97,6 +97,7 @@ export default function Pembelian() {
   const [formData, setFormData] = useState({
     supplierId: '', supplier: '', date: '', total: '', dp: '',
     paymentMethod: 'cash' as 'cash' | 'transfer', status: 'Pending', notes: '',
+    statusBayar: 'lunas' as 'lunas' | 'belum_lunas',
   });
   
   const [supplierFormData, setSupplierFormData] = useState({
@@ -179,7 +180,7 @@ export default function Pembelian() {
 
   const handleAddNew = () => {
     setEditingPurchase(null);
-    setFormData({ supplierId: '', supplier: '', date: '', total: '', dp: '', paymentMethod: 'cash', status: 'Pending', notes: '' });
+    setFormData({ supplierId: '', supplier: '', date: '', total: '', dp: '', paymentMethod: 'cash', status: 'Pending', notes: '', statusBayar: 'lunas' });
     setPurchaseItems([]);
     setShowDialog(true);
   };
@@ -190,6 +191,7 @@ export default function Pembelian() {
       supplierId: purchase.supplierId, supplier: purchase.supplier, date: purchase.date,
       total: purchase.total.toString(), dp: purchase.dp.toString(),
       paymentMethod: purchase.paymentMethod, status: purchase.status, notes: purchase.notes,
+      statusBayar: (purchase.dp > 0 && purchase.dp < purchase.total) ? 'belum_lunas' : 'lunas',
     });
     // Parse items string to PurchaseItem array
     const itemsArr: PurchaseItem[] = purchase.items.split(', ').map((itemStr, idx) => {
@@ -229,8 +231,10 @@ export default function Pembelian() {
 
   const confirmDelete = async () => {
     if (purchaseToDelete) {
+      // Remove related utang
+      await removeRelatedDebt(purchaseToDelete.id);
       await deletePurchase(purchaseToDelete.id);
-      toast.success(`Pembelian ${purchaseToDelete.id} berhasil dihapus`);
+      toast.success(`Pembelian berhasil dihapus`);
       setShowDeleteDialog(false);
     }
   };
@@ -265,17 +269,38 @@ export default function Pembelian() {
         paymentMethod: formData.paymentMethod, status: formData.status, items: itemsStr, 
         itemsData, notes: formData.notes,
       });
+      // Update related utang
+      if (formData.statusBayar === 'belum_lunas') {
+        const sisaUtang = totalAmount - (parseInt(formData.dp) || 0);
+        // Remove old and create new
+        await removeRelatedDebt(editingPurchase.id);
+        if (sisaUtang > 0) {
+          await createPurchaseDebt(editingPurchase.id, formData.supplier, sisaUtang);
+        }
+      } else {
+        await removeRelatedDebt(editingPurchase.id);
+      }
       toast.success('Pembelian berhasil diperbarui');
     } else {
+      // For new purchases, we need the ID after insert - use a temp reference
       await addPurchase({
         supplierId: formData.supplierId, supplier: formData.supplier, date: formData.date,
         total: totalAmount, dp: parseInt(formData.dp) || 0,
         paymentMethod: formData.paymentMethod, status: formData.status, items: itemsStr, 
         itemsData, notes: formData.notes,
       });
-      
-      // NOTE: Stock is now automatically updated by database trigger when status = 'Selesai'
-      if (formData.status === 'Selesai') {
+
+      // Auto-create utang if belum lunas
+      if (formData.statusBayar === 'belum_lunas') {
+        const sisaUtang = totalAmount - (parseInt(formData.dp) || 0);
+        if (sisaUtang > 0) {
+          const purchaseRef = `PO-${Date.now().toString().slice(-8)}`;
+          await createPurchaseDebt(purchaseRef, formData.supplier, sisaUtang);
+          toast.success(`Pembelian ditambahkan & utang ${formatRupiah(sisaUtang)} tercatat`);
+        } else {
+          toast.success('Pembelian berhasil ditambahkan');
+        }
+      } else if (formData.status === 'Selesai') {
         toast.success('Pembelian berhasil ditambahkan & stok diperbarui');
       } else {
         toast.success('Pembelian berhasil ditambahkan');
@@ -594,7 +619,28 @@ export default function Pembelian() {
                 )}
               </div>
 
+              {/* Status Pembayaran */}
+              <div className="space-y-2">
+                <Label>Status Pembayaran</Label>
+                <RadioGroup value={formData.statusBayar} onValueChange={(v) => setFormData(prev => ({ ...prev, statusBayar: v as 'lunas' | 'belum_lunas' }))} className="grid grid-cols-2 gap-2">
+                  <div className="flex items-center space-x-2 p-2 md:p-3 border rounded-lg cursor-pointer hover:bg-muted/50"><RadioGroupItem value="lunas" id="bayar-lunas" /><Label htmlFor="bayar-lunas" className="cursor-pointer text-sm font-medium">Lunas</Label></div>
+                  <div className="flex items-center space-x-2 p-2 md:p-3 border rounded-lg cursor-pointer hover:bg-muted/50"><RadioGroupItem value="belum_lunas" id="bayar-belum" /><Label htmlFor="bayar-belum" className="cursor-pointer text-sm font-medium">Belum Lunas</Label></div>
+                </RadioGroup>
+              </div>
+
               <div className="space-y-2"><Label>DP / Uang Muka (Rp)</Label><Input type="number" placeholder="0 (opsional)" value={formData.dp} onChange={(e) => setFormData(prev => ({ ...prev, dp: e.target.value }))} /></div>
+              
+              {/* Show sisa utang if belum lunas */}
+              {formData.statusBayar === 'belum_lunas' && calculatedTotal > 0 && (
+                <div className="p-3 border border-warning/30 rounded-lg bg-warning/5">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Sisa (Utang)</span>
+                    <span className="font-bold text-destructive">
+                      {formatRupiah(Math.max(0, calculatedTotal - (parseInt(formData.dp) || 0)))}
+                    </span>
+                  </div>
+                </div>
+              )}
               <div className="space-y-3"><Label>Metode Pembayaran</Label>
                 <RadioGroup value={formData.paymentMethod} onValueChange={(v) => setFormData(prev => ({ ...prev, paymentMethod: v as 'cash' | 'transfer' }))} className="grid grid-cols-2 gap-4">
                   <div className="flex items-center space-x-3 p-3 md:p-4 border rounded-lg cursor-pointer hover:bg-secondary/5"><RadioGroupItem value="cash" id="cash" /><Label htmlFor="cash" className="cursor-pointer flex-1"><div className="font-medium text-sm">Cash / Tunai</div></Label></div>

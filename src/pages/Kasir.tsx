@@ -34,7 +34,7 @@ interface CartItem {
 
 export default function Kasir() {
   const { storeInfo, printerSettings } = useStore();
-  const { products, addTransaction, updateProduct } = useData();
+  const { products, addTransaction, updateProduct, createTransactionDebt } = useData();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -43,6 +43,8 @@ export default function Kasir() {
   const [cashAmount, setCashAmount] = useState('');
   const [diskonPersen, setDiskonPersen] = useState(0);
   const [diskonNominal, setDiskonNominal] = useState(0);
+  const [statusBayar, setStatusBayar] = useState<'lunas' | 'belum_lunas'>('lunas');
+  const [jumlahBayarParsial, setJumlahBayarParsial] = useState('');
   const printRef = useRef<HTMLDivElement>(null);
 
   const filteredProducts = useMemo(() => {
@@ -291,13 +293,17 @@ export default function Kasir() {
   };
 
   const handleSaveTransaction = async () => {
+    // Validate: if belum lunas, customer name is required
+    if (statusBayar === 'belum_lunas' && !customerName.trim()) {
+      toast.error('Nama pelanggan wajib diisi untuk transaksi belum lunas');
+      return;
+    }
+
     const receipt = generateReceipt();
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
-    // Avoid locale time separator that can be '.' (e.g. "08.34"), which breaks timestamptz parsing
     const timeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
     
-    // Build items data for database trigger (stock will be auto-updated by trigger)
     const itemsData = cart.map(item => ({
       productId: item.id,
       nama: item.name,
@@ -307,8 +313,16 @@ export default function Kasir() {
       diskonPersen: item.diskonPersen,
       diskonNominal: item.diskonNominal,
     }));
+
+    // Determine actual payment amount
+    let actualBayar = receipt.cashAmount;
+    let actualKembalian = receipt.change;
+    if (statusBayar === 'belum_lunas') {
+      actualBayar = parseInt(jumlahBayarParsial) || 0;
+      actualKembalian = 0;
+    }
     
-    // Add transaction to database - stock update handled by trigger
+    // Save transaction with status 'Selesai' so stock trigger fires
     await addTransaction({
       tanggal: `${dateStr} ${timeStr}`,
       pelanggan: receipt.customer,
@@ -318,20 +332,31 @@ export default function Kasir() {
       diskon: receipt.diskon,
       diskonPersen: receipt.diskonPersen,
       total: receipt.total,
-      bayar: receipt.cashAmount,
-      kembalian: receipt.change,
+      bayar: actualBayar,
+      kembalian: actualKembalian,
       metode: receipt.paymentMethod === 'tunai' ? 'Cash' : receipt.paymentMethod === 'transfer' ? 'Transfer' : 'Kartu',
       status: 'Selesai',
     });
+
+    // Auto-create piutang if belum lunas
+    if (statusBayar === 'belum_lunas') {
+      const sisaBayar = total - (parseInt(jumlahBayarParsial) || 0);
+      if (sisaBayar > 0) {
+        const trxId = `TRX${now.getTime().toString().slice(-8)}`;
+        await createTransactionDebt(trxId, customerName, sisaBayar);
+        toast.success(`Transaksi disimpan & piutang ${formatRupiah(sisaBayar)} tercatat`);
+      }
+    } else {
+      toast.success(`Transaksi berhasil disimpan & stok diperbarui`);
+    }
     
-    // NOTE: Stock is now automatically updated by database trigger
-    
-    toast.success(`Transaksi ${receipt.id} berhasil disimpan & stok diperbarui`);
     setCart([]);
     setCustomerName('');
     setCashAmount('');
     setDiskonPersen(0);
     setDiskonNominal(0);
+    setStatusBayar('lunas');
+    setJumlahBayarParsial('');
     setShowCheckout(false);
   };
 
@@ -578,6 +603,47 @@ export default function Kasir() {
               </div>
             </div>
 
+            {/* Status Pembayaran */}
+            <div className="space-y-2">
+              <Label>Status Pembayaran</Label>
+              <RadioGroup 
+                value={statusBayar} 
+                onValueChange={(v) => setStatusBayar(v as 'lunas' | 'belum_lunas')}
+                className="grid grid-cols-2 gap-2"
+              >
+                <div className="flex items-center space-x-2 p-2 md:p-3 border rounded-lg cursor-pointer hover:bg-muted/50">
+                  <RadioGroupItem value="lunas" id="lunas" />
+                  <Label htmlFor="lunas" className="cursor-pointer text-xs md:text-sm font-medium">Lunas</Label>
+                </div>
+                <div className="flex items-center space-x-2 p-2 md:p-3 border rounded-lg cursor-pointer hover:bg-muted/50">
+                  <RadioGroupItem value="belum_lunas" id="belum_lunas" />
+                  <Label htmlFor="belum_lunas" className="cursor-pointer text-xs md:text-sm font-medium">Belum Lunas</Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            {/* If belum lunas, show partial payment input */}
+            {statusBayar === 'belum_lunas' && (
+              <div className="space-y-2 p-3 border border-warning/30 rounded-lg bg-warning/5">
+                <Label>Jumlah Bayar (sebagian)</Label>
+                <Input
+                  type="number"
+                  placeholder="0"
+                  value={jumlahBayarParsial}
+                  onChange={(e) => setJumlahBayarParsial(e.target.value)}
+                />
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Sisa (Piutang)</span>
+                  <span className="font-bold text-destructive">
+                    {formatRupiah(Math.max(0, total - (parseInt(jumlahBayarParsial) || 0)))}
+                  </span>
+                </div>
+                {!customerName.trim() && (
+                  <p className="text-xs text-destructive">* Nama pelanggan wajib diisi</p>
+                )}
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>Metode Pembayaran</Label>
               <RadioGroup 
@@ -604,7 +670,7 @@ export default function Kasir() {
               </RadioGroup>
             </div>
 
-            {paymentMethod === 'tunai' && (
+            {paymentMethod === 'tunai' && statusBayar === 'lunas' && (
               <div className="space-y-2">
                 <Label>Jumlah Uang</Label>
                 <Input

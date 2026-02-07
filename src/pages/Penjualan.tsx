@@ -77,7 +77,7 @@ const getMethodColor = (metode: string) => {
 };
 
 export default function Transaksi() {
-  const { transactions, updateTransaction, deleteTransaction, projects } = useData();
+  const { transactions, updateTransaction, deleteTransaction, projects, removeRelatedDebt } = useData();
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState('pelanggan');
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
@@ -150,6 +150,8 @@ export default function Transaksi() {
 
   const confirmDelete = async () => {
     if (transactionToDelete) {
+      // Remove related piutang
+      await removeRelatedDebt(transactionToDelete.id);
       // NOTE: Stock reversal is automatically handled by database trigger
       await deleteTransaction(transactionToDelete.id);
       toast.success(`Transaksi ${transactionToDelete.id} berhasil dihapus & stok dikembalikan`);
