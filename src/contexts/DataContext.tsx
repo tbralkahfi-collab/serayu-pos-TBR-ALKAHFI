@@ -181,6 +181,12 @@ interface DataContextType {
   getProjectDebts: (projectId: string) => DebtRecord[];
   createProjectDebt: (projectId: string, projectName: string, amount: number, dueDate: string) => Promise<void>;
   
+  // Transaction debt helpers
+  createTransactionDebt: (transactionId: string, customerName: string, amount: number) => Promise<void>;
+  createPurchaseDebt: (purchaseId: string, supplierName: string, amount: number) => Promise<void>;
+  removeRelatedDebt: (keteranganSearch: string) => Promise<void>;
+  updateRelatedDebt: (keteranganSearch: string, newAmount: number) => Promise<void>;
+  
   // Refresh
   refreshData: () => Promise<void>;
 }
@@ -799,6 +805,53 @@ export function DataProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  // ==================== TRANSACTION DEBT HELPERS ====================
+  const createTransactionDebt = async (transactionId: string, customerName: string, amount: number) => {
+    if (amount <= 0) return;
+    await addDebt({
+      type: 'piutang',
+      nama: customerName,
+      total: amount,
+      sisa: amount,
+      tanggal: new Date().toISOString().split('T')[0],
+      jatuhTempo: '',
+      keterangan: `Piutang dari penjualan: ${transactionId}`,
+    });
+  };
+
+  const createPurchaseDebt = async (purchaseId: string, supplierName: string, amount: number) => {
+    if (amount <= 0) return;
+    await addDebt({
+      type: 'utang',
+      nama: supplierName,
+      total: amount,
+      sisa: amount,
+      tanggal: new Date().toISOString().split('T')[0],
+      jatuhTempo: '',
+      keterangan: `Utang dari pembelian: ${purchaseId}`,
+    });
+  };
+
+  const removeRelatedDebt = async (keteranganSearch: string) => {
+    const relatedDebt = debts.find(d => d.keterangan.includes(keteranganSearch));
+    if (relatedDebt) {
+      await deleteDebt(relatedDebt.id);
+    }
+  };
+
+  const updateRelatedDebt = async (keteranganSearch: string, newAmount: number) => {
+    const relatedDebt = debts.find(d => d.keterangan.includes(keteranganSearch));
+    if (relatedDebt) {
+      if (newAmount <= 0) {
+        await deleteDebt(relatedDebt.id);
+      } else {
+        const paidSoFar = relatedDebt.total - relatedDebt.sisa;
+        const newSisa = Math.max(0, newAmount - paidSoFar);
+        await updateDebt(relatedDebt.id, { total: newAmount, sisa: newSisa });
+      }
+    }
+  };
+
   return (
     <DataContext.Provider value={{
       isLoading,
@@ -833,6 +886,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       deleteProject,
       getProjectDebts,
       createProjectDebt,
+      createTransactionDebt,
+      createPurchaseDebt,
+      removeRelatedDebt,
+      updateRelatedDebt,
       refreshData: fetchData,
     }}>
       {children}
