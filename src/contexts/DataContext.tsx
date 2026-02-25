@@ -277,7 +277,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const fetchData = useCallback(async () => {
     console.log('[DataContext] fetchData called');
     console.log('[DataContext] Current user:', user);
-    console.log('[DataContext] Supabase URL:', supabase.supabaseUrl);
+    console.log('[DataContext] Supabase URL:', (supabase as any).supabaseUrl);
     
     // Test Supabase connection
     try {
@@ -328,11 +328,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
       console.log('[DataContext] Products response:', productsRes.error || `${productsRes.data?.length || 0} items`);
       console.log('[DataContext] Transactions response:', transactionsRes.error || `${transactionsRes.data?.length || 0} items`);
       console.log('[DataContext] Purchases response:', purchasesRes.error || `${purchasesRes.data?.length || 0} items`);
+      
+      // AGGRESSIVE MODAL AWAL DEBUGGING
+      console.log('[DataContext] MODAL AWAL QUERY STARTED');
+      console.log('[DataContext] modalAwalRes object:', modalAwalRes);
+      console.log('[DataContext] modalAwalRes.error:', modalAwalRes.error);
+      console.log('[DataContext] modalAwalRes.data:', modalAwalRes.data);
+      console.log('[DataContext] modalAwalRes.status:', modalAwalRes.status);
+      console.log('[DataContext] modalAwalRes.statusText:', modalAwalRes.statusText);
+      
       console.log('[DataContext] Modal awal response:', modalAwalRes.error || modalAwalRes.data ? '1 item' : '0 items');
       console.log('[DataContext] MODAL AWAL DEBUG:', { 
         error: modalAwalRes.error, 
         data: modalAwalRes.data,
-        hasData: !!modalAwalRes.data 
+        hasData: !!modalAwalRes.data,
+        status: modalAwalRes.status,
+        statusText: modalAwalRes.statusText
       });
 
       if (productsRes.data) {
@@ -935,7 +946,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
     
     console.log('Inserting modal awal for user:', user.id);
-    console.log('Supabase URL:', supabase.supabaseUrl);
+    console.log('Supabase URL:', (supabase as any).supabaseUrl);
     
     try {
       // First check if table exists
