@@ -60,12 +60,14 @@ const statusColors: Record<string, string> = {
 };
 
 export default function Laporan() {
+  console.log('Laporan component loaded');
   const [showPeriodDialog, setShowPeriodDialog] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [activePeriod, setActivePeriod] = useState('Semua Periode');
 
   const { expenses, projects, transactions, products, debts, purchases, modalAwal } = useData();
+  console.log('Laporan data:', { transactions: transactions.length, expenses: expenses.length, modalAwal });
   const { storeInfo } = useStore();
 
   // Filter data by period
