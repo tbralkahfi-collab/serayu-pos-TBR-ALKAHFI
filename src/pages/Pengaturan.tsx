@@ -242,6 +242,7 @@ export default function Pengaturan() {
   };
 
   const handleSaveModalAwal = async () => {
+    alert('Button clicked!'); // Simple debug
     if (!modalAwalForm.tanggal) {
       toast.error('Tanggal modal awal wajib diisi');
       return;
