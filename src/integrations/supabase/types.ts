@@ -400,6 +400,45 @@ export type Database = {
         }
         Relationships: []
       }
+      modal_awal: {
+        Row: {
+          id: string
+          user_id: string
+          tanggal: string
+          kas: number
+          bank: number
+          inventaris: number
+          total: number
+          catatan: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          tanggal: string
+          kas: number
+          bank: number
+          inventaris: number
+          total: number
+          catatan?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          tanggal?: string
+          kas?: number
+          bank?: number
+          inventaris?: number
+          total?: number
+          catatan?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

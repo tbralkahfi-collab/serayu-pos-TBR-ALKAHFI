@@ -279,6 +279,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
     console.log('[DataContext] Current user:', user);
     console.log('[DataContext] Supabase URL:', supabase.supabaseUrl);
     
+    // Test Supabase connection
+    try {
+      console.log('[DataContext] Testing Supabase connection...');
+      const { data: testData, error: testError } = await supabase.from('products').select('count').limit(1);
+      console.log('[DataContext] Connection test:', { testData, testError });
+    } catch (err) {
+      console.error('[DataContext] Connection test failed:', err);
+    }
+    
     if (!user) {
       console.log('[DataContext] No user, clearing data');
       setProducts([]);
@@ -926,13 +935,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
     
     console.log('Inserting modal awal for user:', user.id);
-    console.log('Supabase client:', supabase);
     console.log('Supabase URL:', supabase.supabaseUrl);
     
     try {
       // First check if table exists
       console.log('Checking if modal_awal table exists...');
-      const { error: tableCheckError } = await supabase.from('modal_awal').select('count').head();
+      const { error: tableCheckError } = await supabase.from('modal_awal').select('count').limit(1);
       
       if (tableCheckError) {
         console.error('Table check error:', tableCheckError);
