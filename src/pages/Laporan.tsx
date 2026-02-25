@@ -23,6 +23,7 @@ import {
   Package,
   Users,
   Wallet,
+  Calculator,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -64,7 +65,7 @@ export default function Laporan() {
   const [endDate, setEndDate] = useState('');
   const [activePeriod, setActivePeriod] = useState('Semua Periode');
 
-  const { expenses, projects, transactions, products, debts, purchases } = useData();
+  const { expenses, projects, transactions, products, debts, purchases, modalAwal } = useData();
   const { storeInfo } = useStore();
 
   // Filter data by period
@@ -112,6 +113,71 @@ export default function Laporan() {
   const labaKotor = totalPenjualan - totalPembelian;
   const labaBersih = labaKotor - totalOperasional;
   const marginBersih = totalPenjualan > 0 ? (labaBersih / totalPenjualan) * 100 : 0;
+
+  // Debug modal awal state
+  useEffect(() => {
+    console.log('[Laporan] modalAwal state:', modalAwal);
+    console.log('[Laporan] accountingData:', accountingData);
+  }, [modalAwal, accountingData]);
+
+  // Accounting calculations with modal awal
+  const accountingData = useMemo(() => {
+    console.log('Calculating accounting data...', { modalAwal, totalPenjualan, totalPembelian, totalOperasional, debts, products });
+    
+    if (!modalAwal) {
+      console.log('No modal awal, returning default values');
+      return {
+        modalAwalTotal: 0,
+        ekuitasAwal: 0,
+        ekuitasAkhir: labaBersih,
+        totalAset: 0,
+        totalLiabilitas: 0,
+        totalEkuitas: labaBersih,
+      };
+    }
+
+    // Calculate current assets
+    const totalPiutang = debts
+      .filter(d => d.type === 'piutang')
+      .reduce((sum, d) => sum + d.sisa, 0);
+    
+    const totalStokValue = products.reduce((sum, p) => sum + (p.hargaBeli * p.stok), 0);
+    
+    // Calculate liabilities
+    const totalUtang = debts
+      .filter(d => d.type === 'utang')
+      .reduce((sum, d) => sum + d.sisa, 0);
+
+    // Current cash estimation (simplified)
+    const kasTersedia = modalAwal.kas + totalPenjualan - totalPembelian - totalOperasional;
+
+    const totalAset = kasTersedia + modalAwal.bank + totalStokValue + totalPiutang;
+    const totalLiabilitas = totalUtang;
+    const ekuitasAkhir = modalAwal.total + labaBersih;
+
+    console.log('Calculated values:', {
+      totalPiutang,
+      totalStokValue,
+      totalUtang,
+      kasTersedia,
+      totalAset,
+      totalLiabilitas,
+      ekuitasAkhir
+    });
+
+    return {
+      modalAwalTotal: modalAwal.total,
+      ekuitasAwal: modalAwal.total,
+      ekuitasAkhir,
+      totalAset,
+      totalLiabilitas,
+      totalEkuitas: ekuitasAkhir,
+      kasTersedia,
+      totalPiutang,
+      totalUtang,
+      totalStokValue,
+    };
+  }, [modalAwal, labaBersih, totalPenjualan, totalPembelian, totalOperasional, debts, products]);
 
   const projectStats = useMemo(() => {
     const data = filteredData.projects;
@@ -191,6 +257,10 @@ export default function Laporan() {
   };
 
   const handleQuickReport = (type: string) => {
+    console.log('handleQuickReport called with type:', type);
+    console.log('modalAwal:', modalAwal);
+    console.log('accountingData:', accountingData);
+    
     toast.success(`Membuat laporan ${type}...`);
     
     const printWindow = window.open('', '_blank');
@@ -406,6 +476,88 @@ export default function Laporan() {
           </table>
         `;
         break;
+      case 'neraca':
+        console.log('Generating neraca report...');
+        console.log('modalAwal exists:', !!modalAwal);
+        console.log('accountingData:', accountingData);
+        
+        reportTitle = 'Laporan Neraca';
+        reportContent = modalAwal ? `
+          ${headerHTML}
+          <h2 style="color: #8b5cf6; border-bottom: 2px solid #ddd; padding-bottom: 10px;">LAPORAN NERACA</h2>
+          <p><strong>Periode:</strong> ${activePeriod}</p>
+          <p><strong>Tanggal:</strong> ${formatDate(new Date().toISOString().split('T')[0])}</p>
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin: 20px 0;">
+            <div>
+              <h3 style="color: #8b5cf6; margin-bottom: 15px;">ASET</h3>
+              <table style="width: 100%; margin-bottom: 20px;">
+                <tbody>
+                  <tr><td colspan="2" style="font-weight: bold; background: #f3f4f6; padding: 10px;">Aset Lancar</td></tr>
+                  <tr>
+                    <td style="padding: 8px 20px;">Kas Tersedia</td>
+                    <td style="text-align: right; padding: 8px;">Rp ${accountingData.kasTersedia.toLocaleString('id-ID')}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 20px;">Bank</td>
+                    <td style="text-align: right; padding: 8px;">Rp ${modalAwal.bank.toLocaleString('id-ID')}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 20px;">Piutang Usaha</td>
+                    <td style="text-align: right; padding: 8px;">Rp ${accountingData.totalPiutang.toLocaleString('id-ID')}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 20px;">Persediaan Barang</td>
+                    <td style="text-align: right; padding: 8px;">Rp ${accountingData.totalStokValue.toLocaleString('id-ID')}</td>
+                  </tr>
+                  <tr style="border-top: 2px solid #8b5cf6;">
+                    <td style="padding: 10px 20px; font-weight: bold;">Total Aset</td>
+                    <td style="text-align: right; padding: 10px; font-weight: bold; color: #8b5cf6;">Rp ${accountingData.totalAset.toLocaleString('id-ID')}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <div>
+              <h3 style="color: #8b5cf6; margin-bottom: 15px;">LIABILITAS & EKUITAS</h3>
+              <table style="width: 100%; margin-bottom: 20px;">
+                <tbody>
+                  <tr><td colspan="2" style="font-weight: bold; background: #f3f4f6; padding: 10px;">Liabilitas</td></tr>
+                  <tr>
+                    <td style="padding: 8px 20px;">Utang Usaha</td>
+                    <td style="text-align: right; padding: 8px;">Rp ${accountingData.totalUtang.toLocaleString('id-ID')}</td>
+                  </tr>
+                  <tr><td colspan="2" style="font-weight: bold; background: #f3f4f6; padding: 10px;">Ekuitas</td></tr>
+                  <tr>
+                    <td style="padding: 8px 20px;">Modal Awal</td>
+                    <td style="text-align: right; padding: 8px;">Rp ${accountingData.ekuitasAwal.toLocaleString('id-ID')}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 20px;">Laba Bersih ${labaBersih >= 0 ? '' : '(Rugi)'}</td>
+                    <td style="text-align: right; padding: 8px; color: ${labaBersih >= 0 ? '#16a34a' : '#dc2626'};">Rp ${labaBersih.toLocaleString('id-ID')}</td>
+                  </tr>
+                  <tr style="border-top: 2px solid #8b5cf6;">
+                    <td style="padding: 10px 20px; font-weight: bold;">Total Liab & Ekuitas</td>
+                    <td style="text-align: right; padding: 10px; font-weight: bold; color: #8b5cf6;">Rp ${(accountingData.totalLiabilitas + accountingData.totalEkuitas).toLocaleString('id-ID')}</td>
+                  </tr>
+                </tbody>
+              </table>
+              
+              <div style="background: #dcfce7; padding: 15px; border-radius: 8px; margin-top: 20px;">
+                <h4 style="color: #16a34a; margin-bottom: 10px;">EKUITAS AKHIR</h4>
+                <p style="font-size: 18px; font-weight: bold; color: #16a34a;">Rp ${accountingData.ekuitasAkhir.toLocaleString('id-ID')}</p>
+              </div>
+            </div>
+          </div>
+        ` : `
+          ${headerHTML}
+          <h2 style="color: #8b5cf6; border-bottom: 2px solid #ddd; padding-bottom: 10px;">LAPORAN NERACA</h2>
+          <div style="text-align: center; padding: 50px; background: #f3f4f6; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #666;">Modal Awal Belum Disetup</h3>
+            <p style="color: #666; margin-top: 10px;">Silakan setup modal awal di Pengaturan → Akuntansi</p>
+          </div>
+        `;
+        break;
       case 'proyek':
         reportTitle = 'Laporan Proyek';
         reportContent = `
@@ -562,7 +714,7 @@ export default function Laporan() {
     printWindow.document.close();
   };
 
-  const exportLaporanExcel = (type: 'penjualan' | 'pembelian' | 'stok' | 'labarugi' | 'proyek' | 'semua') => {
+  const exportLaporanExcel = (type: 'penjualan' | 'pembelian' | 'stok' | 'labarugi' | 'proyek' | 'neraca' | 'semua') => {
     const workbook = XLSX.utils.book_new();
     const dateNow = new Date().toISOString().split('T')[0];
     
@@ -711,6 +863,45 @@ export default function Laporan() {
       XLSX.utils.book_append_sheet(workbook, wsProyek, 'Proyek');
     }
 
+    // Neraca Sheet
+    if (type === 'neraca' || type === 'semua') {
+      const neracaData = modalAwal ? [
+        ['LAPORAN NERACA'],
+        [`Periode: ${activePeriod}`],
+        [`Toko: ${storeInfo.name}`],
+        [],
+        ['ASET', ''],
+        ['Kas Tersedia', accountingData.kasTersedia],
+        ['Bank', modalAwal.bank],
+        ['Piutang Usaha', accountingData.totalPiutang],
+        ['Persediaan Barang', accountingData.totalStokValue],
+        [],
+        ['TOTAL ASET', accountingData.totalAset],
+        [],
+        ['LIABILITAS & EKUITAS', ''],
+        ['Liabilitas', ''],
+        ['Utang Usaha', accountingData.totalUtang],
+        [],
+        ['Ekuitas', ''],
+        ['Modal Awal', accountingData.ekuitasAwal],
+        ['Laba Bersih', labaBersih],
+        [],
+        ['TOTAL LIAB & EKUITAS', accountingData.totalLiabilitas + accountingData.totalEkuitas],
+        [],
+        ['EKUITAS AKHIR', accountingData.ekuitasAkhir],
+      ] : [
+        ['LAPORAN NERACA'],
+        [`Periode: ${activePeriod}`],
+        [`Toko: ${storeInfo.name}`],
+        [],
+        ['MODAL AWAL BELUM DISETUP'],
+        ['Silakan setup modal awal di Pengaturan → Akuntansi'],
+      ];
+      const wsNeraca = XLSX.utils.aoa_to_sheet(neracaData);
+      wsNeraca['!cols'] = [{ wch: 25 }, { wch: 20 }];
+      XLSX.utils.book_append_sheet(workbook, wsNeraca, 'Neraca');
+    }
+
     const fileName = type === 'semua' 
       ? `Laporan_Lengkap_${storeInfo.name.replace(/\s+/g, '_')}_${dateNow}.xlsx`
       : `Laporan_${type.charAt(0).toUpperCase() + type.slice(1)}_${dateNow}.xlsx`;
@@ -719,7 +910,7 @@ export default function Laporan() {
     toast.success(`Laporan ${type === 'semua' ? 'Lengkap' : type} berhasil di-export ke Excel`);
   };
 
-  const exportLaporanPDF = (type: 'penjualan' | 'pembelian' | 'stok' | 'labarugi' | 'proyek' | 'semua') => {
+  const exportLaporanPDF = (type: 'penjualan' | 'pembelian' | 'stok' | 'labarugi' | 'proyek' | 'neraca' | 'semua') => {
     const doc = new jsPDF();
     const dateNow = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
     let yPos = 20;
@@ -908,6 +1099,72 @@ export default function Laporan() {
       });
     }
 
+    // Neraca
+    if (type === 'neraca' || type === 'semua') {
+      if (type !== 'semua') addHeader('LAPORAN NERACA');
+      else addHeader('LAPORAN NERACA');
+      
+      if (modalAwal) {
+        // Aset table
+        autoTable(doc, {
+          startY: yPos,
+          head: [['ASET', 'JUMLAH']],
+          body: [
+            ['Kas Tersedia', `Rp ${accountingData.kasTersedia.toLocaleString('id-ID')}`],
+            ['Bank', `Rp ${modalAwal.bank.toLocaleString('id-ID')}`],
+            ['Piutang Usaha', `Rp ${accountingData.totalPiutang.toLocaleString('id-ID')}`],
+            ['Persediaan Barang', `Rp ${accountingData.totalStokValue.toLocaleString('id-ID')}`],
+            ['', ''],
+            ['TOTAL ASET', `Rp ${accountingData.totalAset.toLocaleString('id-ID')}`],
+          ],
+          styles: { fontSize: 10, cellPadding: 4 },
+          headStyles: { fillColor: [139, 92, 246] },
+          columnStyles: {
+            0: { cellWidth: 100 },
+            1: { cellWidth: 60, halign: 'right' }
+          },
+        });
+        
+        yPos += 60;
+        
+        // Liabilitas & Ekuitas table
+        autoTable(doc, {
+          startY: yPos,
+          head: [['LIABILITAS & EKUITAS', 'JUMLAH']],
+          body: [
+            ['Liabilitas', ''],
+            ['Utang Usaha', `Rp ${accountingData.totalUtang.toLocaleString('id-ID')}`],
+            ['', ''],
+            ['Ekuitas', ''],
+            ['Modal Awal', `Rp ${accountingData.ekuitasAwal.toLocaleString('id-ID')}`],
+            ['Laba Bersih', `Rp ${labaBersih.toLocaleString('id-ID')}`],
+            ['', ''],
+            ['TOTAL LIAB & EKUITAS', `Rp ${(accountingData.totalLiabilitas + accountingData.totalEkuitas).toLocaleString('id-ID')}`],
+          ],
+          styles: { fontSize: 10, cellPadding: 4 },
+          headStyles: { fillColor: [139, 92, 246] },
+          columnStyles: {
+            0: { cellWidth: 100 },
+            1: { cellWidth: 60, halign: 'right' }
+          },
+        });
+        
+        yPos += 80;
+        
+        // Ekuitas Akhir
+        doc.setFillColor(220, 252, 231);
+        doc.rect(14, yPos, 182, 15, 'F');
+        doc.setTextColor(22, 163, 74);
+        doc.setFontSize(12);
+        doc.text('EKUITAS AKHIR:', 20, yPos + 10);
+        doc.text(`Rp ${accountingData.ekuitasAkhir.toLocaleString('id-ID')}`, 120, yPos + 10, { align: 'right' });
+      } else {
+        doc.text('Modal Awal Belum Disetup', 105, yPos + 20, { align: 'center' });
+        doc.text('Silakan setup modal awal di Pengaturan → Akuntansi', 105, yPos + 30, { align: 'center' });
+      }
+      if (type === 'semua') addNewPage();
+    }
+
     // Footer
     const pageCount = doc.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
@@ -977,6 +1234,10 @@ export default function Laporan() {
                 <FileSpreadsheet className="w-4 h-4 text-purple-600" />
                 Proyek
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportLaporanExcel('neraca')} className="gap-2 cursor-pointer pl-6">
+                <FileSpreadsheet className="w-4 h-4 text-purple-600" />
+                Neraca
+              </DropdownMenuItem>
               
               <div className="border-t my-1" />
               <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Export PDF</div>
@@ -1003,6 +1264,10 @@ export default function Laporan() {
               <DropdownMenuItem onClick={() => exportLaporanPDF('proyek')} className="gap-2 cursor-pointer pl-6">
                 <File className="w-4 h-4 text-purple-600" />
                 Proyek
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportLaporanPDF('neraca')} className="gap-2 cursor-pointer pl-6">
+                <File className="w-4 h-4 text-purple-600" />
+                Neraca
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -1146,13 +1411,140 @@ export default function Laporan() {
           </CardContent>
         </Card>
 
+        {/* Laba/Rugi Card */}
+        <Card className="bg-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Wallet className="w-5 h-5 text-info" />
+              Laba/Rugi
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Total Penjualan</span>
+                <span className="text-sm font-semibold text-green-600">{formatRupiah(totalPenjualan)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Total Pembelian</span>
+                <span className="text-sm font-semibold text-red-600">{formatRupiah(totalPembelian)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Biaya Operasional</span>
+                <span className="text-sm font-semibold text-orange-600">{formatRupiah(totalOperasional)}</span>
+              </div>
+              <div className="border-t pt-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium">Laba Kotor</span>
+                  <span className={`text-sm font-bold ${labaKotor >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatRupiah(labaKotor)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium">Laba Bersih</span>
+                  <span className={`text-sm font-bold ${labaBersih >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatRupiah(labaBersih)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-muted-foreground">Margin</span>
+                  <span className="text-xs text-muted-foreground">
+                    {marginBersih.toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Neraca Card */}
+        <Card className="bg-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <TrendingUp className="w-5 h-5 text-purple-600" />
+              Neraca
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {modalAwal ? (
+              <div className="space-y-3">
+                <div className="p-2 bg-purple-50 rounded-lg border border-purple-200">
+                  <p className="text-xs font-medium text-purple-800 mb-1">Modal Awal</p>
+                  <p className="text-sm font-bold text-purple-900">{formatRupiah(accountingData.modalAwalTotal)}</p>
+                </div>
+                
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase">Aset</p>
+                  <div className="flex justify-between items-center text-xs">
+                    <span>Kas Tersedia</span>
+                    <span className="font-medium">{formatRupiah(accountingData.kasTersedia)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span>Bank</span>
+                    <span className="font-medium">{formatRupiah(modalAwal.bank)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span>Piutang</span>
+                    <span className="font-medium">{formatRupiah(accountingData.totalPiutang)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span>Stok</span>
+                    <span className="font-medium">{formatRupiah(accountingData.totalStokValue)}</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-1 border-t">
+                    <span className="text-xs font-semibold">Total Aset</span>
+                    <span className="text-sm font-bold text-purple-600">{formatRupiah(accountingData.totalAset)}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase">Liabilitas & Ekuitas</p>
+                  <div className="flex justify-between items-center text-xs">
+                    <span>Utang</span>
+                    <span className="font-medium">{formatRupiah(accountingData.totalUtang)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span>Ekuitas Awal</span>
+                    <span className="font-medium">{formatRupiah(accountingData.ekuitasAwal)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span>Laba Bersih</span>
+                    <span className={`font-medium ${labaBersih >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {formatRupiah(labaBersih)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center pt-1 border-t">
+                    <span className="text-xs font-semibold">Total Liab & Ekuitas</span>
+                    <span className="text-sm font-bold text-purple-600">{formatRupiah(accountingData.totalLiabilitas + accountingData.totalEkuitas)}</span>
+                  </div>
+                </div>
+
+                <div className="p-2 bg-green-50 rounded-lg border border-green-200">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-medium text-green-800">Ekuitas Akhir</span>
+                    <span className="text-sm font-bold text-green-900">{formatRupiah(accountingData.ekuitasAkhir)}</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-6">
+                <Calculator className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground">Modal awal belum disetup</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Set up modal awal di Pengaturan → Akuntansi
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Quick Reports */}
         <Card className="lg:col-span-2 bg-card">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Laporan Cepat</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 md:gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 md:gap-4">
               <Button 
                 variant="outline" 
                 className="h-auto py-4 md:py-6 flex-col gap-2 border-secondary/30 hover:bg-secondary/5 hover:border-secondary text-xs md:text-sm"
@@ -1184,6 +1576,14 @@ export default function Laporan() {
               >
                 <Wallet className="w-6 h-6 md:w-8 md:h-8 text-info" />
                 <span>Laba/Rugi</span>
+              </Button>
+              <Button 
+                variant="outline" 
+                className="h-auto py-4 md:py-6 flex-col gap-2 border-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:border-purple-500 text-xs md:text-sm"
+                onClick={() => handleQuickReport('neraca')}
+              >
+                <TrendingUp className="w-6 h-6 md:w-8 md:h-8 text-purple-500" />
+                <span>Neraca</span>
               </Button>
               <Button 
                 variant="outline" 

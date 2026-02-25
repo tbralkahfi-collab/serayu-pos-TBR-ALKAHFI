@@ -132,6 +132,18 @@ export interface Project {
   materials: ProjectMaterial[];
 }
 
+export interface ModalAwal {
+  id: string;
+  tanggal: string;
+  kas: number;
+  bank: number;
+  inventaris: number;
+  total: number;
+  catatan: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface DataContextType {
   isLoading: boolean;
   // Products
@@ -176,6 +188,13 @@ interface DataContextType {
   addProject: (project: Omit<Project, 'id'>) => Promise<void>;
   updateProject: (id: string, project: Partial<Project>) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
+
+  // Modal Awal
+  modalAwal: ModalAwal | null;
+  addModalAwal: (modalAwal: Omit<ModalAwal, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updateModalAwal: (modalAwal: Partial<ModalAwal>) => Promise<void>;
+  getModalAwal: () => Promise<ModalAwal | null>;
+  fetchData: () => Promise<void>;
 
   // Project debt relation
   getProjectDebts: (projectId: string) => DebtRecord[];
@@ -252,9 +271,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [modalAwal, setModalAwal] = useState<ModalAwal | null>(null);
 
   // Fetch all data
   const fetchData = useCallback(async () => {
+    console.log('[DataContext] fetchData called');
+    console.log('[DataContext] Current user:', user);
+    console.log('[DataContext] Supabase URL:', supabase.supabaseUrl);
+    
     if (!user) {
       console.log('[DataContext] No user, clearing data');
       setProducts([]);
@@ -264,6 +288,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setExpenses([]);
       setTransactions([]);
       setProjects([]);
+      setModalAwal(null);
       setIsLoading(false);
       return;
     }
@@ -279,6 +304,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         expensesRes,
         transactionsRes,
         projectsRes,
+        modalAwalRes,
       ] = await Promise.all([
         supabase.from('products').select('*').order('nama'),
         supabase.from('suppliers').select('*').order('nama'),
@@ -287,6 +313,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         supabase.from('expenses').select('*').order('tanggal', { ascending: false }),
         supabase.from('transactions').select('*').order('tanggal', { ascending: false }),
         supabase.from('projects').select('*').order('created_at', { ascending: false }),
+        supabase.from('modal_awal').select('*').single(),
       ]);
 
       console.log('[DataContext] Products response:', productsRes.error || `${productsRes.data?.length || 0} items`);
@@ -403,6 +430,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
           materials: parseMaterials(p.materials),
         })));
       }
+
+      console.log('[DataContext] Modal awal query response:', { error: modalAwalRes.error, data: modalAwalRes.data });
+      
+      if (modalAwalRes.error) {
+        console.log('[DataContext] Modal awal table not found:', modalAwalRes.error);
+        // Table might not exist yet, don't show error for first time
+        setModalAwal(null);
+      } else if (modalAwalRes.data) {
+        console.log('[DataContext] Modal awal data found:', modalAwalRes.data);
+        setModalAwal({
+          id: modalAwalRes.data.id,
+          tanggal: modalAwalRes.data.tanggal,
+          kas: Number(modalAwalRes.data.kas),
+          bank: Number(modalAwalRes.data.bank),
+          inventaris: Number(modalAwalRes.data.inventaris),
+          total: Number(modalAwalRes.data.total),
+          catatan: modalAwalRes.data.catatan || '',
+          createdAt: modalAwalRes.data.created_at,
+          updatedAt: modalAwalRes.data.updated_at,
+        });
+      } else {
+        console.log('[DataContext] No modal awal data found');
+        setModalAwal(null);
+      }
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Gagal memuat data');
@@ -415,6 +466,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Add modal awal to context
+  useEffect(() => {
+    console.log('[DataContext] modalAwal state changed:', modalAwal);
+  }, [modalAwal]);
 
   // Setup realtime subscriptions
   useEffect(() => {
@@ -429,6 +485,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'modal_awal' }, () => fetchData())
       .subscribe();
 
     return () => {
@@ -852,6 +909,118 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // ==================== MODAL AWAL ====================
+  const addModalAwal = async (modalAwalData: Omit<ModalAwal, 'id' | 'createdAt' | 'updatedAt'>) => {
+    console.log('addModalAwal called with data:', modalAwalData);
+    
+    if (!user) {
+      console.error('No user found');
+      toast.error('User tidak ditemukan');
+      return;
+    }
+    
+    console.log('Inserting modal awal for user:', user.id);
+    console.log('Supabase client:', supabase);
+    console.log('Supabase URL:', supabase.supabaseUrl);
+    
+    try {
+      // First check if table exists
+      console.log('Checking if modal_awal table exists...');
+      const { error: tableCheckError } = await supabase.from('modal_awal').select('count').head();
+      
+      if (tableCheckError) {
+        console.error('Table check error:', tableCheckError);
+        if (tableCheckError.code === 'PGRST116') {
+          toast.error('Table modal_awal tidak ditemukan. Silakan buat table di Supabase dashboard.');
+          return;
+        }
+      }
+      
+      console.log('Table exists, proceeding with insert...');
+      
+      const { error, data } = await supabase.from('modal_awal').insert({
+        user_id: user.id,
+        tanggal: modalAwalData.tanggal,
+        kas: modalAwalData.kas,
+        bank: modalAwalData.bank,
+        inventaris: modalAwalData.inventaris,
+        total: modalAwalData.total,
+        catatan: modalAwalData.catatan,
+      }).select();
+
+      console.log('Insert result:', { error, data });
+
+      if (error) {
+        console.error('Detailed error:', error);
+        toast.error('Gagal menyimpan modal awal: ' + error.message);
+        
+        // Check specific error types
+        if (error.code === 'PGRST116') {
+          toast.error('Table modal_awal tidak ditemukan. Silakan buat table di Supabase.');
+        } else if (error.code === '42501') {
+          toast.error('Permission denied. Cek RLS policies di Supabase.');
+        }
+      } else {
+        toast.success('Modal awal berhasil disimpan');
+        console.log('Modal awal inserted successfully:', data);
+        
+        // Trigger refresh data
+        await fetchData();
+      }
+    } catch (err) {
+      console.error('Unexpected error:', err);
+      toast.error('Error tidak terduga saat menyimpan modal awal');
+    }
+  };
+
+  const updateModalAwal = async (modalAwalData: Partial<ModalAwal>) => {
+    if (!user || !modalAwal?.id) return;
+    
+    const updateData: Record<string, unknown> = {};
+    if (modalAwalData.tanggal !== undefined) updateData.tanggal = modalAwalData.tanggal;
+    if (modalAwalData.kas !== undefined) updateData.kas = modalAwalData.kas;
+    if (modalAwalData.bank !== undefined) updateData.bank = modalAwalData.bank;
+    if (modalAwalData.inventaris !== undefined) updateData.inventaris = modalAwalData.inventaris;
+    if (modalAwalData.total !== undefined) updateData.total = modalAwalData.total;
+    if (modalAwalData.catatan !== undefined) updateData.catatan = modalAwalData.catatan;
+
+    const { error } = await supabase.from('modal_awal').update(updateData).eq('id', modalAwal.id);
+    
+    if (error) {
+      toast.error('Gagal memperbarui modal awal');
+      console.error(error);
+    } else {
+      toast.success('Modal awal berhasil diperbarui');
+    }
+  };
+
+  const getModalAwal = async (): Promise<ModalAwal | null> => {
+    if (!user) return null;
+    
+    const { data, error } = await supabase
+      .from('modal_awal')
+      .select('*')
+      .eq('user_id', user.id)
+      .single();
+    
+    if (error) {
+      console.error('Error fetching modal awal:', error);
+      return null;
+    }
+    
+    return data ? {
+      id: data.id,
+      tanggal: data.tanggal,
+      kas: Number(data.kas),
+      bank: Number(data.bank),
+      inventaris: Number(data.inventaris),
+      total: Number(data.total),
+      catatan: data.catatan || '',
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    } : null;
+  };
+
   return (
     <DataContext.Provider value={{
       isLoading,
@@ -890,6 +1059,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       createPurchaseDebt,
       removeRelatedDebt,
       updateRelatedDebt,
+      modalAwal,
+      addModalAwal,
+      updateModalAwal,
+      getModalAwal,
+      fetchData,
       refreshData: fetchData,
     }}>
       {children}

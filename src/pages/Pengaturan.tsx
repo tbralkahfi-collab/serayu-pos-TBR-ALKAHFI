@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, Fragment } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,6 +34,9 @@ import {
   History,
   RotateCcw,
   Shield,
+  Calculator,
+  TrendingUp,
+  DollarSign,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -65,7 +68,7 @@ export default function Pengaturan() {
     restoreBackup,
     fetchBackups,
   } = useStore();
-  const { products, suppliers, purchases, debts, expenses, transactions, projects, refreshData } = useData();
+  const { products, suppliers, purchases, debts, expenses, transactions, projects, modalAwal, addModalAwal, updateModalAwal, fetchData } = useData();
   
   const [formData, setFormData] = useState({
     name: storeInfo.name,
@@ -79,6 +82,24 @@ export default function Pengaturan() {
   const [minStock, setMinStock] = useState(stockSettings.minStockAlert.toString());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+
+  // Modal Awal state
+  const [modalAwalForm, setModalAwalForm] = useState({
+    tanggal: modalAwal?.tanggal || new Date().toISOString().split('T')[0],
+    kas: modalAwal?.kas || 0,
+    bank: modalAwal?.bank || 0,
+    inventaris: modalAwal?.inventaris || 0,
+    catatan: modalAwal?.catatan || '',
+  });
+  
+  // Debug state changes
+  useEffect(() => {
+    console.log('[Pengaturan] modalAwal changed:', modalAwal);
+    console.log('[Pengaturan] modalAwalForm updated:', modalAwalForm);
+  }, [modalAwal, modalAwalForm]);
+  
+  const [isSavingModalAwal, setIsSavingModalAwal] = useState(false);
+  const [modalAwalError, setModalAwalError] = useState('');
 
   // Local printer settings state
   const [localPrinterType, setLocalPrinterType] = useState(printerSettings.type);
@@ -100,6 +121,19 @@ export default function Pengaturan() {
     setLocalPaperWidth(printerSettings.paperWidth);
     setLocalAutoPrint(printerSettings.autoPrint);
   }, [printerSettings]);
+
+  // Sync modal awal form when modalAwal changes
+  React.useEffect(() => {
+    if (modalAwal) {
+      setModalAwalForm({
+        tanggal: modalAwal.tanggal,
+        kas: modalAwal.kas,
+        bank: modalAwal.bank,
+        inventaris: modalAwal.inventaris,
+        catatan: modalAwal.catatan,
+      });
+    }
+  }, [modalAwal]);
 
   React.useEffect(() => {
     setMinStock(stockSettings.minStockAlert.toString());
@@ -205,6 +239,61 @@ export default function Pengaturan() {
   const handleSaveStock = async () => {
     await updateStockSettings({ minStockAlert: parseInt(minStock) || 10 });
     toast.success('Pengaturan stok berhasil disimpan');
+  };
+
+  const handleSaveModalAwal = async () => {
+    console.log('handleSaveModalAwal called', { modalAwalForm });
+    console.log('Current modalAwal state:', modalAwal);
+    
+    if (!modalAwalForm.tanggal) {
+      toast.error('Tanggal modal awal wajib diisi');
+      return;
+    }
+
+    // Check if any modal values are entered
+    const hasAnyModalValue = modalAwalForm.kas > 0 || modalAwalForm.bank > 0 || modalAwalForm.inventaris > 0;
+    console.log('hasAnyModalValue:', hasAnyModalValue, { kas: modalAwalForm.kas, bank: modalAwalForm.bank, inventaris: modalAwalForm.inventaris });
+    
+    if (!hasAnyModalValue) {
+      toast.error('Minimal satu nilai modal (kas, bank, atau inventaris) harus diisi');
+      return;
+    }
+
+    // Clear any previous error
+    setModalAwalError('');
+
+    setIsSavingModalAwal(true);
+    try {
+      const total = modalAwalForm.kas + modalAwalForm.bank + modalAwalForm.inventaris;
+      const modalAwalData = {
+        ...modalAwalForm,
+        total,
+      };
+      
+      console.log('Saving modal awal data:', modalAwalData);
+      console.log('Calling addModalAwal...');
+
+      if (modalAwal) {
+        console.log('Updating existing modal awal');
+        await updateModalAwal(modalAwalData);
+      } else {
+        console.log('Adding new modal awal');
+        await addModalAwal(modalAwalData);
+      }
+      
+      console.log('Modal awal saved successfully');
+      toast.success('Modal awal berhasil disimpan');
+      
+      // Force refresh after successful save
+      console.log('Triggering fetchData...');
+      await fetchData();
+      
+    } catch (error) {
+      console.error('Error saving modal awal:', error);
+      setModalAwalError('Gagal menyimpan modal awal');
+    } finally {
+      setIsSavingModalAwal(false);
+    }
   };
 
   const handleManualBackup = async () => {
@@ -408,6 +497,10 @@ export default function Pengaturan() {
           <TabsTrigger value="data" className="gap-1 md:gap-2 text-xs md:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Database className="w-3 h-3 md:w-4 md:h-4" />
             <span className="hidden sm:inline">Data</span>
+          </TabsTrigger>
+          <TabsTrigger value="akuntansi" className="gap-1 md:gap-2 text-xs md:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+            <Calculator className="w-3 h-3 md:w-4 md:h-4" />
+            <span className="hidden sm:inline">Akuntansi</span>
           </TabsTrigger>
           <TabsTrigger value="aplikasi" className="gap-1 md:gap-2 text-xs md:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Download className="w-3 h-3 md:w-4 md:h-4" />
@@ -921,6 +1014,141 @@ export default function Pengaturan() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="akuntansi" className="space-y-4 md:space-y-6">
+          <Card className="bg-card border-t-4 border-t-primary">
+            <CardHeader className="pb-2 md:pb-4">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Calculator className="w-5 h-5 text-primary" />
+                Modal Awal
+              </CardTitle>
+              <CardDescription className="text-xs md:text-sm">
+                Setup modal awal untuk perhitungan akuntansi yang akurat
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="tanggalModal">Tanggal Mulai Usaha</Label>
+                  <Input
+                    id="tanggalModal"
+                    type="date"
+                    value={modalAwalForm.tanggal}
+                    onChange={(e) => setModalAwalForm(prev => ({ ...prev, tanggal: e.target.value }))}
+                    className="w-full"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="catatanModal">Catatan</Label>
+                  <Input
+                    id="catatanModal"
+                    placeholder="Opsional: Deskripsi modal awal"
+                    value={modalAwalForm.catatan}
+                    onChange={(e) => setModalAwalForm(prev => ({ ...prev, catatan: e.target.value }))}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="kasModal">Modal Kas</Label>
+                  <Input
+                    id="kasModal"
+                    type="number"
+                    placeholder="0"
+                    value={modalAwalForm.kas || ''}
+                    onChange={(e) => setModalAwalForm(prev => ({ ...prev, kas: Number(e.target.value) || 0 }))}
+                    className={`w-full ${modalAwalForm.kas === 0 && modalAwalForm.bank === 0 && modalAwalForm.inventaris === 0 ? 'border-red-300 focus:border-red-500' : ''}`}
+                  />
+                  {modalAwalForm.kas === 0 && modalAwalForm.bank === 0 && modalAwalForm.inventaris === 0 && (
+                    <p className="text-xs text-red-500 mt-1">Masukkan minimal satu nilai modal</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bankModal">Modal Bank</Label>
+                  <Input
+                    id="bankModal"
+                    type="number"
+                    placeholder="0"
+                    value={modalAwalForm.bank || ''}
+                    onChange={(e) => setModalAwalForm(prev => ({ ...prev, bank: Number(e.target.value) || 0 }))}
+                    className={`w-full ${modalAwalForm.kas === 0 && modalAwalForm.bank === 0 && modalAwalForm.inventaris === 0 ? 'border-red-300 focus:border-red-500' : ''}`}
+                  />
+                  {modalAwalForm.kas === 0 && modalAwalForm.bank === 0 && modalAwalForm.inventaris === 0 && (
+                    <p className="text-xs text-red-500 mt-1">Masukkan minimal satu nilai modal</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="inventarisModal">Modal Inventaris</Label>
+                  <Input
+                    id="inventarisModal"
+                    type="number"
+                    placeholder="0"
+                    value={modalAwalForm.inventaris || ''}
+                    onChange={(e) => setModalAwalForm(prev => ({ ...prev, inventaris: Number(e.target.value) || 0 }))}
+                    className={`w-full ${modalAwalForm.kas === 0 && modalAwalForm.bank === 0 && modalAwalForm.inventaris === 0 ? 'border-red-300 focus:border-red-500' : ''}`}
+                  />
+                  {modalAwalForm.kas === 0 && modalAwalForm.bank === 0 && modalAwalForm.inventaris === 0 && (
+                    <p className="text-xs text-red-500 mt-1">Masukkan minimal satu nilai modal</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-4 bg-gradient-to-r from-primary/5 to-secondary/5 rounded-lg border">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Total Modal Awal</p>
+                    <p className="text-xs text-muted-foreground">Jumlah semua modal</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-primary">
+                      Rp {(modalAwalForm.kas + modalAwalForm.bank + modalAwalForm.inventaris).toLocaleString('id-ID')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Button 
+                  onClick={handleSaveModalAwal} 
+                  disabled={isSavingModalAwal || (!modalAwalForm.tanggal || (modalAwalForm.kas === 0 && modalAwalForm.bank === 0 && modalAwalForm.inventaris === 0))}
+                  className={`gap-2 ${(!modalAwalForm.tanggal || (modalAwalForm.kas === 0 && modalAwalForm.bank === 0 && modalAwalForm.inventaris === 0)) ? 'opacity-50 cursor-not-allowed' : ''} bg-gradient-primary`}
+                >
+                  {isSavingModalAwal ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  {modalAwal ? 'Update Modal Awal' : 'Simpan Modal Awal'}
+                </Button>
+                
+                {modalAwal && (
+                  <Badge variant="secondary" className="gap-1">
+                    <CheckCircle className="w-3 h-3" />
+                    Sudah Disetup
+                  </Badge>
+                )}
+              </div>
+
+              {modalAwal && (
+                <div className="p-3 rounded-lg bg-green-50 border border-green-200">
+                  <p className="text-sm text-green-800">
+                    <strong>Status:</strong> Modal awal sudah disetup pada {format(new Date(modalAwal.createdAt), 'dd MMM yyyy', 'id')}
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        {modalAwalError && (
+          <Fragment>
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-800">{modalAwalError}</p>
+            </div>
+          </Fragment>
+        )}
 
         <TabsContent value="aplikasi" className="space-y-4 md:space-y-6">
           <Card className="bg-card border-t-4 border-t-info">
