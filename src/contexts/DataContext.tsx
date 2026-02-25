@@ -319,6 +319,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       console.log('[DataContext] Products response:', productsRes.error || `${productsRes.data?.length || 0} items`);
       console.log('[DataContext] Transactions response:', transactionsRes.error || `${transactionsRes.data?.length || 0} items`);
       console.log('[DataContext] Purchases response:', purchasesRes.error || `${purchasesRes.data?.length || 0} items`);
+      console.log('[DataContext] Modal awal response:', modalAwalRes.error || modalAwalRes.data ? '1 item' : '0 items');
 
       if (productsRes.data) {
         setProducts(productsRes.data.map(p => ({
