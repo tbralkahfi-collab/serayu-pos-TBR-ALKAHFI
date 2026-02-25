@@ -83,7 +83,7 @@ export default function Pengaturan() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
-  // Modal Awal state
+  // Modal Awal state - Updated: 2026-02-26 01:30
   const [modalAwalForm, setModalAwalForm] = useState({
     tanggal: modalAwal?.tanggal || new Date().toISOString().split('T')[0],
     kas: modalAwal?.kas || 0,
