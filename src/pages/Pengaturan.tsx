@@ -242,9 +242,6 @@ export default function Pengaturan() {
   };
 
   const handleSaveModalAwal = async () => {
-    console.log('handleSaveModalAwal called', { modalAwalForm });
-    console.log('Current modalAwal state:', modalAwal);
-    
     if (!modalAwalForm.tanggal) {
       toast.error('Tanggal modal awal wajib diisi');
       return;
@@ -252,7 +249,6 @@ export default function Pengaturan() {
 
     // Check if any modal values are entered
     const hasAnyModalValue = modalAwalForm.kas > 0 || modalAwalForm.bank > 0 || modalAwalForm.inventaris > 0;
-    console.log('hasAnyModalValue:', hasAnyModalValue, { kas: modalAwalForm.kas, bank: modalAwalForm.bank, inventaris: modalAwalForm.inventaris });
     
     if (!hasAnyModalValue) {
       toast.error('Minimal satu nilai modal (kas, bank, atau inventaris) harus diisi');
@@ -269,24 +265,14 @@ export default function Pengaturan() {
         ...modalAwalForm,
         total,
       };
-      
-      console.log('Saving modal awal data:', modalAwalData);
-      console.log('Calling addModalAwal...');
 
       if (modalAwal) {
-        console.log('Updating existing modal awal');
         await updateModalAwal(modalAwalData);
       } else {
-        console.log('Adding new modal awal');
         await addModalAwal(modalAwalData);
       }
       
-      console.log('Modal awal saved successfully');
       toast.success('Modal awal berhasil disimpan');
-      
-      // Force refresh after successful save
-      console.log('Triggering fetchData...');
-      await fetchData();
       
     } catch (error) {
       console.error('Error saving modal awal:', error);
@@ -1112,8 +1098,8 @@ export default function Pengaturan() {
               <div className="flex gap-2">
                 <Button 
                   onClick={handleSaveModalAwal} 
-                  disabled={isSavingModalAwal || (!modalAwalForm.tanggal || (modalAwalForm.kas === 0 && modalAwalForm.bank === 0 && modalAwalForm.inventaris === 0))}
-                  className={`gap-2 ${(!modalAwalForm.tanggal || (modalAwalForm.kas === 0 && modalAwalForm.bank === 0 && modalAwalForm.inventaris === 0)) ? 'opacity-50 cursor-not-allowed' : ''} bg-gradient-primary`}
+                  disabled={isSavingModalAwal || !modalAwalForm.tanggal}
+                  className={`gap-2 ${!modalAwalForm.tanggal ? 'opacity-50 cursor-not-allowed' : ''} bg-gradient-primary`}
                 >
                   {isSavingModalAwal ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
