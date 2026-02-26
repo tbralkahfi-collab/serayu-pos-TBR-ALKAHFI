@@ -18,6 +18,9 @@ import {
   Menu,
   X,
   Smartphone,
+  Calculator,
+  TrendingUp,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -33,7 +36,18 @@ const menuItems = [
   { icon: BarChart3, label: 'Dashboard Proyek', path: '/proyek-dashboard' },
   { icon: Wallet, label: 'Utang/Piutang', path: '/utang-piutang' },
   { icon: Building2, label: 'Operasional', path: '/operasional' },
-  { icon: BarChart3, label: 'Laporan', path: '/laporan' },
+  { 
+    icon: Calculator, 
+    label: 'Akuntansi', 
+    path: '/akuntansi',
+    isSubmenu: true,
+    subItems: [
+      { icon: TrendingUp, label: 'Modal Awal', path: '/akuntansi/modal-awal' },
+      { icon: FileSpreadsheet, label: 'Neraca', path: '/akuntansi/neraca' },
+      { icon: BarChart3, label: 'Laba Rugi', path: '/akuntansi/laba-rugi' },
+      { icon: FileText, label: 'Laporan Lengkap', path: '/laporan' },
+    ]
+  },
   { icon: Smartphone, label: 'Install App', path: '/install-app' },
   { icon: SettingsIcon, label: 'Pengaturan', path: '/pengaturan' },
 ];
@@ -42,6 +56,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const { user, logout } = useAuth();
   const { storeInfo } = useStore();
   const location = useLocation();
+  const [expandedSubmenu, setExpandedSubmenu] = useState<string | null>('akuntansi');
 
   return (
     <div className="flex flex-col h-full">
@@ -72,6 +87,58 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
       <nav className="flex-1 p-2 md:p-4 space-y-1 overflow-y-auto">
         {menuItems.map((item) => {
           const isActive = location.pathname === item.path;
+          const isSubmenuItem = item.isSubmenu;
+          const isExpanded = expandedSubmenu === item.path;
+          
+          if (isSubmenuItem) {
+            return (
+              <div key={item.path} className="space-y-1">
+                {/* Main menu item */}
+                <button
+                  onClick={() => setExpandedSubmenu(isExpanded ? null : item.path)}
+                  className={cn(
+                    'w-full flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2.5 md:py-3 rounded-lg transition-all duration-200 group',
+                    isActive || location.pathname.startsWith(item.path)
+                      ? 'bg-primary text-primary-foreground shadow-md'
+                      : 'text-muted-foreground hover:bg-secondary/10 hover:text-secondary'
+                  )}
+                >
+                  <item.icon className={cn('w-4 h-4 md:w-5 md:h-5 flex-shrink-0', (isActive || location.pathname.startsWith(item.path)) && 'text-primary-foreground')} />
+                  <span className="font-medium text-sm md:text-base truncate">{item.label}</span>
+                  <ChevronRight className={cn('w-4 h-4 ml-auto flex-shrink-0 transition-transform', isExpanded && 'rotate-90')} />
+                </button>
+                
+                {/* Submenu items */}
+                {isExpanded && item.subItems && (
+                  <div className="ml-4 md:ml-6 space-y-1">
+                    {item.subItems.map((subItem) => {
+                      const isSubActive = location.pathname === subItem.path;
+                      return (
+                        <NavLink
+                          key={subItem.path}
+                          to={subItem.path}
+                          onClick={onNavClick}
+                          className={cn(
+                            'flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2 rounded-lg transition-all duration-200 group',
+                            isSubActive
+                              ? 'bg-primary/20 text-primary font-medium'
+                              : 'text-muted-foreground hover:bg-secondary/5 hover:text-secondary'
+                          )}
+                        >
+                          <subItem.icon className="w-4 h-4 flex-shrink-0" />
+                          <span className="text-sm truncate">{subItem.label}</span>
+                          {isSubActive && (
+                            <ChevronRight className="w-3 h-3 ml-auto flex-shrink-0" />
+                          )}
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+          
           return (
             <NavLink
               key={item.path}

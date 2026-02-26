@@ -8,6 +8,7 @@ import { useStore } from '@/contexts/StoreContext';
 import { useData } from '@/contexts/DataContext';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { id } from 'date-fns/locale';
 import { id as localeId } from 'date-fns/locale';
 import {
   Store,
@@ -1022,7 +1023,7 @@ export default function Pengaturan() {
               )}
               {modalAwal && (
                 <div className="bg-green-100 border border-green-300 text-green-800 px-3 py-2 rounded-lg text-sm">
-                  ✅ Sudah disetup - {format(new Date(modalAwal.createdAt), 'dd MMM yyyy', 'id')}
+                  ✅ Sudah disetup - {new Date(modalAwal.createdAt).toLocaleDateString('id-ID')}
                 </div>
               )}
             </CardHeader>
@@ -1135,7 +1136,7 @@ export default function Pengaturan() {
               {modalAwal && (
                 <div className="p-3 rounded-lg bg-green-50 border border-green-200">
                   <p className="text-sm text-green-800">
-                    <strong>Status:</strong> Modal awal sudah disetup pada {format(new Date(modalAwal.createdAt), 'dd MMM yyyy', 'id')}
+                    <strong>Status:</strong> Modal awal sudah disetup pada {new Date(modalAwal.createdAt).toLocaleDateString('id-ID')}
                   </p>
                 </div>
               )}

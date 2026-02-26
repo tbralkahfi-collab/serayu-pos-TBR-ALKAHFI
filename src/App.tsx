@@ -20,6 +20,9 @@ import Penjualan from "./pages/Penjualan";
 import Laporan from "./pages/Laporan";
 import Pengaturan from "./pages/Pengaturan";
 import InstallApp from "./pages/InstallApp";
+import ModalAwal from "./pages/akuntansi/ModalAwal";
+import Neraca from "./pages/akuntansi/Neraca";
+import LabaRugi from "./pages/akuntansi/LabaRugi";
 import { Layout } from "./components/Layout";
 
 const queryClient = new QueryClient();
@@ -57,6 +60,11 @@ function AppRoutes() {
         <Route path="/penjualan" element={<Penjualan />} />
         <Route path="/laporan" element={<Laporan />} />
         <Route path="/pengaturan" element={<Pengaturan />} />
+        
+        {/* Accounting Routes */}
+        <Route path="/akuntansi/modal-awal" element={<ModalAwal />} />
+        <Route path="/akuntansi/neraca" element={<Neraca />} />
+        <Route path="/akuntansi/laba-rugi" element={<LabaRugi />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>
