@@ -18,6 +18,7 @@ import {
   Menu,
   X,
   Smartphone,
+  Landmark,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -33,6 +34,7 @@ const menuItems = [
   { icon: BarChart3, label: 'Dashboard Proyek', path: '/proyek-dashboard' },
   { icon: Wallet, label: 'Utang/Piutang', path: '/utang-piutang' },
   { icon: Building2, label: 'Operasional', path: '/operasional' },
+  { icon: Landmark, label: 'Akuntansi', path: '/akuntansi' },
   { icon: BarChart3, label: 'Laporan', path: '/laporan' },
   { icon: Smartphone, label: 'Install App', path: '/install-app' },
   { icon: SettingsIcon, label: 'Pengaturan', path: '/pengaturan' },

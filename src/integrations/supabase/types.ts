@@ -38,6 +38,36 @@ export type Database = {
         }
         Relationships: []
       }
+      capital: {
+        Row: {
+          created_at: string
+          id: string
+          jumlah: number
+          keterangan: string | null
+          tanggal: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          jumlah?: number
+          keterangan?: string | null
+          tanggal?: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          jumlah?: number
+          keterangan?: string | null
+          tanggal?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       debts: {
         Row: {
           created_at: string

@@ -18,6 +18,7 @@ import UtangPiutang from "./pages/UtangPiutang";
 import Operasional from "./pages/Operasional";
 import Penjualan from "./pages/Penjualan";
 import Laporan from "./pages/Laporan";
+import Akuntansi from "./pages/Akuntansi";
 import Pengaturan from "./pages/Pengaturan";
 import InstallApp from "./pages/InstallApp";
 import { Layout } from "./components/Layout";
@@ -55,6 +56,7 @@ function AppRoutes() {
         <Route path="/utang-piutang" element={<UtangPiutang />} />
         <Route path="/operasional" element={<Operasional />} />
         <Route path="/penjualan" element={<Penjualan />} />
+        <Route path="/akuntansi" element={<Akuntansi />} />
         <Route path="/laporan" element={<Laporan />} />
         <Route path="/pengaturan" element={<Pengaturan />} />
       </Route>
