@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { StoreProvider } from "@/contexts/StoreContext";
 import { DataProvider } from "@/contexts/DataContext";
+import { RoleProvider, useRole } from "@/contexts/RoleContext";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Dashboard from "./pages/Dashboard";
@@ -21,6 +22,7 @@ import Laporan from "./pages/Laporan";
 import Akuntansi from "./pages/Akuntansi";
 import Pengaturan from "./pages/Pengaturan";
 import InstallApp from "./pages/InstallApp";
+import KelolaPengguna from "./pages/KelolaPengguna";
 import { Layout } from "./components/Layout";
 
 const queryClient = new QueryClient();
@@ -30,6 +32,18 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   
   if (!isAuthenticated) {
     return <Navigate to="/" replace />;
+  }
+  
+  return <>{children}</>;
+}
+
+function RoleRoute({ children, path }: { children: React.ReactNode; path: string }) {
+  const { canAccess, isLoading } = useRole();
+  
+  if (isLoading) return null;
+  
+  if (!canAccess(path)) {
+    return <Navigate to="/dashboard" replace />;
   }
   
   return <>{children}</>;
@@ -48,17 +62,18 @@ function AppRoutes() {
         }
       >
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/kasir" element={<Kasir />} />
-        <Route path="/produk" element={<Produk />} />
-        <Route path="/pembelian" element={<Pembelian />} />
-        <Route path="/proyek" element={<Proyek />} />
-        <Route path="/proyek-dashboard" element={<ProyekDashboard />} />
-        <Route path="/utang-piutang" element={<UtangPiutang />} />
-        <Route path="/operasional" element={<Operasional />} />
-        <Route path="/penjualan" element={<Penjualan />} />
-        <Route path="/akuntansi" element={<Akuntansi />} />
+        <Route path="/kasir" element={<RoleRoute path="/kasir"><Kasir /></RoleRoute>} />
+        <Route path="/produk" element={<RoleRoute path="/produk"><Produk /></RoleRoute>} />
+        <Route path="/pembelian" element={<RoleRoute path="/pembelian"><Pembelian /></RoleRoute>} />
+        <Route path="/proyek" element={<RoleRoute path="/proyek"><Proyek /></RoleRoute>} />
+        <Route path="/proyek-dashboard" element={<RoleRoute path="/proyek-dashboard"><ProyekDashboard /></RoleRoute>} />
+        <Route path="/utang-piutang" element={<RoleRoute path="/utang-piutang"><UtangPiutang /></RoleRoute>} />
+        <Route path="/operasional" element={<RoleRoute path="/operasional"><Operasional /></RoleRoute>} />
+        <Route path="/penjualan" element={<RoleRoute path="/penjualan"><Penjualan /></RoleRoute>} />
+        <Route path="/akuntansi" element={<RoleRoute path="/akuntansi"><Akuntansi /></RoleRoute>} />
         <Route path="/laporan" element={<Laporan />} />
-        <Route path="/pengaturan" element={<Pengaturan />} />
+        <Route path="/pengaturan" element={<RoleRoute path="/pengaturan"><Pengaturan /></RoleRoute>} />
+        <Route path="/kelola-pengguna" element={<RoleRoute path="/kelola-pengguna"><KelolaPengguna /></RoleRoute>} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>
@@ -69,15 +84,17 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <AuthProvider>
-        <StoreProvider>
-          <DataProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <AppRoutes />
-            </BrowserRouter>
-          </DataProvider>
-        </StoreProvider>
+        <RoleProvider>
+          <StoreProvider>
+            <DataProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <AppRoutes />
+              </BrowserRouter>
+            </DataProvider>
+          </StoreProvider>
+        </RoleProvider>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
