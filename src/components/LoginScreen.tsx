@@ -182,7 +182,7 @@ export function LoginScreen() {
 
       {/* Footer */}
       <div className="absolute bottom-6 text-center">
-        <p className="text-white/40 text-xs">© 2024 SERAYU POS. All rights reserved.</p>
+        <p className="text-white/40 text-xs">© 2026 SERAYU POS. All rights reserved.</p>
       </div>
     </div>
   );

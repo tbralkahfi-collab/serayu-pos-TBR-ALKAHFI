@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStore } from '@/contexts/StoreContext';
+import { useRole } from '@/contexts/RoleContext';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -16,15 +17,16 @@ import {
   ChevronRight,
   FolderKanban,
   Menu,
-  X,
   Smartphone,
   Landmark,
+  Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Badge } from '@/components/ui/badge';
 
-const menuItems = [
+const allMenuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
   { icon: ShoppingCart, label: 'Kasir', path: '/kasir' },
   { icon: Package, label: 'Produk', path: '/produk' },
@@ -37,13 +39,19 @@ const menuItems = [
   { icon: Landmark, label: 'Akuntansi', path: '/akuntansi' },
   { icon: BarChart3, label: 'Laporan', path: '/laporan' },
   { icon: Smartphone, label: 'Install App', path: '/install-app' },
+  { icon: Users, label: 'Kelola Pengguna', path: '/kelola-pengguna' },
   { icon: SettingsIcon, label: 'Pengaturan', path: '/pengaturan' },
 ];
 
 function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const { user, logout } = useAuth();
   const { storeInfo } = useStore();
+  const { role, canAccess } = useRole();
   const location = useLocation();
+
+  const menuItems = allMenuItems.filter(item => canAccess(item.path));
+
+  const roleLabel = role === 'super_admin' ? 'Super Admin' : role === 'admin' ? 'Admin' : 'User';
 
   return (
     <div className="flex flex-col h-full">
@@ -52,11 +60,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
         <div className="flex items-center gap-3">
           {storeInfo.logo ? (
             <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10 p-1 flex items-center justify-center ring-2 ring-primary/20">
-              <img
-                src={storeInfo.logo}
-                alt="Logo"
-                className="w-full h-full rounded-lg object-contain"
-              />
+              <img src={storeInfo.logo} alt="Logo" className="w-full h-full rounded-lg object-contain" />
             </div>
           ) : (
             <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">
@@ -88,9 +92,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
             >
               <item.icon className={cn('w-4 h-4 md:w-5 md:h-5 flex-shrink-0', isActive && 'text-primary-foreground')} />
               <span className="font-medium text-sm md:text-base truncate">{item.label}</span>
-              {isActive && (
-                <ChevronRight className="w-4 h-4 ml-auto flex-shrink-0" />
-              )}
+              {isActive && <ChevronRight className="w-4 h-4 ml-auto flex-shrink-0" />}
             </NavLink>
           );
         })}
@@ -106,7 +108,9 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-xs md:text-sm font-medium text-foreground truncate">{user?.email}</p>
-            <p className="text-[10px] md:text-xs text-muted-foreground">User</p>
+            <Badge variant={role === 'super_admin' ? 'destructive' : role === 'admin' ? 'default' : 'secondary'} className="text-[10px] h-4 mt-0.5">
+              {roleLabel}
+            </Badge>
           </div>
         </div>
         <Button
@@ -127,7 +131,7 @@ export function AppSidebar() {
 
   return (
     <>
-      {/* Mobile Menu Button - Fixed at top */}
+      {/* Mobile Menu Button */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-card border-b border-border px-4 py-3 flex items-center gap-3">
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger asChild>
