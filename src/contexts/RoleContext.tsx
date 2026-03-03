@@ -7,6 +7,7 @@ type AppRole = 'super_admin' | 'admin' | 'user';
 interface RoleContextType {
   role: AppRole | null;
   isLoading: boolean;
+  isApproved: boolean;
   isSuperAdmin: boolean;
   isAdmin: boolean;
   isUser: boolean;
@@ -15,7 +16,6 @@ interface RoleContextType {
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
 
-// Routes accessible by each role
 const USER_ROUTES = ['/dashboard', '/laporan'];
 const ADMIN_ROUTES = [
   '/dashboard', '/kasir', '/produk', '/penjualan', '/pembelian',
@@ -29,11 +29,13 @@ const SUPER_ADMIN_ROUTES = [
 export function RoleProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [role, setRole] = useState<AppRole | null>(null);
+  const [isApproved, setIsApproved] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!user) {
       setRole(null);
+      setIsApproved(false);
       setIsLoading(false);
       return;
     }
@@ -42,14 +44,16 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       try {
         const { data, error } = await supabase
           .from('user_roles')
-          .select('role')
+          .select('role, approved')
           .eq('user_id', user.id)
           .single();
 
         if (error) throw error;
-        setRole(data?.role as AppRole || 'user');
+        setRole((data?.role as AppRole) || 'user');
+        setIsApproved(data?.approved ?? false);
       } catch {
         setRole('user');
+        setIsApproved(false);
       } finally {
         setIsLoading(false);
       }
@@ -59,7 +63,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const canAccess = (path: string): boolean => {
-    if (!role) return false;
+    if (!role || !isApproved) return false;
     if (role === 'super_admin') return true;
     if (role === 'admin') return ADMIN_ROUTES.includes(path);
     return USER_ROUTES.includes(path);
@@ -69,6 +73,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     <RoleContext.Provider value={{
       role,
       isLoading,
+      isApproved,
       isSuperAdmin: role === 'super_admin',
       isAdmin: role === 'admin' || role === 'super_admin',
       isUser: role === 'user',

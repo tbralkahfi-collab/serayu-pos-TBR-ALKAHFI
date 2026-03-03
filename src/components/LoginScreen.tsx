@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Lock, Mail, Store, AlertCircle, CheckCircle } from 'lucide-react';
+import { Lock, Mail, Store, AlertCircle, CheckCircle, Eye, EyeOff } from 'lucide-react';
 
 export function LoginScreen() {
   const [isSignup, setIsSignup] = useState(false);
@@ -12,6 +12,7 @@ export function LoginScreen() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const { login, signup } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -148,12 +149,19 @@ export function LoginScreen() {
             <div className="relative">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/50" />
               <Input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="pl-12 h-12 bg-white/10 border-white/30 text-white placeholder:text-white/50 focus:border-white focus:ring-white"
+                className="pl-12 pr-12 h-12 bg-white/10 border-white/30 text-white placeholder:text-white/50 focus:border-white focus:ring-white"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
 
             <Button

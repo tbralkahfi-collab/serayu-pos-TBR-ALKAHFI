@@ -7,6 +7,8 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { StoreProvider } from "@/contexts/StoreContext";
 import { DataProvider } from "@/contexts/DataContext";
 import { RoleProvider, useRole } from "@/contexts/RoleContext";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Dashboard from "./pages/Dashboard";
@@ -29,9 +31,33 @@ const queryClient = new QueryClient();
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
+  const { isApproved, isLoading: roleLoading, role } = useRole();
   
   if (!isAuthenticated) {
     return <Navigate to="/" replace />;
+  }
+
+  if (roleLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isApproved && role !== 'super_admin') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-6">
+        <div className="text-center max-w-md space-y-4">
+          <div className="w-16 h-16 mx-auto rounded-full bg-orange-100 flex items-center justify-center">
+            <span className="text-3xl">⏳</span>
+          </div>
+          <h2 className="text-xl font-bold text-foreground">Menunggu Persetujuan</h2>
+          <p className="text-muted-foreground">Akun Anda sedang menunggu persetujuan dari Super Admin. Silakan hubungi administrator untuk informasi lebih lanjut.</p>
+          <Button variant="outline" onClick={() => supabase.auth.signOut()}>Keluar</Button>
+        </div>
+      </div>
+    );
   }
   
   return <>{children}</>;
