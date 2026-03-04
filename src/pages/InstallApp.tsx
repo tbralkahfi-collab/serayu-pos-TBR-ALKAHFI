@@ -35,8 +35,13 @@ export default function InstallApp() {
   const [isWindows, setIsWindows] = useState(false);
 
   useEffect(() => {
-    // Check if already installed
-    if (window.matchMedia('(display-mode: standalone)').matches) {
+    // Check if already installed (standalone mode)
+    const isStandalone = 
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true ||
+      document.referrer.includes('android-app://');
+
+    if (isStandalone) {
       setIsInstalled(true);
     }
 
@@ -44,8 +49,14 @@ export default function InstallApp() {
     const userAgent = navigator.userAgent.toLowerCase();
     setIsIOS(/iphone|ipad|ipod/.test(userAgent));
     setIsAndroid(/android/.test(userAgent));
-    setIsHarmonyOS(/harmonyos|huawei|hmscore/.test(userAgent));
+    // Broader Huawei detection: HarmonyOS, HUAWEI, HMSCore, or common Huawei model prefixes
+    setIsHarmonyOS(/harmonyos|huawei|hmscore|honor|hiai/.test(userAgent));
     setIsWindows(/windows/.test(userAgent));
+
+    // Check for stored prompt from main.tsx
+    if ((window as any).deferredPrompt) {
+      setDeferredPrompt((window as any).deferredPrompt);
+    }
 
     // Listen for beforeinstallprompt
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -56,13 +67,15 @@ export default function InstallApp() {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
     // Listen for app installed
-    window.addEventListener('appinstalled', () => {
+    const handleAppInstalled = () => {
       setIsInstalled(true);
       setDeferredPrompt(null);
-    });
+    };
+    window.addEventListener('appinstalled', handleAppInstalled);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
 
@@ -210,8 +223,7 @@ export default function InstallApp() {
                 </CardContent>
               </Card>
 
-              {/* Huawei / HarmonyOS Instructions */}
-              <Card className={isHarmonyOS ? 'border-warning/50' : ''}>
+              <Card className={isHarmonyOS ? 'border-warning/50 ring-2 ring-warning/20' : ''}>
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Smartphone className="w-5 h-5 text-muted-foreground" />
@@ -219,28 +231,61 @@ export default function InstallApp() {
                     {isHarmonyOS && <Badge className="ml-2 bg-warning text-warning-foreground">Perangkat Anda</Badge>}
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="pt-0">
-                  <ol className="space-y-3 text-sm">
-                    <li className="flex items-start gap-3">
-                      <span className="w-6 h-6 rounded-full bg-warning/10 flex items-center justify-center flex-shrink-0 text-xs font-medium text-warning">1</span>
-                      <span>Buka di <strong>Huawei Browser</strong> atau <strong>Chrome</strong></span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <span className="w-6 h-6 rounded-full bg-warning/10 flex items-center justify-center flex-shrink-0 text-xs font-medium text-warning">2</span>
-                      <span>Ketuk menu <strong>⋮</strong> di pojok kanan bawah/atas</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <span className="w-6 h-6 rounded-full bg-warning/10 flex items-center justify-center flex-shrink-0 text-xs font-medium text-warning">3</span>
-                      <span>Pilih <strong>Add to Home screen</strong> atau <strong>Tambah ke layar utama</strong></span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <span className="w-6 h-6 rounded-full bg-warning/10 flex items-center justify-center flex-shrink-0 text-xs font-medium text-warning">4</span>
-                      <span>Ketuk <strong>Add</strong> untuk konfirmasi</span>
-                    </li>
-                  </ol>
-                  <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+                <CardContent className="pt-0 space-y-4">
+                  {/* Cara 1: Huawei Browser */}
+                  <div>
+                    <p className="text-sm font-medium text-foreground mb-2">Cara 1: Huawei Browser (Direkomendasikan)</p>
+                    <ol className="space-y-3 text-sm">
+                      <li className="flex items-start gap-3">
+                        <span className="w-6 h-6 rounded-full bg-warning/10 flex items-center justify-center flex-shrink-0 text-xs font-medium text-warning">1</span>
+                        <span>Buka halaman ini di <strong>Huawei Browser</strong> (browser bawaan Huawei)</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="w-6 h-6 rounded-full bg-warning/10 flex items-center justify-center flex-shrink-0 text-xs font-medium text-warning">2</span>
+                        <span>Ketuk menu <strong>⋮</strong> atau ikon <strong>≡</strong> di bagian bawah</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="w-6 h-6 rounded-full bg-warning/10 flex items-center justify-center flex-shrink-0 text-xs font-medium text-warning">3</span>
+                        <span>Pilih <strong>"Tambah ke layar utama"</strong> atau <strong>"Add to Home screen"</strong></span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="w-6 h-6 rounded-full bg-warning/10 flex items-center justify-center flex-shrink-0 text-xs font-medium text-warning">4</span>
+                        <span>Ketuk <strong>Tambah</strong> untuk konfirmasi</span>
+                      </li>
+                    </ol>
+                  </div>
+
+                  {/* Cara 2: Chrome */}
+                  <div>
+                    <p className="text-sm font-medium text-foreground mb-2">Cara 2: Google Chrome</p>
+                    <ol className="space-y-3 text-sm">
+                      <li className="flex items-start gap-3">
+                        <span className="w-6 h-6 rounded-full bg-warning/10 flex items-center justify-center flex-shrink-0 text-xs font-medium text-warning">1</span>
+                        <span>Buka halaman ini di <strong>Chrome</strong> (install dari AppGallery jika belum ada)</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="w-6 h-6 rounded-full bg-warning/10 flex items-center justify-center flex-shrink-0 text-xs font-medium text-warning">2</span>
+                        <span>Ketuk menu <strong>⋮</strong> di pojok kanan atas</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="w-6 h-6 rounded-full bg-warning/10 flex items-center justify-center flex-shrink-0 text-xs font-medium text-warning">3</span>
+                        <span>Pilih <strong>"Install app"</strong> atau <strong>"Add to Home screen"</strong></span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="w-6 h-6 rounded-full bg-warning/10 flex items-center justify-center flex-shrink-0 text-xs font-medium text-warning">4</span>
+                        <span>Konfirmasi dengan menekan <strong>Install</strong></span>
+                      </li>
+                    </ol>
+                  </div>
+
+                  <div className="p-3 bg-warning/5 border border-warning/20 rounded-lg">
                     <p className="text-xs text-muted-foreground">
-                      💡 Untuk HarmonyOS 3.0+, aplikasi akan berjalan dalam mode standalone seperti aplikasi native
+                      💡 <strong>HarmonyOS 3.0+:</strong> Aplikasi akan berjalan dalam mode standalone (layar penuh tanpa address bar) seperti aplikasi native. Jika tidak muncul mode standalone, pastikan menggunakan browser terbaru.
+                    </p>
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground">
+                      ⚠️ <strong>Tips:</strong> Jika tombol "Install" tidak muncul otomatis, cukup gunakan "Tambah ke layar utama" dari menu browser. Hasilnya sama — aplikasi akan terbuka dalam mode fullscreen.
                     </p>
                   </div>
                 </CardContent>
