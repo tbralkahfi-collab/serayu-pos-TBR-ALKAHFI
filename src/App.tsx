@@ -80,6 +80,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<Index />} />
       <Route path="/install" element={<InstallApp />} />
+      <Route path="/install-app" element={<InstallApp />} />
       <Route
         element={
           <ProtectedRoute>

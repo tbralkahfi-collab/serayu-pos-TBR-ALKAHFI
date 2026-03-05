@@ -81,28 +81,18 @@ export default function KelolaPengguna() {
     setIsCreating(true);
 
     try {
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      await callAdminApi('create_user', {
         email,
         password,
-        options: { data: { store_name: storeName } },
+        store_name: storeName,
+        role: selectedRole,
       });
 
-      if (signUpError) throw signUpError;
-
-      if (signUpData.user) {
-        // Update role if not 'user' (default)
-        if (selectedRole !== 'user') {
-          await callAdminApi('update_role', { user_id: signUpData.user.id, new_role: selectedRole });
-        }
-        // Auto-approve users created by super admin
-        await callAdminApi('approve_user', { user_id: signUpData.user.id, approved: true });
-
-        toast({ title: 'Berhasil', description: `Akun ${selectedRole} berhasil dibuat untuk ${email}` });
-        setEmail('');
-        setPassword('');
-        setStoreName('');
-        fetchUsers();
-      }
+      toast({ title: 'Berhasil', description: `Akun ${selectedRole} berhasil dibuat untuk ${email}` });
+      setEmail('');
+      setPassword('');
+      setStoreName('');
+      fetchUsers();
     } catch (error: any) {
       toast({ title: 'Gagal', description: error.message || 'Gagal membuat akun', variant: 'destructive' });
     } finally {
