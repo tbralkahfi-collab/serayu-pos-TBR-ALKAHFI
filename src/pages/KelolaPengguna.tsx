@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRole } from '@/contexts/RoleContext';
@@ -8,8 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { UserPlus, Shield, ShieldCheck, User, Eye, EyeOff, KeyRound, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { UserPlus, Shield, ShieldCheck, User, Eye, EyeOff, KeyRound, CheckCircle, XCircle, RefreshCw, Loader2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 interface UserItem {
@@ -22,15 +22,20 @@ interface UserItem {
 
 async function callAdminApi(action: string, params: Record<string, any>) {
   const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('No session');
+  if (!session) throw new Error('Sesi tidak ditemukan. Silakan login ulang.');
 
   const res = await supabase.functions.invoke('admin-users', {
     body: { action, ...params },
     headers: { Authorization: `Bearer ${session.access_token}` },
   });
 
-  if (res.error) throw res.error;
-  if (res.data?.error) throw new Error(res.data.error);
+  if (res.error) {
+    console.error('Edge function error:', res.error);
+    throw new Error(res.error.message || 'Gagal menghubungi server');
+  }
+  if (res.data?.error) {
+    throw new Error(res.data.error);
+  }
   return res.data;
 }
 
@@ -55,21 +60,25 @@ export default function KelolaPengguna() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
 
-  const fetchUsers = async () => {
+  // Action loading states
+  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+
+  const fetchUsers = useCallback(async () => {
+    setIsLoading(true);
     try {
       const data = await callAdminApi('list_users', {});
       setUsers(data.users || []);
     } catch (error: any) {
       console.error('Error fetching users:', error);
-      toast({ title: 'Gagal', description: 'Gagal memuat daftar pengguna', variant: 'destructive' });
+      toast({ title: 'Gagal', description: error.message || 'Gagal memuat daftar pengguna', variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (isSuperAdmin) fetchUsers();
-  }, [isSuperAdmin]);
+  }, [isSuperAdmin, fetchUsers]);
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,7 +101,8 @@ export default function KelolaPengguna() {
       setEmail('');
       setPassword('');
       setStoreName('');
-      fetchUsers();
+      setSelectedRole('user');
+      await fetchUsers();
     } catch (error: any) {
       toast({ title: 'Gagal', description: error.message || 'Gagal membuat akun', variant: 'destructive' });
     } finally {
@@ -114,29 +124,35 @@ export default function KelolaPengguna() {
       setNewPassword('');
       setShowNewPassword(false);
     } catch (error: any) {
-      toast({ title: 'Gagal', description: error.message, variant: 'destructive' });
+      toast({ title: 'Gagal', description: error.message || 'Gagal reset password', variant: 'destructive' });
     } finally {
       setIsResetting(false);
     }
   };
 
   const handleChangeRole = async (userId: string, newRole: string) => {
+    setActionLoading(prev => ({ ...prev, [`role-${userId}`]: true }));
     try {
       await callAdminApi('update_role', { user_id: userId, new_role: newRole });
       toast({ title: 'Berhasil', description: `Role berhasil diubah ke ${newRole}` });
-      fetchUsers();
+      await fetchUsers();
     } catch (error: any) {
-      toast({ title: 'Gagal', description: error.message, variant: 'destructive' });
+      toast({ title: 'Gagal', description: error.message || 'Gagal mengubah role', variant: 'destructive' });
+    } finally {
+      setActionLoading(prev => ({ ...prev, [`role-${userId}`]: false }));
     }
   };
 
   const handleApproval = async (userId: string, approved: boolean) => {
+    setActionLoading(prev => ({ ...prev, [`approve-${userId}`]: true }));
     try {
       await callAdminApi('approve_user', { user_id: userId, approved });
-      toast({ title: 'Berhasil', description: approved ? 'Pengguna disetujui' : 'Pengguna ditolak' });
-      fetchUsers();
+      toast({ title: 'Berhasil', description: approved ? 'Pengguna disetujui' : 'Persetujuan dicabut' });
+      await fetchUsers();
     } catch (error: any) {
-      toast({ title: 'Gagal', description: error.message, variant: 'destructive' });
+      toast({ title: 'Gagal', description: error.message || 'Gagal mengubah status approval', variant: 'destructive' });
+    } finally {
+      setActionLoading(prev => ({ ...prev, [`approve-${userId}`]: false }));
     }
   };
 
@@ -148,6 +164,18 @@ export default function KelolaPengguna() {
         return <Badge className="bg-primary text-primary-foreground"><Shield className="w-3 h-3 mr-1" />Admin</Badge>;
       default:
         return <Badge variant="secondary"><User className="w-3 h-3 mr-1" />User</Badge>;
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    try {
+      return new Date(dateStr).toLocaleDateString('id-ID', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      });
+    } catch {
+      return '-';
     }
   };
 
@@ -163,8 +191,8 @@ export default function KelolaPengguna() {
     <div className="p-4 md:p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-foreground">Kelola Pengguna</h1>
-        <Button variant="outline" size="sm" onClick={() => { setIsLoading(true); fetchUsers(); }}>
-          <RefreshCw className="w-4 h-4 mr-2" /> Refresh
+        <Button variant="outline" size="sm" onClick={fetchUsers} disabled={isLoading}>
+          <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} /> Refresh
         </Button>
       </div>
 
@@ -219,7 +247,7 @@ export default function KelolaPengguna() {
             </Select>
             <div className="md:col-span-2">
               <Button type="submit" disabled={isCreating} className="w-full md:w-auto">
-                {isCreating ? 'Membuat...' : 'Buat Akun'}
+                {isCreating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Membuat...</> : 'Buat Akun'}
               </Button>
             </div>
           </form>
@@ -229,13 +257,15 @@ export default function KelolaPengguna() {
       {/* Users List */}
       <Card>
         <CardHeader>
-          <CardTitle>Daftar Pengguna</CardTitle>
+          <CardTitle>Daftar Pengguna ({users.length})</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
+          ) : users.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">Belum ada pengguna terdaftar.</p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -259,9 +289,14 @@ export default function KelolaPengguna() {
                           <Select
                             value={u.role}
                             onValueChange={(newRole) => handleChangeRole(u.id, newRole)}
+                            disabled={!!actionLoading[`role-${u.id}`]}
                           >
                             <SelectTrigger className="w-32 h-8">
-                              <SelectValue />
+                              {actionLoading[`role-${u.id}`] ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <SelectValue />
+                              )}
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="admin">Admin</SelectItem>
@@ -282,7 +317,7 @@ export default function KelolaPengguna() {
                         )}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm">
-                        {new Date(u.created_at).toLocaleDateString('id-ID')}
+                        {formatDate(u.created_at)}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -292,8 +327,13 @@ export default function KelolaPengguna() {
                               variant="outline"
                               className="text-green-600 hover:bg-green-50 h-8"
                               onClick={() => handleApproval(u.id, true)}
+                              disabled={!!actionLoading[`approve-${u.id}`]}
                             >
-                              <CheckCircle className="w-3.5 h-3.5 mr-1" /> Setujui
+                              {actionLoading[`approve-${u.id}`] ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <><CheckCircle className="w-3.5 h-3.5 mr-1" /> Setujui</>
+                              )}
                             </Button>
                           )}
                           {u.role !== 'super_admin' && u.approved && (
@@ -302,8 +342,13 @@ export default function KelolaPengguna() {
                               variant="outline"
                               className="text-orange-600 hover:bg-orange-50 h-8"
                               onClick={() => handleApproval(u.id, false)}
+                              disabled={!!actionLoading[`approve-${u.id}`]}
                             >
-                              <XCircle className="w-3.5 h-3.5 mr-1" /> Cabut
+                              {actionLoading[`approve-${u.id}`] ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <><XCircle className="w-3.5 h-3.5 mr-1" /> Cabut</>
+                              )}
                             </Button>
                           )}
                           {u.role !== 'super_admin' && (
@@ -369,7 +414,7 @@ export default function KelolaPengguna() {
               <Button variant="outline">Batal</Button>
             </DialogClose>
             <Button onClick={handleResetPassword} disabled={isResetting || newPassword.length < 6}>
-              {isResetting ? 'Mereset...' : 'Reset Password'}
+              {isResetting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Mereset...</> : 'Reset Password'}
             </Button>
           </DialogFooter>
         </DialogContent>
