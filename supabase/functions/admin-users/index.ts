@@ -14,7 +14,6 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-    // Verify the caller is authenticated
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'No authorization header' }), {
@@ -22,22 +21,15 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Create client with caller's token to verify identity
-    const callerClient = createClient(supabaseUrl, serviceRoleKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false }
-    })
+    const adminClient = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
 
-    const { data: { user: caller }, error: callerError } = await callerClient.auth.getUser(authHeader.replace('Bearer ', ''))
+    const { data: { user: caller }, error: callerError } = await adminClient.auth.getUser(authHeader.replace('Bearer ', ''))
     if (callerError || !caller) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
-    // Verify caller is super_admin using service role client
-    const adminClient = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
-    
     const { data: callerRole } = await adminClient
       .from('user_roles')
       .select('role')
@@ -53,6 +45,48 @@ Deno.serve(async (req) => {
     const { action, ...params } = await req.json()
 
     switch (action) {
+      case 'create_user': {
+        const { email, password, store_name, role } = params
+        if (!email || !password || !store_name) {
+          return new Response(JSON.stringify({ error: 'email, password, and store_name required' }), {
+            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          })
+        }
+        if (password.length < 6) {
+          return new Response(JSON.stringify({ error: 'Password minimal 6 karakter' }), {
+            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          })
+        }
+
+        // Create user via admin API (won't affect caller's session)
+        const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: { store_name },
+        })
+
+        if (createError) throw createError
+
+        // Update role if not default 'user'
+        if (role && role !== 'user' && ['admin', 'user'].includes(role)) {
+          await adminClient
+            .from('user_roles')
+            .update({ role })
+            .eq('user_id', newUser.user.id)
+        }
+
+        // Auto-approve
+        await adminClient
+          .from('user_roles')
+          .update({ approved: true })
+          .eq('user_id', newUser.user.id)
+
+        return new Response(JSON.stringify({ success: true, user_id: newUser.user.id }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
       case 'reset_password': {
         const { user_id, new_password } = params
         if (!user_id || !new_password) {
@@ -120,11 +154,9 @@ Deno.serve(async (req) => {
       }
 
       case 'list_users': {
-        // Get all users from auth
         const { data: { users }, error: listError } = await adminClient.auth.admin.listUsers()
         if (listError) throw listError
 
-        // Get all roles
         const { data: roles } = await adminClient.from('user_roles').select('*')
 
         const roleMap = new Map((roles || []).map(r => [r.user_id, r]))
