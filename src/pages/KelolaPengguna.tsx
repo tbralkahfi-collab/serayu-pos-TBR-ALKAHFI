@@ -24,10 +24,12 @@ async function callAdminApi(action: string, params: Record<string, any>) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Sesi tidak ditemukan. Silakan login ulang.');
 
+  console.log('Calling admin-users:', action, params);
   const res = await supabase.functions.invoke('admin-users', {
     body: { action, ...params },
-    headers: { Authorization: `Bearer ${session.access_token}` },
   });
+
+  console.log('Admin API response:', JSON.stringify(res.data), 'error:', res.error);
 
   if (res.error) {
     console.error('Edge function error:', res.error);
