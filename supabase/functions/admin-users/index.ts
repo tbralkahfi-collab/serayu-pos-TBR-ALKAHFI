@@ -145,14 +145,21 @@ Deno.serve(async (req) => {
           return jsonResponse({ error: 'Tidak dapat mengubah role Super Admin' }, 403)
         }
 
+        // Upsert: update if exists, insert if not
         const { error } = await adminClient
           .from('user_roles')
-          .update({ role: new_role })
-          .eq('user_id', user_id)
+          .upsert({ user_id, role: new_role }, { onConflict: 'user_id' })
 
         if (error) {
           console.error('Update role error:', error.message)
-          return jsonResponse({ error: error.message }, 500)
+          // Fallback: try update then insert
+          const { error: updateErr } = await adminClient
+            .from('user_roles')
+            .update({ role: new_role })
+            .eq('user_id', user_id)
+          if (updateErr) {
+            return jsonResponse({ error: updateErr.message }, 500)
+          }
         }
         return jsonResponse({ success: true })
       }
@@ -164,24 +171,31 @@ Deno.serve(async (req) => {
         }
 
         // Prevent changing super_admin approval
-        const { data: targetUser } = await adminClient
+        const { data: targetUser2 } = await adminClient
           .from('user_roles')
           .select('role')
           .eq('user_id', user_id)
           .single()
 
-        if (targetUser?.role === 'super_admin') {
+        if (targetUser2?.role === 'super_admin') {
           return jsonResponse({ error: 'Tidak dapat mengubah status Super Admin' }, 403)
         }
 
+        // Upsert: handle missing row
         const { error } = await adminClient
           .from('user_roles')
-          .update({ approved: !!approved })
-          .eq('user_id', user_id)
+          .upsert({ user_id, approved: !!approved, role: targetUser2?.role || 'user' }, { onConflict: 'user_id' })
 
         if (error) {
           console.error('Approve user error:', error.message)
-          return jsonResponse({ error: error.message }, 500)
+          // Fallback
+          const { error: updateErr } = await adminClient
+            .from('user_roles')
+            .update({ approved: !!approved })
+            .eq('user_id', user_id)
+          if (updateErr) {
+            return jsonResponse({ error: updateErr.message }, 500)
+          }
         }
         return jsonResponse({ success: true })
       }
