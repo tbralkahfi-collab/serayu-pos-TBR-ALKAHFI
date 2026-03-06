@@ -16,7 +16,11 @@ interface RoleContextType {
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
 
-const USER_ROUTES = ['/dashboard', '/laporan'];
+const USER_ROUTES = [
+  '/dashboard', '/produk', '/penjualan', '/pembelian',
+  '/proyek', '/proyek-dashboard', '/utang-piutang', '/operasional',
+  '/akuntansi', '/laporan',
+];
 const ADMIN_ROUTES = [
   '/dashboard', '/kasir', '/produk', '/penjualan', '/pembelian',
   '/proyek', '/proyek-dashboard', '/utang-piutang', '/operasional',
