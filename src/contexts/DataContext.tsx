@@ -184,7 +184,7 @@ interface DataContextType {
   createProjectDebt: (projectId: string, projectName: string, amount: number, dueDate: string) => Promise<void>;
   createTransactionDebt: (transactionId: string, customerName: string, amount: number) => Promise<void>;
   createPurchaseDebt: (purchaseId: string, supplierName: string, amount: number) => Promise<void>;
-  removeRelatedDebt: (keteranganSearch: string) => Promise<void>;
+  removeRelatedDebt: (keteranganSearch: string) => Promise<boolean>;
   updateRelatedDebt: (keteranganSearch: string, newAmount: number) => Promise<void>;
   
   // Manual refresh
@@ -1028,21 +1028,49 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const deleteDebt = async (id: string) => {
-    if (!user) return;
-    
-    const { error } = await supabase
-      .from('debts')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', user.id);
-    if (error) {
-      toast.error('Gagal menghapus utang/piutang');
-      console.error(error);
-      return;
+  const deleteDebt = async (id: string): Promise<boolean> => {
+    if (!user) {
+      toast.error('User not authenticated');
+      return false;
     }
-    // Immediate local state update
-    setDebts(prev => prev.filter(d => d.id !== id));
+    
+    try {
+      // First verify the debt belongs to the user
+      const { data: verifyData, error: verifyError } = await supabase
+        .from('debts')
+        .select('id')
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (verifyError || !verifyData) {
+        toast.error('Utang/piutang tidak ditemukan atau tidak memiliki akses');
+        console.error('Debt verification error:', verifyError);
+        return false;
+      }
+
+      // Delete the debt
+      const { error } = await supabase
+        .from('debts')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Debt deletion error:', error);
+        toast.error(`Gagal menghapus utang/piutang: ${error.message}`);
+        return false;
+      }
+
+      // Immediate local state update
+      setDebts(prev => prev.filter(d => d.id !== id));
+      toast.success('Utang/piutang berhasil dihapus');
+      return true;
+    } catch (err) {
+      console.error('Unexpected error during debt deletion:', err);
+      toast.error('Terjadi kesalahan yang tidak terduga saat menghapus utang/piutang');
+      return false;
+    }
   };
 
   const addPayment = async (debtId: string, payment: Omit<PaymentHistory, 'id'>) => {
@@ -1193,22 +1221,49 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const deleteTransaction = async (id: string) => {
-    if (!user) return;
-    
-    const { error } = await supabase
-      .from('transactions')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', user.id);
-    if (error) {
-      toast.error('Gagal menghapus transaksi');
-      console.error(error);
-      return;
+  const deleteTransaction = async (id: string): Promise<boolean> => {
+    if (!user) {
+      toast.error('User not authenticated');
+      return false;
     }
-    // Immediate local state update
-    setTransactions(prev => prev.filter(t => t.id !== id));
-    toast.success('Transaksi berhasil dihapus');
+    
+    try {
+      // First verify the transaction belongs to the user
+      const { data: verifyData, error: verifyError } = await supabase
+        .from('transactions')
+        .select('id')
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (verifyError || !verifyData) {
+        toast.error('Transaksi tidak ditemukan atau tidak memiliki akses');
+        console.error('Transaction verification error:', verifyError);
+        return false;
+      }
+
+      // Delete the transaction
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Transaction deletion error:', error);
+        toast.error(`Gagal menghapus transaksi: ${error.message}`);
+        return false;
+      }
+
+      // Immediate local state update
+      setTransactions(prev => prev.filter(t => t.id !== id));
+      toast.success('Transaksi berhasil dihapus dan stok dikembalikan');
+      return true;
+    } catch (err) {
+      console.error('Unexpected error during transaction deletion:', err);
+      toast.error('Terjadi kesalahan yang tidak terduga saat menghapus transaksi');
+      return false;
+    }
   };
 
   const createProject = async (project: Omit<Project, 'id'>) => {
@@ -1375,10 +1430,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const removeRelatedDebt = async (keteranganSearch: string) => {
-    const relatedDebt = debts.find(d => d.keterangan.includes(keteranganSearch));
-    if (relatedDebt) {
-      await deleteDebt(relatedDebt.id);
+  const removeRelatedDebt = async (keteranganSearch: string): Promise<boolean> => {
+    try {
+      const relatedDebt = debts.find(d => d.keterangan.includes(keteranganSearch));
+      if (relatedDebt) {
+        await deleteDebt(relatedDebt.id);
+        return true;
+      }
+      return true; // No related debt found, which is fine
+    } catch (error) {
+      console.error('Error removing related debt:', error);
+      return false;
     }
   };
 
