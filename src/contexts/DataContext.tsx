@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, testSupabaseConnection } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
 import type { Json } from '@/integrations/supabase/types';
@@ -479,6 +479,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     setIsLoading(true);
     try {
+      // Test Supabase connection first
+      const isConnected = await testSupabaseConnection();
+      if (!isConnected) {
+        toast.error('Koneksi ke database gagal. Silakan periksa konfigurasi Supabase.');
+        setIsLoading(false);
+        return;
+      }
+
       await Promise.all([
         loadProducts(),
         loadSuppliers(),
