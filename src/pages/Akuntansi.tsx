@@ -235,8 +235,12 @@ export default function Akuntansi() {
   const confirmDelete = async () => {
     if (!recordToDelete) return;
     const { error } = await supabase.from('capital').delete().eq('id', recordToDelete.id);
-    if (error) toast.error('Gagal menghapus data modal');
-    else toast.success('Data modal berhasil dihapus');
+    if (error) {
+      toast.error('Gagal menghapus data modal');
+      return;
+    }
+    setCapitalRecords(prev => prev.filter(r => r.id !== recordToDelete.id));
+    toast.success('Data modal berhasil dihapus');
     setShowDeleteDialog(false);
     setRecordToDelete(null);
   };

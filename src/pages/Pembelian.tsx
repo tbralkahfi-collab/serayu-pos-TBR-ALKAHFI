@@ -236,6 +236,7 @@ export default function Pembelian() {
       await deletePurchase(purchaseToDelete.id);
       toast.success(`Pembelian berhasil dihapus`);
       setShowDeleteDialog(false);
+      setPurchaseToDelete(null);
     }
   };
 
@@ -687,8 +688,40 @@ export default function Pembelian() {
       </Dialog>
 
       {/* Delete Dialogs */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Hapus Pembelian?</AlertDialogTitle><AlertDialogDescription>Anda yakin ingin menghapus pembelian {purchaseToDelete?.id}?</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Batal</AlertDialogCancel><AlertDialogAction onClick={confirmDelete} className="bg-destructive">Hapus</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
-      <AlertDialog open={showDeleteSupplierDialog} onOpenChange={setShowDeleteSupplierDialog}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Hapus Supplier?</AlertDialogTitle><AlertDialogDescription>Anda yakin ingin menghapus supplier "{supplierToDelete?.nama}"?</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Batal</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteSupplier} className="bg-destructive">Hapus</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Pembelian?</AlertDialogTitle>
+            <AlertDialogDescription>Anda yakin ingin menghapus pembelian {purchaseToDelete?.id}?</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <Button 
+              onClick={confirmDelete} 
+              className="bg-destructive"
+            >
+              Hapus
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={showDeleteSupplierDialog} onOpenChange={setShowDeleteSupplierDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Supplier?</AlertDialogTitle>
+            <AlertDialogDescription>Anda yakin ingin menghapus supplier "{supplierToDelete?.nama}"?</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <Button 
+              onClick={confirmDeleteSupplier} 
+              className="bg-destructive"
+            >
+              Hapus
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

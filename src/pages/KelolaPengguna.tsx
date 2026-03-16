@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { UserPlus, Shield, ShieldCheck, User, Eye, EyeOff, KeyRound, CheckCircle, XCircle, RefreshCw, Loader2 } from 'lucide-react';
-import { toast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 
 interface UserItem {
   id: string;
@@ -24,12 +24,9 @@ async function callAdminApi(action: string, params: Record<string, any>) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Sesi tidak ditemukan. Silakan login ulang.');
 
-  console.log('Calling admin-users:', action, params);
   const res = await supabase.functions.invoke('admin-users', {
     body: { action, ...params },
   });
-
-  console.log('Admin API response:', JSON.stringify(res.data), 'error:', res.error);
 
   if (res.error) {
     console.error('Edge function error:', res.error);
@@ -72,7 +69,7 @@ export default function KelolaPengguna() {
       setUsers(data.users || []);
     } catch (error: any) {
       console.error('Error fetching users:', error);
-      toast({ title: 'Gagal', description: error.message || 'Gagal memuat daftar pengguna', variant: 'destructive' });
+      toast.error(error.message || 'Gagal memuat daftar pengguna');
     } finally {
       setIsLoading(false);
     }
@@ -86,7 +83,7 @@ export default function KelolaPengguna() {
     e.preventDefault();
     if (!email || !password || !storeName) return;
     if (password.length < 6) {
-      toast({ title: 'Error', description: 'Password minimal 6 karakter', variant: 'destructive' });
+      toast.error('Password minimal 6 karakter');
       return;
     }
     setIsCreating(true);
@@ -99,14 +96,14 @@ export default function KelolaPengguna() {
         role: selectedRole,
       });
 
-      toast({ title: 'Berhasil', description: `Akun ${selectedRole} berhasil dibuat untuk ${email}` });
+      toast.success(`Akun ${selectedRole} berhasil dibuat untuk ${email}`);
       setEmail('');
       setPassword('');
       setStoreName('');
       setSelectedRole('user');
       await fetchUsers();
     } catch (error: any) {
-      toast({ title: 'Gagal', description: error.message || 'Gagal membuat akun', variant: 'destructive' });
+      toast.error(error.message || 'Gagal membuat akun');
     } finally {
       setIsCreating(false);
     }
@@ -115,18 +112,18 @@ export default function KelolaPengguna() {
   const handleResetPassword = async () => {
     if (!resetUserId || !newPassword) return;
     if (newPassword.length < 6) {
-      toast({ title: 'Error', description: 'Password minimal 6 karakter', variant: 'destructive' });
+      toast.error('Password minimal 6 karakter');
       return;
     }
     setIsResetting(true);
     try {
       await callAdminApi('reset_password', { user_id: resetUserId, new_password: newPassword });
-      toast({ title: 'Berhasil', description: `Password untuk ${resetEmail} berhasil direset` });
+      toast.success(`Password untuk ${resetEmail} berhasil direset`);
       setResetUserId(null);
       setNewPassword('');
       setShowNewPassword(false);
     } catch (error: any) {
-      toast({ title: 'Gagal', description: error.message || 'Gagal reset password', variant: 'destructive' });
+      toast.error(error.message || 'Gagal reset password');
     } finally {
       setIsResetting(false);
     }
@@ -139,7 +136,7 @@ export default function KelolaPengguna() {
       toast({ title: 'Berhasil', description: `Role berhasil diubah ke ${newRole}` });
       await fetchUsers();
     } catch (error: any) {
-      toast({ title: 'Gagal', description: error.message || 'Gagal mengubah role', variant: 'destructive' });
+      toast.error(error.message || 'Gagal mengubah role');
     } finally {
       setActionLoading(prev => ({ ...prev, [`role-${userId}`]: false }));
     }
@@ -152,7 +149,7 @@ export default function KelolaPengguna() {
       toast({ title: 'Berhasil', description: approved ? 'Pengguna disetujui' : 'Persetujuan dicabut' });
       await fetchUsers();
     } catch (error: any) {
-      toast({ title: 'Gagal', description: error.message || 'Gagal mengubah status approval', variant: 'destructive' });
+      toast.error(error.message || 'Gagal mengubah status approval');
     } finally {
       setActionLoading(prev => ({ ...prev, [`approve-${userId}`]: false }));
     }

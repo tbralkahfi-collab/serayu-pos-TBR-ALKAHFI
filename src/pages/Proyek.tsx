@@ -13,6 +13,16 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -64,13 +74,15 @@ const statusIcons: Record<string, React.ReactNode> = {
 };
 
 export default function Proyek() {
-  const { projects, products, addProject, updateProject, deleteProject, updateProduct, addTransaction, transactions, updateTransaction } = useData();
+  const { projects, products, addProject, updateProject, deleteProject, updateProduct, addTransaction, transactions, updateTransaction, getProjectDebts, deleteDebt } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showDialog, setShowDialog] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [editingProject, setEditingProject] = useState<typeof projects[0] | null>(null);
   const [viewingProject, setViewingProject] = useState<typeof projects[0] | null>(null);
+  const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     namaProyek: '',
@@ -324,10 +336,19 @@ export default function Proyek() {
     resetForm();
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Hapus proyek ini?')) {
-      await deleteProject(id);
+  const handleDelete = (id: string) => {
+    setProjectToDelete(id);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDelete = async () => {
+    if (projectToDelete) {
+      const relatedDebts = getProjectDebts(projectToDelete);
+      for (const d of relatedDebts) await deleteDebt(d.id);
+      await deleteProject(projectToDelete);
       toast.success('Proyek berhasil dihapus');
+      setShowDeleteDialog(false);
+      setProjectToDelete(null);
     }
   };
 
@@ -1109,6 +1130,27 @@ export default function Proyek() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Konfirmasi Hapus Proyek</AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah Anda yakin ingin menghapus proyek ini? Tindakan ini tidak dapat dibatalkan dan akan menghapus semua data terkait proyek.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <Button 
+              onClick={confirmDelete} 
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Hapus
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
