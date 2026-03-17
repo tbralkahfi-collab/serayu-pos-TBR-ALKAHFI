@@ -57,8 +57,8 @@ export default function Kasir() {
   const addToCart = (product: Product) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
-      // Use hargaJual (selling price) 
-      const sellingPrice = product.hargaJual || product.harga || 0;
+      // Use hargaJual (selling price) consistently
+      const sellingPrice = product.hargaJual || 0;
       const costPrice = product.hargaBeli || 0;
       
       if (existing) {
@@ -396,7 +396,7 @@ export default function Kasir() {
                 <h3 className="font-medium text-foreground text-xs md:text-sm truncate">{product.nama}</h3>
                 <p className="text-xs text-muted-foreground truncate">{product.kategori}</p>
                 <div className="flex items-center justify-between mt-1 md:mt-2">
-                  <p className="text-xs md:text-sm font-bold text-primary">{formatRupiah(product.hargaJual || product.harga || 0)}</p>
+                  <p className="text-xs md:text-sm font-bold text-primary">{formatRupiah(product.hargaJual || 0)}</p>
                   <span className="text-xs text-muted-foreground">{product.stok} {product.satuan}</span>
                 </div>
               </CardContent>

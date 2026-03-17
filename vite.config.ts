@@ -143,9 +143,16 @@ export default defineConfig(({ mode }) => ({
           utils: ['date-fns', 'clsx', 'tailwind-merge', 'class-variance-authority'],
           pdf: ['jspdf', 'jspdf-autotable', 'xlsx'],
           icons: ['lucide-react'],
+          ui: ['@radix-ui/react-slot', '@radix-ui/react-separator', '@radix-ui/react-scroll-area'],
         },
       },
     },
-    chunkSizeWarningLimit: 1000,
+    chunkSizeWarningLimit: 800,
+    minify: 'terser',
+    sourcemap: mode === 'development',
+    target: 'es2015',
+  },
+  optimizeDeps: {
+    include: ['@supabase/supabase-js', '@tanstack/react-query', 'recharts'],
   },
 }));

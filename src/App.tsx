@@ -9,6 +9,7 @@ import { DataProvider } from "@/contexts/DataContext";
 import { RoleProvider, useRole } from "@/contexts/RoleContext";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Dashboard from "./pages/Dashboard";
@@ -75,8 +76,8 @@ function RoleRoute({ children, path }: { children: React.ReactNode; path: string
   return <>{children}</>;
 }
 
-function AppRoutes() {
-  return (
+const AppRoutes = () => (
+  <ErrorBoundary>
     <Routes>
       <Route path="/" element={<Index />} />
       <Route path="/install" element={<InstallApp />} />
@@ -104,8 +105,8 @@ function AppRoutes() {
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>
-  );
-}
+  </ErrorBoundary>
+);
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

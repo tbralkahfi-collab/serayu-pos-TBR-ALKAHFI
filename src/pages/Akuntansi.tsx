@@ -234,13 +234,21 @@ export default function Akuntansi() {
 
   const confirmDelete = async () => {
     if (!recordToDelete) return;
-    const { error } = await supabase.from('capital').delete().eq('id', recordToDelete.id);
+    if (!user) {
+      toast.error('User not authenticated');
+      return;
+    }
+    const { error } = await supabase
+      .from('capital')
+      .delete()
+      .eq('id', recordToDelete.id)
+      .eq('user_id', user.id);
     if (error) {
       toast.error('Gagal menghapus data modal');
       return;
     }
-    setCapitalRecords(prev => prev.filter(r => r.id !== recordToDelete.id));
     toast.success('Data modal berhasil dihapus');
+    fetchCapitalRecords();
     setShowDeleteDialog(false);
     setRecordToDelete(null);
   };
@@ -254,7 +262,8 @@ export default function Akuntansi() {
       const { error } = await supabase.from('capital').update({
         type: formData.type, jumlah: parseFloat(formData.jumlah),
         tanggal: formData.tanggal, keterangan: formData.keterangan,
-      }).eq('id', editingRecord.id);
+      }).eq('id', editingRecord.id)
+      .eq('user_id', user.id);
       if (error) toast.error('Gagal memperbarui data modal');
       else toast.success('Data modal berhasil diperbarui');
     } else {
