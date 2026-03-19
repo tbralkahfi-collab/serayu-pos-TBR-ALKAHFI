@@ -1053,7 +1053,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const createDebt = async (debt: Omit<DebtRecord, 'id' | 'payments'>) => {
-    if (!user) return;
+    console.log('💰 DataContext: createDebt called', { type: debt.type, nama: debt.nama, total: debt.total });
+    
+    if (!user) {
+      console.error('💰 DataContext: Create debt failed - no user');
+      return;
+    }
     
     const { error } = await supabase.from('debts').insert({
       user_id: user.id,
@@ -1069,12 +1074,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
     });
 
     if (error) {
+      console.error('💰 DataContext: Create debt error', error);
       toast.error('Gagal menambah utang/piutang');
-      console.error(error);
+      return;
     }
+    
+    console.log('💰 DataContext: Create debt successful');
+    toast.success('Utang/piutang berhasil ditambahkan');
   };
 
   const updateDebt = async (id: string, debt: Partial<DebtRecord>) => {
+    console.log('💰 DataContext: updateDebt called', { id, debt });
+    
     const updateData: Record<string, unknown> = {};
     if (debt.type !== undefined) updateData.type = debt.type;
     if (debt.nama !== undefined) updateData.nama = debt.nama;
@@ -1086,21 +1097,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (debt.payments !== undefined) updateData.payments = debt.payments as unknown as Json;
     if (debt.projectId !== undefined) updateData.project_id = debt.projectId;
 
+    console.log('💰 DataContext: Executing Supabase update', updateData);
     const { error } = await supabase.from('debts').update(updateData).eq('id', id);
     if (error) {
+      console.error('💰 DataContext: Update debt error', error);
       toast.error('Gagal memperbarui utang/piutang');
-      console.error(error);
+      return;
     }
+    
+    console.log('💰 DataContext: Update debt successful');
+    toast.success('Utang/piutang berhasil diperbarui');
   };
 
   const deleteDebt = async (id: string): Promise<boolean> => {
+    console.log('💰 DataContext: deleteDebt called', { id, userId: user?.id });
+    
     if (!user) {
+      console.error('💰 DataContext: Delete debt failed - no user');
       toast.error('User not authenticated');
       return false;
     }
     
     try {
       // First verify the debt belongs to the user
+      console.log('💰 DataContext: Verifying debt ownership', id);
       const { data: verifyData, error: verifyError } = await supabase
         .from('debts')
         .select('id')
@@ -1109,11 +1129,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (verifyError || !verifyData) {
+        console.error('💰 DataContext: Debt verification failed', { verifyError, verifyData });
         toast.error('Utang/piutang tidak ditemukan atau tidak memiliki akses');
-        console.error('Debt verification error:', verifyError);
         return false;
       }
 
+      console.log('💰 DataContext: Debt verified, executing delete');
       // Delete the debt
       const { error } = await supabase
         .from('debts')
@@ -1122,25 +1143,31 @@ export function DataProvider({ children }: { children: ReactNode }) {
         .eq('user_id', user.id);
 
       if (error) {
-        console.error('Debt deletion error:', error);
+        console.error('💰 DataContext: Delete debt error', error);
         toast.error(`Gagal menghapus utang/piutang: ${error.message}`);
         return false;
       }
 
+      console.log('💰 DataContext: Delete successful, updating local state');
       // Immediate local state update
       setDebts(prev => prev.filter(d => d.id !== id));
       toast.success('Utang/piutang berhasil dihapus');
       return true;
     } catch (err) {
-      console.error('Unexpected error during debt deletion:', err);
+      console.error('💰 DataContext: Unexpected error during debt deletion', err);
       toast.error('Terjadi kesalahan yang tidak terduga saat menghapus utang/piutang');
       return false;
     }
   };
 
   const addPayment = async (debtId: string, payment: Omit<PaymentHistory, 'id'>) => {
+    console.log('💰 DataContext: addPayment called', { debtId, payment });
+    
     const debt = debts.find(d => d.id === debtId);
-    if (!debt) return;
+    if (!debt) {
+      console.error('💰 DataContext: Add payment failed - debt not found', debtId);
+      return;
+    }
 
     const newPayment: PaymentHistory = {
       ...payment,
@@ -1148,11 +1175,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
     };
     const updatedPayments = [...debt.payments, newPayment];
     const newSisa = debt.sisa - payment.jumlah;
+    
+    console.log('💰 DataContext: Adding payment', { 
+      debtId, 
+      paymentAmount: payment.jumlah,
+      oldSisa: debt.sisa,
+      newSisa,
+      totalPayments: updatedPayments.length 
+    });
 
     await updateDebt(debtId, { 
       payments: updatedPayments,
       sisa: Math.max(0, newSisa),
     });
+    
+    console.log('💰 DataContext: Payment added successfully');
+    toast.success('Pembayaran berhasil ditambahkan');
   };
 
   const createExpense = async (expense: Omit<Expense, 'id'>) => {

@@ -116,10 +116,14 @@ export default function UtangPiutang() {
 
   const confirmDelete = async () => {
     if (recordToDelete) {
-      await deleteDebt(recordToDelete.id);
-      toast.success(`Data berhasil dihapus`);
-      setShowDeleteDialog(false);
-      setRecordToDelete(null);
+      const success = await deleteDebt(recordToDelete.id);
+      if (success) {
+        toast.success(`Data ${recordToDelete.nama} berhasil dihapus`);
+        setShowDeleteDialog(false);
+        setRecordToDelete(null);
+      } else {
+        toast.error('Gagal menghapus data');
+      }
     }
   };
 
