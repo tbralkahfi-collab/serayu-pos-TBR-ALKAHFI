@@ -473,11 +473,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   // Initial data fetch - runs only once when auth is resolved
   const fetchInitialData = useCallback(async () => {
+    console.log('📊 DataContext: fetchInitialData called', { 
+      isAuthLoading, 
+      hasFetched: hasFetched.current, 
+      userId: user?.id 
+    });
+    
     // Prevent fetch during auth loading or if already fetched
-    if (isAuthLoading || hasFetched.current) return;
+    if (isAuthLoading || hasFetched.current) {
+      console.log('📊 DataContext: Fetch skipped', { 
+        reason: isAuthLoading ? 'Auth loading' : 'Already fetched' 
+      });
+      return;
+    }
 
     // Only clear state if user is truly logged out (not during auth loading)
     if (!user) {
+      console.log('📊 DataContext: User logged out, clearing state');
       setProducts([]);
       setSuppliers([]);
       setPurchases([]);
@@ -489,17 +501,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    console.log('📊 DataContext: Starting data fetch for user', user.id);
     hasFetched.current = true;
     setIsLoading(true);
     try {
       // Test Supabase connection first
       const isConnected = await testSupabaseConnection();
       if (!isConnected) {
+        console.error('📊 DataContext: Supabase connection failed');
         toast.error('Koneksi ke database gagal. Silakan periksa konfigurasi Supabase.');
         setIsLoading(false);
         return;
       }
 
+      console.log('📊 DataContext: Connection successful, fetching all data');
       await Promise.all([
         loadProducts(),
         loadSuppliers(),
@@ -509,11 +524,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         loadTransactions(),
         loadProjects(),
       ]);
+      console.log('📊 DataContext: All data fetched successfully');
     } catch (error) {
-      console.error('Error loading initial data:', error);
+      console.error('📊 DataContext: Error loading initial data:', error);
       toast.error('Gagal memuat data');
     } finally {
       setIsLoading(false);
+      console.log('📊 DataContext: Data fetch completed');
     }
   }, [user, isAuthLoading, loadProducts, loadSuppliers, loadPurchases, loadDebts, loadExpenses, loadTransactions, loadProjects]);
 
@@ -1393,18 +1410,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteProject = async (id: string) => {
-    if (!user) return;
+    console.log('🗑️ DataContext: deleteProject called', { id, userId: user?.id });
     
-    const { error } = await supabase
+    if (!user) {
+      console.error('🗑️ DataContext: Delete failed - no user');
+      return;
+    }
+    
+    console.log('🗑️ DataContext: Executing Supabase delete for project', id);
+    const { error, data } = await supabase
       .from('projects')
       .delete()
       .eq('id', id)
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .select();
+      
+    console.log('🗑️ DataContext: Supabase delete response', { error, data });
+    
     if (error) {
+      console.error('🗑️ DataContext: Delete error', error);
       toast.error('Gagal menghapus proyek');
-      console.error(error);
       return;
     }
+    
+    console.log('🗑️ DataContext: Delete successful, updating local state');
     // Immediate local state update
     setProjects(prev => prev.filter(p => p.id !== id));
     toast.success('Proyek berhasil dihapus');
