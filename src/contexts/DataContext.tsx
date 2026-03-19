@@ -156,18 +156,18 @@ interface DataContextType {
   // Purchases CRUD
   createPurchase: (purchase: Omit<Purchase, 'id'>) => Promise<void>;
   updatePurchase: (id: string, purchase: Partial<Purchase>) => Promise<void>;
-  deletePurchase: (id: string) => Promise<void>;
+  deletePurchase: (id: string) => Promise<boolean>;
   
   // Debts CRUD
   createDebt: (debt: Omit<DebtRecord, 'id' | 'payments'>) => Promise<void>;
   updateDebt: (id: string, debt: Partial<DebtRecord>) => Promise<void>;
-  deleteDebt: (id: string) => Promise<void>;
+  deleteDebt: (id: string) => Promise<boolean>;
   addPayment: (debtId: string, payment: Omit<PaymentHistory, 'id'>) => Promise<void>;
   
   // Expenses CRUD
   createExpense: (expense: Omit<Expense, 'id'>) => Promise<void>;
   updateExpense: (id: string, expense: Partial<Expense>) => Promise<void>;
-  deleteExpense: (id: string) => Promise<void>;
+  deleteExpense: (id: string) => Promise<boolean>;
   
   // Transactions CRUD
   createTransaction: (transaction: Omit<Transaction, 'id'>) => Promise<void>;
@@ -177,7 +177,7 @@ interface DataContextType {
   // Projects CRUD
   createProject: (project: Omit<Project, 'id'>) => Promise<void>;
   updateProject: (id: string, project: Partial<Project>) => Promise<void>;
-  deleteProject: (id: string) => Promise<void>;
+  deleteProject: (id: string) => Promise<boolean>;
   
   // Helpers
   getProjectDebts: (projectId: string) => DebtRecord[];
@@ -237,6 +237,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const { user, isLoading: isAuthLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const hasFetched = useRef(false);
+  
+  // ✅ DEBUG: Log auth state changes
+  console.log('📊 DataContext: Auth state', { 
+    userId: user?.id, 
+    isAuthLoading,
+    hasFetched: hasFetched.current 
+  });
   
   // State
   const [products, setProducts] = useState<Product[]>([]);
@@ -437,6 +444,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // Prevent loading during auth initialization
     if (isAuthLoading || !user) return;
     
+    console.log('📊 DataContext: loadProjects called', { userId: user.id });
+    
     const { data, error } = await supabase
       .from('projects')
       .select('*')
@@ -444,11 +453,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error loading projects:', error);
+      console.error('📊 DataContext: Error loading projects:', error);
       return;
     }
 
     if (data) {
+      console.log('📊 DataContext: Projects loaded from DB', { count: data.length, projects: data.map(p => ({ id: p.id, nama: p.nama_proyek })) });
       setProjects(data.map(p => ({
         id: p.id,
         namaProyek: p.nama_proyek,
@@ -479,15 +489,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
       userId: user?.id 
     });
     
-    // Prevent fetch during auth loading or if already fetched
-    if (isAuthLoading || hasFetched.current) {
-      console.log('📊 DataContext: Fetch skipped', { 
-        reason: isAuthLoading ? 'Auth loading' : 'Already fetched' 
-      });
+    // ✅ MANDATORY: Prevent ANY operation during auth loading
+    if (isAuthLoading) {
+      console.log('📊 DataContext: Auth loading, returning early');
+      return;
+    }
+    
+    // ✅ MANDATORY: Prevent multiple fetches for same user
+    if (hasFetched.current) {
+      console.log('📊 DataContext: Already fetched for this user, skipping');
       return;
     }
 
-    // Only clear state if user is truly logged out (not during auth loading)
+    // ✅ CORRECT: Only clear state if user is truly logged out (not during auth loading)
     if (!user) {
       console.log('📊 DataContext: User logged out, clearing state');
       setProducts([]);
@@ -501,8 +515,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    console.log('📊 DataContext: Starting data fetch for user', user.id);
+    // ✅ MARK FETCH STARTED for this user
     hasFetched.current = true;
+    console.log('📊 DataContext: Starting fetch for user', user.id);
     setIsLoading(true);
     try {
       // Test Supabase connection first
@@ -534,10 +549,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, [user, isAuthLoading, loadProducts, loadSuppliers, loadPurchases, loadDebts, loadExpenses, loadTransactions, loadProjects]);
 
-  // Single useEffect for initial fetch - NO LOOPS
+  // ✅ CORRECT: useEffect depends only on user.id to prevent loops
   useEffect(() => {
+    console.log('📊 DataContext: useEffect triggered', { 
+      userId: user?.id, 
+      isAuthLoading 
+    });
+    
+    // ✅ MANDATORY: Reset fetch guard when user changes
+    if (user) {
+      hasFetched.current = false;
+      console.log('📊 DataContext: Reset hasFetched for new user');
+    }
+    
     fetchInitialData();
-  }, [fetchInitialData]);
+  }, [user?.id]); // ✅ ONLY depend on user.id
 
   // Realtime subscriptions - USER-SPECIFIC WITH FILTERING AND AUTH GUARD
   useEffect(() => {
@@ -1409,12 +1435,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const deleteProject = async (id: string) => {
+  const deleteProject = async (id: string): Promise<boolean> => {
     console.log('🗑️ DataContext: deleteProject called', { id, userId: user?.id });
     
     if (!user) {
       console.error('🗑️ DataContext: Delete failed - no user');
-      return;
+      return false;
     }
     
     console.log('🗑️ DataContext: Executing Supabase delete for project', id);
@@ -1430,13 +1456,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (error) {
       console.error('🗑️ DataContext: Delete error', error);
       toast.error('Gagal menghapus proyek');
-      return;
+      return false;
     }
     
-    console.log('🗑️ DataContext: Delete successful, updating local state');
-    // Immediate local state update
+    // ✅ CRITICAL: Verify delete actually worked
+    if (!data || data.length === 0) {
+      console.error('🗑️ DataContext: Delete failed - no data returned', { data });
+      toast.error('Proyek tidak ditemukan atau sudah dihapus');
+      return false;
+    }
+    
+    console.log('🗑️ DataContext: Delete successful, updating local state', { deletedProject: data[0] });
+    // ✅ IMMEDIATE: Update local state to prevent refetch override
     setProjects(prev => prev.filter(p => p.id !== id));
     toast.success('Proyek berhasil dihapus');
+    return true;
   };
 
   // Helper functions
