@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { supabase, testSupabaseConnection } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
@@ -234,8 +234,9 @@ const normalizeTimestamptzInput = (value: string): string => {
 };
 
 export function DataProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
+  const hasFetched = useRef(false);
   
   // State
   const [products, setProducts] = useState<Product[]>([]);
@@ -248,7 +249,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   // Load functions
   const loadProducts = useCallback(async () => {
-    if (!user) return;
+    // Prevent loading during auth initialization
+    if (isAuthLoading || !user) return;
     
     const { data, error } = await supabase
       .from('products')
@@ -276,7 +278,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadSuppliers = useCallback(async () => {
-    if (!user) return;
+    // Prevent loading during auth initialization
+    if (isAuthLoading || !user) return;
     
     const { data, error } = await supabase
       .from('suppliers')
@@ -302,7 +305,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadPurchases = useCallback(async () => {
-    if (!user) return;
+    // Prevent loading during auth initialization
+    if (isAuthLoading || !user) return;
     
     const { data, error } = await supabase
       .from('purchases')
@@ -336,7 +340,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const loadDebts = useCallback(async () => {
-    if (!user) return;
+    // Prevent loading during auth initialization
+    if (isAuthLoading || !user) return;
     
     const { data, error } = await supabase
       .from('debts')
@@ -366,7 +371,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadExpenses = useCallback(async () => {
-    if (!user) return;
+    // Prevent loading during auth initialization
+    if (isAuthLoading || !user) return;
     
     const { data, error } = await supabase
       .from('expenses')
@@ -391,7 +397,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadTransactions = useCallback(async () => {
-    if (!user) return;
+    // Prevent loading during auth initialization
+    if (isAuthLoading || !user) return;
     
     const { data, error } = await supabase
       .from('transactions')
@@ -427,7 +434,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadProjects = useCallback(async () => {
-    if (!user) return;
+    // Prevent loading during auth initialization
+    if (isAuthLoading || !user) return;
     
     const { data, error } = await supabase
       .from('projects')
@@ -463,8 +471,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Initial data fetch - runs only once when user changes
+  // Initial data fetch - runs only once when auth is resolved
   const fetchInitialData = useCallback(async () => {
+    // Prevent fetch during auth loading or if already fetched
+    if (isAuthLoading || hasFetched.current) return;
+
+    // Only clear state if user is truly logged out (not during auth loading)
     if (!user) {
       setProducts([]);
       setSuppliers([]);
@@ -477,6 +489,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    hasFetched.current = true;
     setIsLoading(true);
     try {
       // Test Supabase connection first
@@ -502,16 +515,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [user, loadProducts, loadSuppliers, loadPurchases, loadDebts, loadExpenses, loadTransactions, loadProjects]);
+  }, [user, isAuthLoading, loadProducts, loadSuppliers, loadPurchases, loadDebts, loadExpenses, loadTransactions, loadProjects]);
 
   // Single useEffect for initial fetch - NO LOOPS
   useEffect(() => {
     fetchInitialData();
   }, [fetchInitialData]);
 
-  // Realtime subscriptions - USER-SPECIFIC WITH FILTERING
+  // Realtime subscriptions - USER-SPECIFIC WITH FILTERING AND AUTH GUARD
   useEffect(() => {
-    if (!user) return;
+    // Prevent subscription during auth loading or if no user
+    if (isAuthLoading || !user) return;
 
     const channel = supabase
       .channel(`db-${user.id}`)
@@ -740,7 +754,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, isAuthLoading]);
 
   // CRUD Functions - NO FETCH CALLS
   const createProduct = async (product: Omit<Product, 'id'>) => {
