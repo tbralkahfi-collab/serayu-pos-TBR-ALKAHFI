@@ -117,7 +117,7 @@ const App = () => (
             <DataProvider>
               <Toaster />
               <Sonner />
-              <BrowserRouter basename="/">
+              <BrowserRouter>
                 <AppRoutes />
               </BrowserRouter>
             </DataProvider>
