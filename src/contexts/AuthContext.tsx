@@ -109,6 +109,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string): Promise<{ error: string | null }> => {
+    // Input validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      return { error: 'Format email tidak valid' };
+    }
+    if (!password || password.length < 6) {
+      return { error: 'Password minimal 6 karakter' };
+    }
+
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,

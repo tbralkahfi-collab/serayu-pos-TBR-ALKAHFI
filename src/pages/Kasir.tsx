@@ -139,6 +139,17 @@ export default function Kasir() {
       return;
     }
     
+    // Input validation
+    if (qty <= 0) {
+      toast.error('Jumlah harus lebih dari 0');
+      return;
+    }
+    
+    if (product.price < 0) {
+      toast.error('Harga tidak boleh negatif');
+      return;
+    }
+    
     if (qty <= 0) {
       setCart(prev => prev.filter(item => item.id !== id));
     } else {
