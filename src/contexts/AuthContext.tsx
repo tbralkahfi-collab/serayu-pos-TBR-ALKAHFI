@@ -7,6 +7,7 @@ interface AuthContextType {
   session: Session | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isAuthLoading: boolean;
   login: (email: string, password: string) => Promise<{ error: string | null }>;
   signup: (email: string, password: string, storeName: string) => Promise<{ error: string | null }>;
   logout: () => Promise<void>;
@@ -18,39 +19,92 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   useEffect(() => {
-    console.log('🔐 AuthContext: Initializing auth state');
-    
-    // Check for existing session FIRST
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('🔐 AuthContext: Session check result', { 
-        hasSession: !!session, 
-        userId: session?.user?.id 
-      });
-      setSession(session);
-      setUser(session?.user ?? null);
-      setIsLoading(false);
-      console.log('🔐 AuthContext: Initial auth state loaded');
-    });
+    console.log('🔐 AUTH INIT: Starting auth initialization');
+    let mounted = true;
+    let sessionLoaded = false;
 
-    // Then set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        console.log('🔐 AuthContext: Auth state changed', { 
-          event, 
-          hasSession: !!session, 
-          userId: session?.user?.id 
-        });
-        setSession(session);
-        setUser(session?.user ?? null);
-        setIsLoading(false);
+    // ✅ STEP 1: Load initial session FIRST
+    const loadInitialSession = async () => {
+      try {
+        console.log('🔐 SESSION LOAD: Fetching initial session');
+        const { data, error } = await supabase.auth.getSession();
+
+        if (!mounted) return;
+
+        if (error) {
+          console.error('🔐 SESSION LOAD: Error', error);
+        } else {
+          console.log('🔐 SESSION LOADED:', { 
+            hasSession: !!data.session, 
+            userId: data.session?.user?.id 
+          });
+
+          // ✅ ONLY set state if session was actually loaded
+          if (!sessionLoaded) {
+            sessionLoaded = true;
+            setSession(data.session);
+            setUser(data.session?.user ?? null);
+            setIsAuthLoading(false);
+            setIsLoading(false);
+            console.log('🔐 AUTH READY: Initial session loaded successfully');
+          }
+        }
+      } catch (err) {
+        console.error('🔐 SESSION LOAD: Unexpected error', err);
+        if (mounted && !sessionLoaded) {
+          sessionLoaded = true;
+          setIsAuthLoading(false);
+          setIsLoading(false);
+        }
       }
-    );
+    };
 
+    // ✅ STEP 2: Set up auth state listener AFTER initial load
+    const setupAuthListener = () => {
+      console.log('🔐 LISTENER SETUP: Setting up auth state listener');
+      
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        (event, session) => {
+          console.log('🔐 AUTH STATE CHANGE:', { 
+            event, 
+            hasSession: !!session, 
+            userId: session?.user?.id 
+          });
+
+          // ✅ Prevent duplicate state setting during initial load
+          if (!sessionLoaded) {
+            console.log('🔐 AUTH STATE CHANGE: Ignoring - initial load not complete');
+            return;
+          }
+
+          // ✅ Update state only after initial load is complete
+          setSession(session);
+          setUser(session?.user ?? null);
+          setIsAuthLoading(false);
+          setIsLoading(false);
+
+          console.log('🔐 AUTH STATE CHANGE: State updated', { 
+            event, 
+            userId: session?.user?.id 
+          });
+        }
+      );
+
+      return subscription;
+    };
+
+    // ✅ Execute in proper order
+    loadInitialSession();
+    const subscription = setupAuthListener();
+
+    // ✅ Cleanup
     return () => {
-      console.log('🔐 AuthContext: Cleaning up auth subscription');
-      subscription.unsubscribe();
+      console.log('🔐 CLEANUP: Unsubscribing from auth changes');
+      mounted = false;
+      subscription?.unsubscribe();
     };
   }, []);
 
@@ -96,6 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    console.log('🔐 LOGOUT: Signing out user');
     await supabase.auth.signOut();
   };
 
@@ -105,6 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       isAuthenticated: !!session, 
       isLoading,
+      isAuthLoading,
       login, 
       signup,
       logout 
