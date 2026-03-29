@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -89,8 +89,6 @@ export default function UtangPiutang() {
 
   const totalUtang = utangData.filter(u => u.sisa > 0).reduce((sum, u) => sum + u.sisa, 0);
   const totalPiutang = piutangData.filter(p => p.sisa > 0).reduce((sum, p) => sum + p.sisa, 0);
-
-  const currentData = activeTab === 'utang' ? utangData : piutangData;
 
   const handleAddNew = () => {
     setEditingRecord(null);
