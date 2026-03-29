@@ -111,6 +111,142 @@ const normalizeBackupData = (rawBackupData: any): BackupData => {
   };
 };
 
+// ✅ TRANSACTIONS JSON NORMALIZER - Fix "cannot extract elements from a scalar" error
+const normalizeTransactions = (records: any[]): any[] => {
+  console.log('🔧 Normalizing transactions JSON fields...');
+  
+  if (!records || !Array.isArray(records)) {
+    console.log('⚠️ No transaction records to normalize');
+    return [];
+  }
+  
+  const normalizedRecords = records.map((record, index) => {
+    if (!record) {
+      console.log(`⚠️ Transaction record ${index} is null/undefined, skipping`);
+      return null;
+    }
+    
+    const normalized = { ...record };
+    
+    // Handle items field normalization
+    if (normalized.items === null || normalized.items === undefined) {
+      console.log(`📦 Transaction ${index}: items is null/undefined → []`);
+      normalized.items = [];
+    } else if (typeof normalized.items === 'string') {
+      try {
+        const parsed = JSON.parse(normalized.items);
+        if (Array.isArray(parsed)) {
+          console.log(`📦 Transaction ${index}: items converted from string array (${parsed.length} items)`);
+          normalized.items = parsed;
+        } else if (typeof parsed === 'object' && parsed !== null) {
+          console.log(`📦 Transaction ${index}: items converted from string object → wrapped in array`);
+          normalized.items = [parsed];
+        } else {
+          console.log(`📦 Transaction ${index}: invalid JSON string → []`);
+          normalized.items = [];
+        }
+      } catch (error) {
+        console.log(`📦 Transaction ${index}: JSON parse failed → [] (error: ${error.message})`);
+        normalized.items = [];
+      }
+    } else if (Array.isArray(normalized.items)) {
+      console.log(`📦 Transaction ${index}: items already valid array (${normalized.items.length} items)`);
+      // Keep as is, but ensure it's a clean array
+      normalized.items = normalized.items.filter(item => item !== null && item !== undefined);
+    } else if (typeof normalized.items === 'object') {
+      console.log(`📦 Transaction ${index}: items is object → wrapped in array`);
+      normalized.items = [normalized.items];
+    } else {
+      console.log(`📦 Transaction ${index}: items has invalid type (${typeof normalized.items}) → []`);
+      normalized.items = [];
+    }
+    
+    // Final validation - ensure items is always an array
+    if (!Array.isArray(normalized.items)) {
+      console.log(`🔧 Transaction ${index}: Final validation failed, forcing []`);
+      normalized.items = [];
+    }
+    
+    console.log(`✅ Transaction ${index}: items normalized to ${normalized.items.length} items`);
+    return normalized;
+  }).filter(Boolean); // Remove null records
+  
+  console.log(`✅ Normalized ${records.length} → ${normalizedRecords.length} transaction records`);
+  return normalizedRecords;
+};
+
+// ✅ TEST FUNCTION: Verify normalizeTransactions handles all test cases
+const testNormalizeTransactions = () => {
+  console.log('🧪 Testing normalizeTransactions function...');
+  
+  const testCases = [
+    {
+      name: 'String JSON array',
+      input: { items: '[{"produk":"Besi","qty":2}]' },
+      expectedItemsLength: 1
+    },
+    {
+      name: 'String JSON object',
+      input: { items: '{"produk":"Besi","qty":2}' },
+      expectedItemsLength: 1
+    },
+    {
+      name: 'Null items',
+      input: { items: null },
+      expectedItemsLength: 0
+    },
+    {
+      name: 'Undefined items',
+      input: { items: undefined },
+      expectedItemsLength: 0
+    },
+    {
+      name: 'Valid array',
+      input: { items: [{"produk":"Besi","qty":2}] },
+      expectedItemsLength: 1
+    },
+    {
+      name: 'Single object',
+      input: { items: {"produk":"Besi","qty":2} },
+      expectedItemsLength: 1
+    },
+    {
+      name: 'Invalid string',
+      input: { items: 'invalid json' },
+      expectedItemsLength: 0
+    },
+    {
+      name: 'Invalid type',
+      input: { items: 123 },
+      expectedItemsLength: 0
+    }
+  ];
+  
+  const results = testCases.map((testCase, index) => {
+    const normalized = normalizeTransactions([testCase.input]);
+    const result = normalized[0];
+    const passed = Array.isArray(result?.items) && result.items.length === testCase.expectedItemsLength;
+    
+    console.log(`🧪 Test ${index + 1} (${testCase.name}): ${passed ? '✅ PASS' : '❌ FAIL'}`);
+    console.log(`   Input:`, testCase.input);
+    console.log(`   Output:`, result?.items);
+    console.log(`   Expected: ${testCase.expectedItemsLength} items`);
+    
+    return passed;
+  });
+  
+  const allPassed = results.every(r => r);
+  console.log(`🧪 Test results: ${results.filter(r => r).length}/${results.length} passed`);
+  
+  if (allPassed) {
+    console.log('🎉 All normalizeTransactions tests passed!');
+  } else {
+    console.log('❌ Some normalizeTransactions tests failed!');
+  }
+  
+  return allPassed;
+};
+
 // ✅ ENHANCED DYNAMIC SANITIZE FUNCTION - Matches actual database schema
 const sanitizeData = (table: ValidTable, data: any[]): any[] => {
   if (!data || !Array.isArray(data)) {
@@ -634,12 +770,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             console.log(`📥 Inserting ${tableData.length} records into ${tableName}...`);
             
             // Sanitize data before insertion
-            const sanitizedData = sanitizeData(tableName, tableData);
+            let sanitizedData = sanitizeData(tableName, tableData);
+            
+            // ✅ SPECIAL HANDLING: Normalize transactions JSON fields
+            if (tableName === 'transactions') {
+              console.log('🔧 Applying transactions JSON normalization...');
+              sanitizedData = normalizeTransactions(sanitizedData);
+            }
             
             if (sanitizedData.length === 0) {
               console.log(`⏭️ Skipping ${tableName} - no valid data after sanitization`);
               processedTables.push({ table: tableName, records: 0, status: 'skipped' });
               continue;
+            }
+
+            // ✅ HARD VALIDATION: Ensure transactions have valid items array
+            if (tableName === 'transactions') {
+              for (let i = 0; i < sanitizedData.length; i++) {
+                const record = sanitizedData[i];
+                if (!Array.isArray(record.items)) {
+                  console.error(`❌ Transaction record ${i} has invalid items field:`, record.items);
+                  throw new Error(`Transaction record ${i} has invalid items format - expected array, got ${typeof record.items}`);
+                }
+              }
+              console.log('✅ All transaction records passed items validation');
             }
 
             // Batch insert (100 records per batch)
@@ -663,7 +817,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
               if (insertError) {
                 console.error(`❌ Failed to insert batch into ${tableName}:`, insertError);
-                throw new Error(`Insert failed at ${tableName} (batch ${Math.floor(i/batchSize) + 1}): ${insertError.message}`);
+                
+                // ✅ ENHANCED ERROR HANDLING: Detect JSON format issues
+                let errorMessage = insertError.message;
+                if (insertError.message.includes('cannot extract elements from a scalar')) {
+                  errorMessage = `Invalid JSON format in transactions.items field - expected array but got scalar value`;
+                } else if (insertError.message.includes('invalid input syntax for type json')) {
+                  errorMessage = `Invalid JSON syntax in transactions.items field`;
+                } else if (insertError.message.includes('JSON')) {
+                  errorMessage = `JSON format error in transactions: ${insertError.message}`;
+                }
+                
+                throw new Error(`Insert failed at ${tableName} (batch ${Math.floor(i/batchSize) + 1}): ${errorMessage}`);
               }
 
               insertedCount += batch.length;
