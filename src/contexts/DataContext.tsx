@@ -4,6 +4,133 @@ import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
 import type { Json } from '@/integrations/supabase/types';
 
+// ✅ LOCAL CACHE LAYER - State persistence across refresh
+interface CacheData {
+  products: Product[];
+  suppliers: Supplier[];
+  purchases: Purchase[];
+  debts: DebtRecord[];
+  expenses: Expense[];
+  transactions: Transaction[];
+  projects: Project[];
+  userId: string;
+  timestamp: number;
+  version: string;
+}
+
+interface CacheState {
+  data: CacheData | null;
+  isHydrated: boolean;
+  isLoading: boolean;
+}
+
+const CACHE_VERSION = '1.0';
+const CACHE_KEY_PREFIX = 'serayu_pos_cache_';
+const CACHE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// ✅ CACHE FUNCTIONS
+const getCacheKey = (userId: string) => `${CACHE_KEY_PREFIX}${userId}`;
+
+const loadCacheData = (userId: string): CacheData | null => {
+  try {
+    const cacheKey = getCacheKey(userId);
+    const cached = localStorage.getItem(cacheKey);
+    
+    if (!cached) {
+      console.log('📦 Cache: No cached data found');
+      return null;
+    }
+    
+    const cacheData: CacheData = JSON.parse(cached);
+    
+    // Check version compatibility
+    if (cacheData.version !== CACHE_VERSION) {
+      console.log('📦 Cache: Version mismatch, clearing cache');
+      localStorage.removeItem(cacheKey);
+      return null;
+    }
+    
+    // Check expiry
+    const now = Date.now();
+    if (now - cacheData.timestamp > CACHE_EXPIRY_MS) {
+      console.log('📦 Cache: Expired, clearing cache');
+      localStorage.removeItem(cacheKey);
+      return null;
+    }
+    
+    // Verify user ID match
+    if (cacheData.userId !== userId) {
+      console.log('📦 Cache: User ID mismatch, clearing cache');
+      localStorage.removeItem(cacheKey);
+      return null;
+    }
+    
+    console.log('📦 Cache: Loaded cached data', {
+      timestamp: new Date(cacheData.timestamp).toISOString(),
+      age: Math.round((now - cacheData.timestamp) / 1000 / 60) + ' minutes',
+      records: {
+        products: cacheData.products.length,
+        suppliers: cacheData.suppliers.length,
+        purchases: cacheData.purchases.length,
+        debts: cacheData.debts.length,
+        expenses: cacheData.expenses.length,
+        transactions: cacheData.transactions.length,
+        projects: cacheData.projects.length
+      }
+    });
+    
+    return cacheData;
+  } catch (error) {
+    console.error('📦 Cache: Error loading cache', error);
+    return null;
+  }
+};
+
+const saveCacheData = (userId: string, data: Omit<CacheData, 'timestamp'>): void => {
+  try {
+    const cacheKey = getCacheKey(userId);
+    const cacheData: CacheData = {
+      ...data,
+      timestamp: Date.now(),
+      version: CACHE_VERSION
+    };
+    
+    localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+    console.log('📦 Cache: Saved data to cache', {
+      timestamp: new Date(cacheData.timestamp).toISOString(),
+      records: {
+        products: cacheData.products.length,
+        suppliers: cacheData.suppliers.length,
+        purchases: cacheData.purchases.length,
+        debts: cacheData.debts.length,
+        expenses: cacheData.expenses.length,
+        transactions: cacheData.transactions.length,
+        projects: cacheData.projects.length
+      }
+    });
+  } catch (error) {
+    console.error('📦 Cache: Error saving cache', error);
+  }
+};
+
+const clearCacheData = (userId?: string): void => {
+  try {
+    if (userId) {
+      const cacheKey = getCacheKey(userId);
+      localStorage.removeItem(cacheKey);
+      console.log('📦 Cache: Cleared cache for user', userId);
+    } else {
+      // Clear all caches
+      const keys = Object.keys(localStorage);
+      const cacheKeys = keys.filter(key => key.startsWith(CACHE_KEY_PREFIX));
+      cacheKeys.forEach(key => localStorage.removeItem(key));
+      console.log('📦 Cache: Cleared all caches');
+    }
+  } catch (error) {
+    console.error('📦 Cache: Error clearing cache', error);
+  }
+};
+
 // Types
 export interface Product {
   id: string;
@@ -134,6 +261,7 @@ export interface Project {
 
 interface DataContextType {
   isLoading: boolean;
+  isHydrated: boolean; // ✅ ADD HYDRATION FLAG
   // Data
   products: Product[];
   suppliers: Supplier[];
@@ -253,6 +381,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [isHydrated, setIsHydrated] = useState<boolean>(false);
 
   // Load functions
   const loadProducts = useCallback(async () => {
@@ -512,6 +641,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setTransactions([]);
       setProjects([]);
       setIsLoading(false);
+      setIsHydrated(false);
+      // Clear cache for logged out user
+      clearCacheData();
       return;
     }
 
@@ -519,17 +651,44 @@ export function DataProvider({ children }: { children: ReactNode }) {
     hasFetched.current = true;
     console.log('📊 DataContext: Starting fetch for user', user.id);
     setIsLoading(true);
+    
     try {
-      // Test Supabase connection first
+      // ✅ STEP 1: LOAD FROM CACHE FIRST (Instant UI)
+      console.log('📦 DataContext: Loading data from cache...');
+      const cachedData = loadCacheData(user.id);
+      
+      if (cachedData) {
+        console.log('📦 DataContext: Cache hit - hydrating state instantly');
+        // ✅ HYDRATION: Load cached data immediately
+        setProducts(cachedData.products);
+        setSuppliers(cachedData.suppliers);
+        setPurchases(cachedData.purchases);
+        setDebts(cachedData.debts);
+        setExpenses(cachedData.expenses);
+        setTransactions(cachedData.transactions);
+        setProjects(cachedData.projects);
+        setIsHydrated(true);
+        setIsLoading(false);
+        
+        console.log('📦 DataContext: Hydration completed - UI is now instant');
+      }
+      
+      // ✅ STEP 2: TEST SUPABASE CONNECTION
       const isConnected = await testSupabaseConnection();
       if (!isConnected) {
         console.error('📊 DataContext: Supabase connection failed');
-        toast.error('Koneksi ke database gagal. Silakan periksa konfigurasi Supabase.');
-        setIsLoading(false);
+        if (!cachedData) {
+          // Only show error if no cached data available
+          toast.error('Koneksi ke database gagal. Silakan periksa konfigurasi Supabase.');
+          setIsLoading(false);
+          setIsHydrated(false);
+        }
         return;
       }
 
-      console.log('📊 DataContext: Connection successful, fetching all data');
+      console.log('📊 DataContext: Connection successful, fetching fresh data');
+      
+      // ✅ STEP 3: FETCH FRESH DATA FROM SERVER
       await Promise.all([
         loadProducts(),
         loadSuppliers(),
@@ -539,15 +698,36 @@ export function DataProvider({ children }: { children: ReactNode }) {
         loadTransactions(),
         loadProjects(),
       ]);
-      console.log('📊 DataContext: All data fetched successfully');
+      
+      console.log('📊 DataContext: Fresh data fetched successfully');
+      
+      // ✅ STEP 4: UPDATE CACHE WITH FRESH DATA
+      console.log('📦 DataContext: Updating cache with fresh data...');
+      saveCacheData(user.id, {
+        products,
+        suppliers,
+        purchases,
+        debts,
+        expenses,
+        transactions,
+        projects,
+        userId: user.id,
+        version: CACHE_VERSION
+      });
+      
+      // ✅ STEP 5: MARK HYDRATION COMPLETE
+      setIsHydrated(true);
+      console.log('📊 DataContext: Hydration cycle completed');
+      
     } catch (error) {
       console.error('📊 DataContext: Error loading initial data:', error);
       toast.error('Gagal memuat data');
+      setIsHydrated(false);
     } finally {
       setIsLoading(false);
       console.log('📊 DataContext: Data fetch completed');
     }
-  }, [user, isAuthLoading, loadProducts, loadSuppliers, loadPurchases, loadDebts, loadExpenses, loadTransactions, loadProjects]);
+  }, [user, isAuthLoading, loadProducts, loadSuppliers, loadPurchases, loadDebts, loadExpenses, loadTransactions, loadProjects, products, suppliers, purchases, debts, expenses, transactions, projects]);
 
   // ✅ CORRECT: useEffect depends only on user.id to prevent loops
   useEffect(() => {
@@ -800,6 +980,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [user, isAuthLoading]);
 
   // CRUD Functions - NO FETCH CALLS
+  const updateCacheAfterOperation = useCallback(() => {
+    if (!user) return;
+    
+    console.log('📦 DataContext: Updating cache after operation...');
+    saveCacheData(user.id, {
+      products,
+      suppliers,
+      purchases,
+      debts,
+      expenses,
+      transactions,
+      projects,
+      userId: user.id,
+      version: CACHE_VERSION
+    });
+  }, [user, products, suppliers, purchases, debts, expenses, transactions, projects]);
+
   const createProduct = async (product: Omit<Product, 'id'>) => {
     if (!user) return;
     
@@ -833,6 +1030,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       };
       setProducts(prev => [newProduct, ...prev]);
       toast.success('Produk berhasil ditambahkan');
+      
+      // ✅ UPDATE CACHE AFTER OPERATION
+      updateCacheAfterOperation();
     }
   };
 
@@ -865,6 +1065,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         minStok: data.min_stok ?? undefined,
       } : p));
       toast.success('Produk berhasil diperbarui');
+      
+      // ✅ UPDATE CACHE AFTER OPERATION
+      updateCacheAfterOperation();
     }
   };
 
@@ -883,6 +1086,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
     // Immediate local state update
     setProducts(prev => prev.filter(p => p.id !== id));
+    toast.success('Produk berhasil dihapus');
+    
+    // ✅ UPDATE CACHE AFTER OPERATION
+    updateCacheAfterOperation();
   };
 
   const createSupplier = async (supplier: Omit<Supplier, 'id'>): Promise<Supplier> => {
@@ -1587,6 +1794,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   return (
     <DataContext.Provider value={{
       isLoading,
+      isHydrated,
       products,
       suppliers,
       purchases,
