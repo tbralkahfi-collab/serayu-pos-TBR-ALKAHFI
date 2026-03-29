@@ -26,6 +26,9 @@ interface BackupRecord {
   createdAt: string;
 }
 
+// Define valid table types for Supabase operations
+type ValidTable = 'products' | 'suppliers' | 'purchases' | 'debts' | 'expenses' | 'transactions' | 'projects';
+
 interface StoreContextType {
   storeInfo: StoreInfo;
   printerSettings: PrinterSettings;
@@ -419,7 +422,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       console.log('✅ Backup structure validated, tables found:', backupTables);
 
       // Step 2: Define dependency-aware restore sequence
-      const restoreSequence = [
+      const restoreSequence: { table: ValidTable; data: any[]; dependencies: string[] }[] = [
         { table: 'products', data: backupData.products || [], dependencies: [] },
         { table: 'suppliers', data: backupData.suppliers || [], dependencies: [] },
         { table: 'projects', data: backupData.projects || [], dependencies: ['suppliers'] },
@@ -430,7 +433,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       ];
 
       // Step 3: Safe delete sequence (reverse of dependencies)
-      const deleteSequence = ['expenses', 'debts', 'transactions', 'purchases', 'projects', 'suppliers', 'products'];
+      const deleteSequence: ValidTable[] = ['expenses', 'debts', 'transactions', 'purchases', 'projects', 'suppliers', 'products'];
       
       console.log('🗑️ Deleting existing data with dependency safety...');
       
@@ -495,10 +498,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // Use upsert to handle potential conflicts gracefully
           const { error: insertError, count: insertCount } = await supabase
             .from(table)
-            .upsert(preparedData, { 
-              onConflict: 'id', 
-              ignoreDuplicates: false 
-            })
+            .upsert(preparedData)
             .select('id', { count: 'exact' });
 
           if (insertError) {
@@ -588,7 +588,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     
     // For now, we'll just clear all data to prevent inconsistent state
     // In a real production system, you might have backup of current state
-    const tables = ['products', 'suppliers', 'purchases', 'debts', 'expenses', 'transactions', 'projects'];
+    const tables: ValidTable[] = ['products', 'suppliers', 'purchases', 'debts', 'expenses', 'transactions', 'projects'];
     
     for (const table of tables) {
       try {

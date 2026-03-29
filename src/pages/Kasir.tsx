@@ -34,7 +34,7 @@ interface CartItem {
 
 export default function Kasir() {
   const { storeInfo, printerSettings } = useStore();
-  const { products, addTransaction, updateProduct, createTransactionDebt, createTransaction } = useData();
+  const { products, createTransaction, updateProduct, createTransactionDebt } = useData();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [search, setSearch] = useState('');
   const [customerName, setCustomerName] = useState('');
