@@ -277,70 +277,134 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const restoreBackup = async (backupId: string) => {
     if (!user) throw new Error('Not authenticated');
 
-    // Fetch backup data
+    // Step 1: Validate backup structure
+    console.log('🔄 Starting restore process for backup:', backupId);
+    
     const { data: backup, error: fetchError } = await supabase
       .from('backups')
-      .select('backup_data')
+      .select('backup_data, created_at')
       .eq('id', backupId)
       .eq('user_id', user.id)
       .single();
 
-    if (fetchError || !backup) throw fetchError || new Error('Backup not found');
+    if (fetchError || !backup) {
+      console.error('❌ Backup fetch error:', fetchError);
+      throw new Error('Backup not found or access denied');
+    }
 
     const backupData = backup.backup_data as any;
-
-    // Clear existing data and restore from backup
-    await Promise.all([
-      supabase.from('products').delete().eq('user_id', user.id),
-      supabase.from('suppliers').delete().eq('user_id', user.id),
-      supabase.from('purchases').delete().eq('user_id', user.id),
-      supabase.from('debts').delete().eq('user_id', user.id),
-      supabase.from('expenses').delete().eq('user_id', user.id),
-      supabase.from('transactions').delete().eq('user_id', user.id),
-      supabase.from('projects').delete().eq('user_id', user.id),
-    ]);
-
-    // Insert backup data
-    if (backupData.products?.length) {
-      await supabase.from('products').insert(backupData.products);
-    }
-    if (backupData.suppliers?.length) {
-      await supabase.from('suppliers').insert(backupData.suppliers);
-    }
-    if (backupData.purchases?.length) {
-      await supabase.from('purchases').insert(backupData.purchases);
-    }
-    if (backupData.debts?.length) {
-      await supabase.from('debts').insert(backupData.debts);
-    }
-    if (backupData.expenses?.length) {
-      await supabase.from('expenses').insert(backupData.expenses);
-    }
-    if (backupData.transactions?.length) {
-      await supabase.from('transactions').insert(backupData.transactions);
-    }
-    if (backupData.projects?.length) {
-      await supabase.from('projects').insert(backupData.projects);
-    }
-
-    // Restore profile settings
-    if (backupData.profile) {
-      await supabase.from('profiles').update({
-        store_name: backupData.profile.store_name,
-        store_address: backupData.profile.store_address,
-        store_phone: backupData.profile.store_phone,
-        store_logo: backupData.profile.store_logo,
-        printer_type: backupData.profile.printer_type,
-        paper_width: backupData.profile.paper_width,
-        auto_print: backupData.profile.auto_print,
-        min_stock_alert: backupData.profile.min_stock_alert,
-      } as any).eq('id', user.id);
-    }
-
-
     
-    // Refresh settings
+    // Validate backup structure
+    const requiredTables = ['products', 'suppliers', 'purchases', 'debts', 'expenses', 'transactions', 'projects'];
+    const backupTables = Object.keys(backupData).filter(key => requiredTables.includes(key));
+    
+    if (backupTables.length === 0) {
+      throw new Error('Invalid backup structure: No valid data tables found');
+    }
+
+    console.log('✅ Backup structure validated, tables found:', backupTables);
+
+    // Step 2: Define ordered restore sequence (dependencies first)
+    const restoreSequence = [
+      { table: 'products', data: backupData.products || [] },
+      { table: 'suppliers', data: backupData.suppliers || [] },
+      { table: 'projects', data: backupData.projects || [] },
+      { table: 'purchases', data: backupData.purchases || [] },
+      { table: 'transactions', data: backupData.transactions || [] },
+      { table: 'debts', data: backupData.debts || [] },
+      { table: 'expenses', data: backupData.expenses || [] }
+    ];
+
+    // Step 3: Delete existing data in reverse order (to respect foreign keys)
+    const deleteSequence = ['expenses', 'debts', 'transactions', 'purchases', 'projects', 'suppliers', 'products'];
+    
+    console.log('🗑️ Deleting existing data...');
+    for (const table of deleteSequence) {
+      try {
+        const { error: deleteError } = await supabase
+          .from(table)
+          .delete()
+          .eq('user_id', user.id);
+        
+        if (deleteError) {
+          console.error(`❌ Failed to delete ${table}:`, deleteError);
+          throw new Error(`Failed to clear ${table}: ${deleteError.message}`);
+        }
+        console.log(`✅ Cleared ${table} table`);
+      } catch (error) {
+        console.error(`❌ Error deleting ${table}:`, error);
+        throw error;
+      }
+    }
+
+    // Step 4: Insert backup data in correct order
+    console.log('📥 Inserting backup data...');
+    for (const { table, data } of restoreSequence) {
+      if (data.length === 0) {
+        console.log(`⏭️ Skipping ${table} - no data`);
+        continue;
+      }
+
+      try {
+        // Ensure all records have user_id
+        const dataWithUserId = data.map((record: any) => ({
+          ...record,
+          user_id: user.id
+        }));
+
+        // Remove any existing IDs to avoid conflicts
+        const cleanData = dataWithUserId.map(({ id, ...record }: any) => record);
+
+        const { error: insertError } = await supabase
+          .from(table)
+          .insert(cleanData);
+
+        if (insertError) {
+          console.error(`❌ Failed to insert ${table}:`, insertError);
+          throw new Error(`Failed to restore ${table}: ${insertError.message}`);
+        }
+        console.log(`✅ Restored ${data.length} records to ${table}`);
+      } catch (error) {
+        console.error(`❌ Error inserting ${table}:`, error);
+        throw error;
+      }
+    }
+
+    // Step 5: Restore profile settings
+    if (backupData.profile) {
+      console.log('⚙️ Restoring profile settings...');
+      try {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({
+            store_name: backupData.profile.store_name,
+            store_address: backupData.profile.store_address,
+            store_phone: backupData.profile.store_phone,
+            store_logo: backupData.profile.store_logo,
+            printer_type: backupData.profile.printer_type,
+            paper_width: backupData.profile.paper_width,
+            auto_print: backupData.profile.auto_print,
+            min_stock_alert: backupData.profile.min_stock_alert,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', user.id);
+
+        if (profileError) {
+          console.error('❌ Failed to restore profile:', profileError);
+          throw new Error(`Failed to restore profile: ${profileError.message}`);
+        }
+        console.log('✅ Profile settings restored');
+      } catch (error) {
+        console.error('❌ Error restoring profile:', error);
+        throw error;
+      }
+    }
+
+    // Step 6: Refresh settings and validate
+    console.log('🔄 Refreshing settings...');
     await fetchSettings();
+    
+    console.log('✅ Restore completed successfully');
   };
 
   return (

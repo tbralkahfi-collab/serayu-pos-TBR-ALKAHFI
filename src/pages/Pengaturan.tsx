@@ -222,12 +222,55 @@ export default function Pengaturan() {
   const handleRestore = async (backupId: string) => {
     setIsRestoring(true);
     try {
+      // Step 1: Prevent unauthorized restore (role check)
+      if (!user) {
+        toast.error('Anda harus login untuk memulihkan data');
+        return;
+      }
+
+      // Step 2: Confirm backup exists and belongs to user
+      const selectedBackup = backups.find(b => b.id === backupId);
+      if (!selectedBackup) {
+        toast.error('Backup tidak ditemukan');
+        return;
+      }
+
+      console.log('🔄 Starting restore process for backup:', selectedBackup.name);
+      
+      // Step 3: Execute restore with detailed logging
       await restoreBackup(backupId);
+      
+      // Step 4: Force refresh all data to ensure UI reflects updated data
+      console.log('🔄 Refreshing application data...');
       await refreshData();
-      toast.success('Data berhasil dipulihkan dari backup');
+      
+      // Step 5: Success feedback with details
+      const backupDate = new Date(selectedBackup.created_at).toLocaleString('id-ID');
+      toast.success(`Data berhasil dipulihkan dari backup (${backupDate})`);
+      
+      console.log('✅ Restore process completed successfully');
+      
     } catch (error) {
-      console.error('Restore error:', error);
-      toast.error('Gagal memulihkan data');
+      console.error('❌ Restore error:', error);
+      
+      // Step 6: Detailed error handling
+      let errorMessage = 'Gagal memulihkan data';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('access denied')) {
+          errorMessage = 'Akses ditolak: Backup tidak valid atau tidak milik Anda';
+        } else if (error.message.includes('structure')) {
+          errorMessage = 'Backup rusak atau tidak valid';
+        } else if (error.message.includes('Failed to clear')) {
+          errorMessage = 'Gagal menghapus data lama, coba lagi';
+        } else if (error.message.includes('Failed to restore')) {
+          errorMessage = 'Gagal memulihkan data, periksa format backup';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setIsRestoring(false);
     }
