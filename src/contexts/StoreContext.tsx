@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
+import { User } from '@supabase/supabase-js';
 
 interface StoreInfo {
   name: string;
@@ -60,7 +61,7 @@ const DEFAULT_STOCK_SETTINGS: StockSettings = {
 };
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, isAuthLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [storeInfo, setStoreInfo] = useState<StoreInfo>(DEFAULT_STORE_INFO);
@@ -68,28 +69,58 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [stockSettings, setStockSettings] = useState<StockSettings>(DEFAULT_STOCK_SETTINGS);
   const [backups, setBackups] = useState<BackupRecord[]>([]);
 
-  // Safety wrapper to ensure user is defined for all operations
-  const withUserGuard = useCallback(async (operation: () => Promise<any>, operationName: string) => {
-    // Wait for auth to load if still loading
-    if (authLoading) {
-      console.log(`⏳ Waiting for auth to complete before ${operationName}`);
-      return;
+  // ✅ REQUIRE USER GUARD - Ensures user is defined before any operation
+  const requireUser = useCallback((user: User | null, authLoading: boolean): User => {
+    // Wait for auth to complete
+    if (authLoading || isAuthLoading) {
+      console.log('⏳ Waiting for auth to complete...');
+      throw new Error('AUTH_LOADING');
     }
 
     // Ensure user is defined
     if (!user) {
-      console.error(`❌ Cannot perform ${operationName}: User not authenticated`);
-      throw new Error('User not authenticated');
+      console.error('❌ User not authenticated');
+      throw new Error('USER_NOT_AUTHENTICATED');
     }
 
-    console.log(`🔐 User verified for ${operationName}:`, user.id);
-    return await operation();
-  }, [user, authLoading]);
+    console.log('✅ User verified:', user.id);
+    return user;
+  }, [isAuthLoading]);
+
+  // ✅ Enhanced safety wrapper with requireUser
+  const withUserGuard = useCallback(async (operation: () => Promise<any>, operationName: string) => {
+    try {
+      // Ensure user is authenticated
+      const verifiedUser = requireUser(user, authLoading);
+      
+      console.log(`🔐 User verified for ${operationName}:`, verifiedUser.id);
+      return await operation();
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === 'AUTH_LOADING') {
+          console.log(`⏳ ${operationName} waiting for auth...`);
+          return;
+        }
+        if (error.message === 'USER_NOT_AUTHENTICATED') {
+          console.error(`❌ Cannot perform ${operationName}: User not authenticated`);
+          throw new Error('User not authenticated');
+        }
+      }
+      throw error;
+    }
+  }, [user, authLoading, requireUser]);
 
   // Fetch profile settings from Supabase
   const fetchSettings = useCallback(async () => {
+    // ✅ Prevent data fetching before auth is ready
+    if (authLoading || isAuthLoading) {
+      console.log('⏳ fetchSettings: Waiting for auth to complete...');
+      return;
+    }
+
+    // ✅ Fallback to localStorage for non-authenticated users
     if (!user) {
-      // Fallback to localStorage for non-authenticated users
+      console.log('📦 fetchSettings: Using localStorage fallback');
       const savedStore = localStorage.getItem('serayu_store_info');
       const savedPrinter = localStorage.getItem('serayu_printer_settings');
       const savedStock = localStorage.getItem('serayu_stock_settings');
@@ -101,7 +132,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // ✅ Safe database operation with verified user
     try {
+      console.log('🔍 fetchSettings: Fetching from database for user:', user.id);
+      
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('*')
@@ -127,19 +161,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setStockSettings({
           minStockAlert: (profile as any).min_stock_alert ?? DEFAULT_STOCK_SETTINGS.minStockAlert,
         });
+        
+        console.log('✅ fetchSettings: Settings loaded successfully');
       }
     } catch (error) {
-      console.error('Error fetching settings:', error);
+      console.error('❌ fetchSettings: Error fetching settings:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, authLoading, isAuthLoading]);
 
   // Fetch backups list
   const fetchBackups = useCallback(async () => {
-    if (!user) return;
+    // ✅ Prevent data fetching before auth is ready
+    if (authLoading || isAuthLoading) {
+      console.log('⏳ fetchBackups: Waiting for auth to complete...');
+      return;
+    }
+
+    // ✅ Ensure user is authenticated
+    if (!user) {
+      console.log('📦 fetchBackups: No user, skipping backup fetch');
+      return;
+    }
 
     try {
+      console.log('🔍 fetchBackups: Fetching backups for user:', user.id);
+      
       const { data, error } = await supabase
         .from('backups')
         .select('id, backup_type, created_at')
@@ -153,20 +201,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         backupType: b.backup_type as 'auto' | 'manual',
         createdAt: b.created_at,
       })));
+      
+      console.log(`✅ fetchBackups: Loaded ${data?.length || 0} backups`);
     } catch (error) {
-      console.error('Error fetching backups:', error);
+      console.error('❌ fetchBackups: Error fetching backups:', error);
     }
-  }, [user]);
+  }, [user, authLoading, isAuthLoading]);
 
-  // Initial fetch
+  // Initial fetch - only after auth is ready
   useEffect(() => {
+    // ✅ Prevent race conditions - wait for auth to complete
+    if (authLoading || isAuthLoading) {
+      console.log('⏳ Initial fetch: Waiting for auth to complete...');
+      return;
+    }
+
+    console.log('🚀 Initial fetch: Auth ready, starting data fetch');
     fetchSettings();
     fetchBackups();
-  }, [fetchSettings, fetchBackups]);
+  }, [fetchSettings, fetchBackups, authLoading, isAuthLoading]);
 
-  // Realtime subscription for profiles
+  // Realtime subscription for profiles - only after auth is ready
   useEffect(() => {
-    if (!user) return;
+    // ✅ Prevent race conditions - wait for auth to complete
+    if (authLoading || isAuthLoading) {
+      console.log('⏳ Realtime subscription: Waiting for auth to complete...');
+      return;
+    }
+
+    if (!user) {
+      console.log('📦 Realtime subscription: No user, skipping subscription');
+      return;
+    }
+
+    console.log('🔗 Realtime subscription: Setting up for user:', user.id);
 
     const channel = supabase
       .channel('store-settings')
@@ -176,6 +244,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         table: 'profiles',
         filter: `id=eq.${user.id}`
       }, () => {
+        console.log('🔄 Realtime: Profile changed, refreshing settings');
         fetchSettings();
       })
       .on('postgres_changes', { 
@@ -184,19 +253,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         table: 'backups',
         filter: `user_id=eq.${user.id}`
       }, () => {
+        console.log('🔄 Realtime: Backups changed, refreshing list');
         fetchBackups();
       })
       .subscribe();
 
     return () => {
+      console.log('🔌 Realtime: Cleaning up subscription for user:', user.id);
       supabase.removeChannel(channel);
     };
-  }, [user, fetchSettings, fetchBackups]);
+  }, [user, fetchSettings, fetchBackups, authLoading, isAuthLoading]);
 
-  // Update functions with user safety
+  // Update functions with enhanced user safety
   const updateStoreInfo = async (info: Partial<StoreInfo>) => {
     return await withUserGuard(async () => {
-      if (!user) return;
+      const verifiedUser = requireUser(user, authLoading);
+      
+      console.log('📝 updateStoreInfo: Updating store info for user:', verifiedUser.id);
       
       const { error } = await supabase
         .from('profiles')
@@ -206,16 +279,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           store_phone: info.phone,
           store_logo: info.logo,
         })
-        .eq('id', user.id);
+        .eq('id', verifiedUser.id);
 
       if (error) throw error;
       await fetchSettings();
+      
+      console.log('✅ updateStoreInfo: Store info updated successfully');
     }, 'updateStoreInfo');
   };
 
   const updatePrinterSettings = async (settings: Partial<PrinterSettings>) => {
     return await withUserGuard(async () => {
-      if (!user) return;
+      const verifiedUser = requireUser(user, authLoading);
+      
+      console.log('🖨️ updatePrinterSettings: Updating printer settings for user:', verifiedUser.id);
       
       const { error } = await supabase
         .from('profiles')
@@ -224,34 +301,42 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           paper_width: settings.paperWidth,
           auto_print: settings.autoPrint,
         })
-        .eq('id', user.id);
+        .eq('id', verifiedUser.id);
 
       if (error) throw error;
       await fetchSettings();
+      
+      console.log('✅ updatePrinterSettings: Printer settings updated successfully');
     }, 'updatePrinterSettings');
   };
 
   const updateStockSettings = async (settings: Partial<StockSettings>) => {
     return await withUserGuard(async () => {
-      if (!user) return;
+      const verifiedUser = requireUser(user, authLoading);
+      
+      console.log('📦 updateStockSettings: Updating stock settings for user:', verifiedUser.id);
       
       const { error } = await supabase
         .from('profiles')
         .update({
           min_stock_alert: settings.minStockAlert,
         })
-        .eq('id', user.id);
+        .eq('id', verifiedUser.id);
 
       if (error) throw error;
       await fetchSettings();
+      
+      console.log('✅ updateStockSettings: Stock settings updated successfully');
     }, 'updateStockSettings');
   };
 
   const triggerManualBackup = async () => {
     return await withUserGuard(async () => {
-      if (!user) return;
+      const verifiedUser = requireUser(user, authLoading);
+      
+      console.log('💾 triggerManualBackup: Creating manual backup for user:', verifiedUser.id);
 
-      // Get current data
+      // Get current data with verified user
       const [
         productsRes,
         suppliersRes,
@@ -262,14 +347,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         projectsRes,
         profileRes
       ] = await Promise.all([
-        supabase.from('products').select('*').eq('user_id', user.id),
-        supabase.from('suppliers').select('*').eq('user_id', user.id),
-        supabase.from('purchases').select('*').eq('user_id', user.id),
-        supabase.from('debts').select('*').eq('user_id', user.id),
-        supabase.from('expenses').select('*').eq('user_id', user.id),
-        supabase.from('transactions').select('*').eq('user_id', user.id),
-        supabase.from('projects').select('*').eq('user_id', user.id),
-        supabase.from('profiles').select('*').eq('id', user.id).single()
+        supabase.from('products').select('*').eq('user_id', verifiedUser.id),
+        supabase.from('suppliers').select('*').eq('user_id', verifiedUser.id),
+        supabase.from('purchases').select('*').eq('user_id', verifiedUser.id),
+        supabase.from('debts').select('*').eq('user_id', verifiedUser.id),
+        supabase.from('expenses').select('*').eq('user_id', verifiedUser.id),
+        supabase.from('transactions').select('*').eq('user_id', verifiedUser.id),
+        supabase.from('projects').select('*').eq('user_id', verifiedUser.id),
+        supabase.from('profiles').select('*').eq('id', verifiedUser.id).single()
       ]);
 
       if (profileRes.error) throw profileRes.error;
@@ -288,13 +373,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase
         .from('backups')
         .insert({
-          user_id: user.id,
+          user_id: verifiedUser.id,
           backup_data: backupData,
           backup_type: 'manual'
         });
 
       if (error) throw error;
       await fetchBackups();
+      
+      console.log('✅ triggerManualBackup: Manual backup created successfully');
     }, 'triggerManualBackup');
   };
 
@@ -302,6 +389,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     console.log('🔄 Starting production-grade restore process for backup:', backupId);
     
     return await withUserGuard(async () => {
+      const verifiedUser = requireUser(user, authLoading);
+      
       // Step 1: Validate backup structure and ownership
       console.log('🔍 Fetching and validating backup...');
       
@@ -309,7 +398,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         .from('backups')
         .select('backup_data, created_at, user_id')
         .eq('id', backupId)
-        .eq('user_id', user!.id)
+        .eq('user_id', verifiedUser.id)
         .single();
 
       if (fetchError || !backup) {
@@ -356,12 +445,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const { count } = await supabase
             .from(table)
             .select('*', { count: 'exact', head: true })
-            .eq('user_id', user!.id);
+            .eq('user_id', verifiedUser.id);
           
           const { error: deleteError } = await supabase
             .from(table)
             .delete()
-            .eq('user_id', user!.id);
+            .eq('user_id', verifiedUser.id);
           
           if (deleteError) {
             console.error(`❌ Failed to delete ${table}:`, deleteError);
@@ -396,7 +485,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // Prepare data with user_id and preserve original IDs
           const preparedData = data.map((record: any) => ({
             ...record,
-            user_id: user!.id,
+            user_id: verifiedUser.id,
             // Ensure created_at is preserved or set
             created_at: record.created_at || new Date().toISOString(),
             // Update modified timestamp
@@ -418,7 +507,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             
             // Critical failure - attempt rollback
             console.error('🚨 Critical failure detected, attempting rollback...');
-            await attemptRollback(deleteResults, user!.id);
+            await attemptRollback(deleteResults, verifiedUser.id);
             throw new Error(`Failed to restore ${table}: ${insertError.message}`);
           }
           
@@ -430,7 +519,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           
           // Critical failure - attempt rollback
           console.error('🚨 Critical failure detected, attempting rollback...');
-          await attemptRollback(deleteResults, user!.id);
+          await attemptRollback(deleteResults, verifiedUser.id);
           throw error;
         }
       }
@@ -442,7 +531,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const { error: profileError } = await supabase
             .from('profiles')
             .upsert({
-              id: user!.id,
+              id: verifiedUser.id,
               store_name: backupData.profile.store_name,
               store_address: backupData.profile.store_address,
               store_phone: backupData.profile.store_phone,
@@ -453,7 +542,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               min_stock_alert: backupData.profile.min_stock_alert,
               updated_at: new Date().toISOString()
             })
-            .eq('id', user!.id);
+            .eq('id', verifiedUser.id);
 
           if (profileError) {
             console.error('❌ Failed to restore profile:', profileError);
