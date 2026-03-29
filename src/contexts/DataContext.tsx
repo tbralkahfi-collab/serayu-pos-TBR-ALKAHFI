@@ -159,7 +159,7 @@ interface DataContextType {
   deletePurchase: (id: string) => Promise<boolean>;
   
   // Debts CRUD
-  createDebt: (debt: Omit<DebtRecord, 'id' | 'payments'>) => Promise<void>;
+  addDebt: (debt: Omit<DebtRecord, 'id' | 'payments'>) => Promise<void>;
   updateDebt: (id: string, debt: Partial<DebtRecord>) => Promise<void>;
   deleteDebt: (id: string) => Promise<boolean>;
   addPayment: (debtId: string, payment: Omit<PaymentHistory, 'id'>) => Promise<void>;
@@ -1052,8 +1052,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     toast.success('Pembelian berhasil dihapus');
   };
 
-  const createDebt = async (debt: Omit<DebtRecord, 'id' | 'payments'>) => {
-    console.log('💰 DataContext: createDebt called', { type: debt.type, nama: debt.nama, total: debt.total });
+  const addDebt = async (debt: Omit<DebtRecord, 'id' | 'payments'>) => {
+    console.log('💰 DataContext: addDebt called', { type: debt.type, nama: debt.nama, total: debt.total });
     
     if (!user) {
       console.error('💰 DataContext: Create debt failed - no user');
@@ -1611,7 +1611,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       deletePurchase,
       
       // Debts CRUD
-      createDebt,
+      addDebt,
       updateDebt,
       deleteDebt,
       addPayment,
