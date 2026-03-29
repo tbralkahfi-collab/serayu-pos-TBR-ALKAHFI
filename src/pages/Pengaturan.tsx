@@ -240,30 +240,39 @@ export default function Pengaturan() {
         return;
       }
 
-      console.log('🔄 Starting restore process for backup:', backupId);
-      console.log('🔍 Data sanitization will be applied during restore process');
+      console.log('🔄 Starting ATOMIC restore process for backup:', backupId);
+      console.log('🔍 Atomic transaction will be used for data integrity');
       
-      // Step 3: Execute restore with detailed logging
+      // Step 3: Execute atomic restore with detailed logging
       const restoreResult = await restoreBackup(backupId);
       
       // Step 4: Force refresh all data to ensure UI reflects updated data
       console.log('🔄 Refreshing application data...');
       await refreshData();
       
-      // Step 5: Success feedback with details
+      // Step 5: Success feedback with atomic details
       const backupDate = new Date(selectedBackup.createdAt).toLocaleString('id-ID');
       const totalRecords = restoreResult?.summary?.totalRecords || 0;
       const tablesRestored = restoreResult?.summary?.tablesRestored?.length || 0;
+      const isAtomic = restoreResult?.atomic || false;
+      const version = restoreResult?.summary?.version || '1.0';
       
-      toast.success(`Data berhasil dipulihkan: ${totalRecords} records dari ${tablesRestored} tabel (${backupDate})`);
+      const atomicText = isAtomic ? 'ATOMIC' : 'Standard';
+      toast.success(`Data berhasil dipulihkan (${atomicText}): ${totalRecords} records dari ${tablesRestored} tabel (${backupDate}) [v${version}]`);
       
-      console.log('✅ Restore process completed successfully');
-      console.log('📊 Restore Summary:', restoreResult?.summary);
+      console.log('✅ ATOMIC Restore process completed successfully');
+      console.log('📊 Restore Summary:', {
+        atomic: isAtomic,
+        version,
+        tablesRestored,
+        totalRecords,
+        backupDate
+      });
       
     } catch (error) {
-      console.error('❌ Restore error:', error);
+      console.error('❌ ATOMIC Restore error:', error);
       
-      // Step 6: Detailed error handling
+      // Step 6: Enhanced error handling for atomic operations
       let errorMessage = 'Gagal memulihkan data';
       
       if (error instanceof Error) {
@@ -271,12 +280,16 @@ export default function Pengaturan() {
           errorMessage = 'Akses ditolak: Backup tidak valid atau tidak milik Anda';
         } else if (error.message.includes('Restore already in progress')) {
           errorMessage = 'Restore sedang berjalan, harap tunggu selesai';
+        } else if (error.message.includes('not compatible')) {
+          errorMessage = `Versi backup tidak kompatibel: ${error.message}`;
+        } else if (error.message.includes('Atomic restore failed')) {
+          errorMessage = `Restore atomik gagal: ${error.message}`;
         } else if (error.message.includes('Invalid backup structure')) {
           errorMessage = 'Struktur backup tidak valid atau rusak';
         } else if (error.message.includes('Failed to clear')) {
           errorMessage = 'Gagal menghapus data lama, coba lagi';
         } else if (error.message.includes('Failed to restore')) {
-          errorMessage = 'Gagal memulihkan data, periksa konsol untuk detail';
+          errorMessage = `Gagal memulihkan data: ${error.message}`;
         } else {
           errorMessage = error.message;
         }
@@ -847,9 +860,23 @@ export default function Pengaturan() {
                     </div>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-1" disabled={isRestoring}>
-                          <RotateCcw className="w-3 h-3" />
-                          Pulihkan
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="gap-1" 
+                          disabled={isRestoring}
+                        >
+                          {isRestoring ? (
+                            <>
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              <span className="text-xs">Atomic Restore...</span>
+                            </>
+                          ) : (
+                            <>
+                              <RotateCcw className="w-3 h-3" />
+                              <span className="text-xs">Pulihkan</span>
+                            </>
+                          )}
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>

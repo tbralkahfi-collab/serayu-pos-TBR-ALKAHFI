@@ -20,6 +20,22 @@ interface StockSettings {
   minStockAlert: number;
 }
 
+// ✅ ENHANCED BACKUP STRUCTURE WITH VERSIONING
+interface BackupData {
+  version: string;
+  created_at: string;
+  data: {
+    products: any[];
+    suppliers: any[];
+    purchases: any[];
+    debts: any[];
+    expenses: any[];
+    transactions: any[];
+    projects: any[];
+    profile?: any;
+  };
+}
+
 interface BackupRecord {
   id: string;
   backupType: 'auto' | 'manual';
@@ -410,15 +426,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       if (profileRes.error) throw profileRes.error;
 
-      const backupData = {
-        products: productsRes.data || [],
-        suppliers: suppliersRes.data || [],
-        purchases: purchasesRes.data || [],
-        debts: debtsRes.data || [],
-        expenses: expensesRes.data || [],
-        transactions: transactionsRes.data || [],
-        projects: projectsRes.data || [],
-        profile: profileRes.data
+      const backupData: BackupData = {
+        version: '1.0',
+        created_at: new Date().toISOString(),
+        data: {
+          products: productsRes.data || [],
+          suppliers: suppliersRes.data || [],
+          purchases: purchasesRes.data || [],
+          debts: debtsRes.data || [],
+          expenses: expensesRes.data || [],
+          transactions: transactionsRes.data || [],
+          projects: projectsRes.data || [],
+          profile: profileRes.data
+        }
       };
 
       const { error } = await supabase
@@ -437,7 +457,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const restoreBackup = async (backupId: string) => {
-    console.log('🔄 Starting production-grade restore process for backup:', backupId);
+    console.log('🔄 Starting ATOMIC restore process for backup:', backupId);
     
     return await withUserGuard(async () => {
       const verifiedUser = requireUser(user, authLoading);
@@ -451,7 +471,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setIsRestoring(true);
       
       try {
-        // Step 1: Validate backup structure and ownership
+        // Step 1: Fetch and validate backup
         console.log('🔍 Fetching and validating backup...');
         
         const { data: backup, error: fetchError } = await supabase
@@ -466,190 +486,81 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           throw new Error(`Backup not found or access denied: ${fetchError?.message || 'Unknown error'}`);
         }
 
-        const backupData = backup.backup_data as any;
+        const backupData = backup.backup_data as BackupData;
         
-        // Validate backup structure
-        const requiredTables = ['products', 'suppliers', 'purchases', 'debts', 'expenses', 'transactions', 'projects'];
-        const backupTables = Object.keys(backupData).filter(key => requiredTables.includes(key));
+        // Step 2: Version validation
+        console.log('🔍 Validating backup version...');
+        if (!backupData.version) {
+          console.warn('⚠️ Legacy backup detected, assuming version 1.0');
+          backupData.version = '1.0';
+        }
         
-        if (backupTables.length === 0) {
-          throw new Error('Invalid backup structure: No valid data tables found');
+        if (backupData.version !== '1.0') {
+          throw new Error(`Backup version ${backupData.version} is not compatible with current version 1.0`);
+        }
+        
+        console.log('✅ Backup version validated:', backupData.version);
+
+        // Step 3: ATOMIC RESTORE via RPC
+        console.log('🔄 Executing atomic restore via RPC...');
+        
+        const { data: restoreResults, error: restoreError } = await supabase
+          .rpc('restore_backup_atomic', {
+            p_backup_data: backupData.data,
+            p_user_id: verifiedUser.id,
+            p_version: backupData.version
+          });
+
+        if (restoreError) {
+          console.error('❌ Atomic restore failed:', restoreError);
+          throw new Error(`Atomic restore failed: ${restoreError.message}`);
         }
 
-        console.log('✅ Backup structure validated, tables found:', backupTables);
+        console.log('✅ Atomic restore completed:', restoreResults);
 
-      // Step 2: Define dependency-aware restore sequence
-      const restoreSequence: { table: ValidTable; data: any[]; dependencies: string[] }[] = [
-        { table: 'products', data: backupData.products || [], dependencies: [] },
-        { table: 'suppliers', data: backupData.suppliers || [], dependencies: [] },
-        { table: 'projects', data: backupData.projects || [], dependencies: ['suppliers'] },
-        { table: 'purchases', data: backupData.purchases || [], dependencies: ['suppliers'] },
-        { table: 'transactions', data: backupData.transactions || [], dependencies: ['products'] },
-        { table: 'debts', data: backupData.debts || [], dependencies: ['projects', 'transactions'] },
-        { table: 'expenses', data: backupData.expenses || [], dependencies: [] }
-      ];
+        // Step 4: Process results
+        const results = restoreResults || [];
+        const summary = results.find(r => r.table_name === 'SUMMARY');
+        const errors = results.filter(r => r.status === 'ERROR');
+        
+        if (errors.length > 0) {
+          console.error('❌ Restore errors:', errors);
+          throw new Error(`Restore failed for ${errors.length} table(s): ${errors.map(e => e.table_name).join(', ')}`);
+        }
 
-      // Step 3: Safe delete sequence (reverse of dependencies)
-      const deleteSequence: ValidTable[] = ['expenses', 'debts', 'transactions', 'purchases', 'projects', 'suppliers', 'products'];
-      
-      console.log('🗑️ Deleting existing data with dependency safety...');
-      
-      // Delete with error handling and rollback capability
-      const deleteResults: Record<string, { success: boolean; count?: number; error?: any }> = {};
-      
-      for (const table of deleteSequence) {
-        try {
-          console.log(`🗑️ Deleting ${table}...`);
-          
-          // Get count before deletion for logging
-          const { count } = await supabase
-            .from(table)
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', verifiedUser.id);
-          
-          const { error: deleteError } = await supabase
-            .from(table)
-            .delete()
-            .eq('user_id', verifiedUser.id);
-          
-          if (deleteError) {
-            console.error(`❌ Failed to delete ${table}:`, deleteError);
-            deleteResults[table] = { success: false, error: deleteError };
-            throw new Error(`Failed to clear ${table}: ${deleteError.message}`);
+        // Step 5: Refresh settings
+        console.log('🔄 Refreshing settings...');
+        await fetchSettings();
+
+        // Step 6: Return success
+        const totalRows = summary?.rows_processed || 0;
+        const tablesRestored = results.filter(r => r.status === 'SUCCESS' && r.table_name !== 'SUMMARY').length;
+        
+        console.log('✅ ATOMIC RESTORE SUCCESSFUL:', {
+          tablesRestored,
+          totalRows,
+          backupId
+        });
+
+        return {
+          success: true,
+          atomic: true,
+          results: results,
+          summary: {
+            tablesRestored: results.filter(r => r.status === 'SUCCESS' && r.table_name !== 'SUMMARY').map(r => r.table_name),
+            totalRecords: totalRows,
+            version: backupData.version
           }
-          
-          deleteResults[table] = { success: true, count: count || 0 };
-          console.log(`✅ Cleared ${table}: ${count} records deleted`);
-        } catch (error) {
-          console.error(`❌ Critical error deleting ${table}:`, error);
-          deleteResults[table] = { success: false, error };
-          throw error;
-        }
-      }
-
-      // Step 4: Insert backup data with upsert to preserve IDs and handle conflicts
-      console.log('📥 Inserting backup data with ID preservation...');
-      
-      const insertResults: Record<string, { success: boolean; count: number; error?: any }> = {};
-      
-      for (const { table, data } of restoreSequence) {
-        if (data.length === 0) {
-          console.log(`⏭️ Skipping ${table} - no data`);
-          insertResults[table] = { success: true, count: 0 };
-          continue;
-        }
-
-        try {
-          console.log(`📥 Restoring ${data.length} records to ${table}...`);
-          
-          // ✅ Sanitize data before processing
-          const sanitizedData = sanitizeData(table, data);
-          
-          // Prepare data with user_id and preserve original IDs
-          const preparedData = sanitizedData.map((record: any) => ({
-            ...record,
-            user_id: verifiedUser.id,
-            // Ensure created_at is preserved or set
-            created_at: record.created_at || new Date().toISOString(),
-            // Update modified timestamp
-            updated_at: new Date().toISOString()
-          }));
-
-          console.log(`🔍 Prepared ${preparedData.length} records for ${table}`);
-
-          // Use upsert to handle potential conflicts gracefully
-          const { error: insertError, count: insertCount } = await supabase
-            .from(table)
-            .upsert(preparedData)
-            .select('id', { count: 'exact' });
-
-          if (insertError) {
-            console.error(`❌ Failed to upsert ${table}:`, insertError);
-            insertResults[table] = { success: false, count: 0, error: insertError };
-            
-            // Critical failure - attempt rollback
-            console.error('🚨 Critical failure detected, attempting rollback...');
-            await attemptRollback(deleteResults, verifiedUser.id);
-            throw new Error(`Failed to restore ${table}: ${insertError.message}`);
-          }
-          
-          insertResults[table] = { success: true, count: insertCount || data.length };
-          console.log(`✅ Restored ${insertCount || data.length} records to ${table}`);
-        } catch (error) {
-          console.error(`❌ Error inserting ${table}:`, error);
-          insertResults[table] = { success: false, count: 0, error };
-          
-          // Critical failure - attempt rollback
-          console.error('🚨 Critical failure detected, attempting rollback...');
-          await attemptRollback(deleteResults, verifiedUser.id);
-          throw error;
-        }
-      }
-
-      // Step 5: Restore profile settings with upsert
-      if (backupData.profile) {
-        console.log('⚙️ Restoring profile settings...');
-        try {
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .upsert({
-              id: verifiedUser.id,
-              store_name: backupData.profile.store_name,
-              store_address: backupData.profile.store_address,
-              store_phone: backupData.profile.store_phone,
-              store_logo: backupData.profile.store_logo,
-              printer_type: backupData.profile.printer_type,
-              paper_width: backupData.profile.paper_width,
-              auto_print: backupData.profile.auto_print,
-              min_stock_alert: backupData.profile.min_stock_alert,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', verifiedUser.id);
-
-          if (profileError) {
-            console.error('❌ Failed to restore profile:', profileError);
-            throw new Error(`Failed to restore profile: ${profileError.message}`);
-          }
-          console.log('✅ Profile settings restored');
-        } catch (error) {
-          console.error('❌ Error restoring profile:', error);
-          throw error;
-        }
-      }
-
-      // Step 6: Refresh settings and validate
-      console.log('🔄 Refreshing settings...');
-      await fetchSettings();
-      
-      // Step 7: Log comprehensive restore summary
-      console.log('📊 Restore Summary:', {
-        backupId,
-        tablesRestored: Object.keys(insertResults),
-        totalRecords: Object.values(insertResults).reduce((sum, result) => sum + result.count, 0),
-        success: true
-      });
-      
-      console.log('✅ Production-grade restore completed successfully');
-      
-      // Return results for potential UI updates
-      return {
-        success: true,
-        results: insertResults,
-        summary: {
-          tablesRestored: Object.keys(insertResults),
-          totalRecords: Object.values(insertResults).reduce((sum, result) => sum + result.count, 0)
-        }
-      };
-      
+        };
+        
       } catch (error) {
-        console.error('❌ Restore failed:', error);
+        console.error('❌ Atomic restore failed:', error);
         throw error;
       } finally {
         // ✅ ALWAYS RESET RESTORE FLAG
         setIsRestoring(false);
-        console.log('🔓 Restore flag reset - operation completed');
+        console.log('🔓 Restore flag reset - atomic operation completed');
       }
-      
     }, 'restoreBackup');
   };
 
