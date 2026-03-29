@@ -11,12 +11,6 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
   },
-  resolve: {
-    dedupe: ['react', 'react-dom'],
-  },
-  optimizeDeps: {
-    include: ['react', 'react-dom'],
-  },
   plugins: [
     react(),
     mode === "development" && componentTagger(),
