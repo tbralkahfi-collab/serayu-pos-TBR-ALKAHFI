@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import {
   AlertDialog,
+  AlertDialogTrigger,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
