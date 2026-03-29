@@ -172,7 +172,7 @@ interface DataContextType {
   // Transactions CRUD
   createTransaction: (transaction: Omit<Transaction, 'id'>) => Promise<void>;
   updateTransaction: (id: string, transaction: Partial<Transaction>) => Promise<void>;
-  deleteTransaction: (id: string) => Promise<void>;
+  deleteTransaction: (id: string) => Promise<boolean>;
   
   // Projects CRUD
   createProject: (project: Omit<Project, 'id'>) => Promise<void>;
@@ -1035,7 +1035,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const deletePurchase = async (id: string) => {
-    if (!user) return;
+    if (!user) return false;
     
     const { error } = await supabase
       .from('purchases')
@@ -1045,7 +1045,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (error) {
       toast.error('Gagal menghapus pembelian');
       console.error(error);
-      return;
+      return false;
     }
     // Immediate local state update
     setPurchases(prev => prev.filter(p => p.id !== id));
@@ -1219,7 +1219,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteExpense = async (id: string) => {
-    if (!user) return;
+    if (!user) return false;
     
     const { error } = await supabase
       .from('expenses')
@@ -1229,7 +1229,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (error) {
       toast.error('Gagal menghapus pengeluaran');
       console.error(error);
-      return;
+      return false;
     }
     // Immediate local state update
     setExpenses(prev => prev.filter(e => e.id !== id));
@@ -1515,7 +1515,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const getProjectDebts = (projectId: string) => debts.filter(d => d.projectId === projectId);
   
   const createProjectDebt = async (projectId: string, projectName: string, amount: number, dueDate: string) => {
-    await createDebt({
+    await addDebt({
       type: 'piutang',
       nama: projectName,
       total: amount,
@@ -1529,7 +1529,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const createTransactionDebt = async (transactionId: string, customerName: string, amount: number) => {
     if (amount <= 0) return;
-    await createDebt({
+    await addDebt({
       type: 'piutang',
       nama: customerName,
       total: amount,
@@ -1542,7 +1542,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const createPurchaseDebt = async (purchaseId: string, supplierName: string, amount: number) => {
     if (amount <= 0) return;
-    await createDebt({
+    await addDebt({
       type: 'utang',
       nama: supplierName,
       total: amount,
