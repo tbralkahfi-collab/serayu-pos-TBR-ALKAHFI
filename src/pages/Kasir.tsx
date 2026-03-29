@@ -334,7 +334,7 @@ export default function Kasir() {
     }
     
     // Save transaction with status 'Selesai' so stock trigger fires
-    await addTransaction({
+    await createTransaction({
       tanggal: `${dateStr} ${timeStr}`,
       pelanggan: receipt.customer,
       items: cart.map(item => `${item.name} x${item.qty}`).join(', '),
