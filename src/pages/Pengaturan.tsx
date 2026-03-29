@@ -226,7 +226,7 @@ export default function Pengaturan() {
   };
 
   const handleRestore = async (backupId: string) => {
-    // ✅ BULLETPROOF: Use global isRestoring flag - no local state
+    // ✅ PRODUCTION-GRADE: Use global isRestoring flag - no local state
     try {
       // Step 1: User authentication check
       if (!user) {
@@ -241,40 +241,36 @@ export default function Pengaturan() {
         return;
       }
 
-      console.log('🔄 Starting BULLETPROOF atomic restore for backup:', backupId);
-      console.log('🔍 Atomic transaction with auto schema detection will be used');
+      console.log('🔄 Starting PRODUCTION-GRADE restore for backup:', backupId);
+      console.log('🔍 Auto-detection and batching will be used');
       
-      // Step 3: Execute bulletproof restore
+      // Step 3: Execute production-grade restore
       const restoreResult = await restoreBackup(backupId);
       
       // Step 4: Force refresh all data
       console.log('🔄 Refreshing application data...');
       await refreshData();
       
-      // Step 5: Success feedback with bulletproof details
+      // Step 5: Success feedback with production-grade details
       const backupDate = new Date(selectedBackup.createdAt).toLocaleString('id-ID');
       const totalRecords = restoreResult?.summary?.totalRecords || 0;
       const tablesRestored = restoreResult?.summary?.tablesRestored?.length || 0;
-      const isAtomic = restoreResult?.atomic || false;
-      const isBulletproof = restoreResult?.bulletproof || false;
-      const version = restoreResult?.summary?.version || '1.0';
+      const version = restoreResult?.summary?.version || 'unknown';
       const details = restoreResult?.summary?.details || [];
       
       // Build success message
-      const typeText = isBulletproof ? 'BULLETPROOF' : (isAtomic ? 'ATOMIC' : 'Standard');
-      const detailText = details.map(d => `${d.table}(${d.rows})`).join(', ');
+      const detailText = details.map(d => `${d.table}(${d.records})`).join(', ');
       
       toast.success(
-        `Data berhasil dipulihkan (${typeText}): ${totalRecords} records dari ${tablesRestored} tabel (${backupDate}) [v${version}]`,
+        `Data berhasil dipulihkan (PRODUCTION): ${totalRecords} records dari ${tablesRestored} tabel (${backupDate}) [v${version}]`,
         {
           description: detailText,
           duration: 6000
         }
       );
       
-      console.log('✅ BULLETPROOF ATOMIC Restore completed successfully');
+      console.log('✅ PRODUCTION-GRADE Restore completed successfully');
       console.log('📊 Detailed Restore Summary:', {
-        type: typeText,
         version,
         tablesRestored,
         totalRecords,
@@ -283,9 +279,9 @@ export default function Pengaturan() {
       });
       
     } catch (error) {
-      console.error('❌ BULLETPROOF Restore error:', error);
+      console.error('❌ PRODUCTION-GRADE Restore error:', error);
       
-      // Step 6: Enhanced error handling for bulletproof operations
+      // Step 6: Enhanced error handling for production-grade operations
       let errorMessage = 'Gagal memulihkan data';
       let errorDescription = '';
       
@@ -296,24 +292,21 @@ export default function Pengaturan() {
         } else if (error.message.includes('Restore already in progress')) {
           errorMessage = 'Restore sedang berjalan';
           errorDescription = 'Harap tunggu proses restore selesai';
-        } else if (error.message.includes('not compatible')) {
-          errorMessage = 'Versi backup tidak kompatibel';
-          errorDescription = error.message;
-        } else if (error.message.includes('Atomic restore failed')) {
-          errorMessage = 'Restore atomik gagal';
-          errorDescription = error.message;
-        } else if (error.message.includes('Global restore error')) {
-          errorMessage = 'Error global restore';
-          errorDescription = error.message;
+        } else if (error.message.includes('Backup not found')) {
+          errorMessage = 'Backup tidak ditemukan';
+          errorDescription = 'Backup mungkin telah dihapus atau tidak valid';
         } else if (error.message.includes('Invalid backup data structure')) {
           errorMessage = 'Struktur backup tidak valid';
           errorDescription = 'Backup rusak atau format tidak didukung';
-        } else if (error.message.includes('Backup data section is missing')) {
-          errorMessage = 'Data backup tidak lengkap';
-          errorDescription = 'Struktur backup tidak lengkap';
-        } else if (error.message.includes('Invalid restore results format')) {
-          errorMessage = 'Format hasil restore tidak valid';
-          errorDescription = 'Terjadi kesalahan dalam proses restore';
+        } else if (error.message.includes('Delete failed at')) {
+          errorMessage = 'Gagal menghapus data lama';
+          errorDescription = error.message;
+        } else if (error.message.includes('Insert failed at')) {
+          errorMessage = 'Gagal memulihkan data';
+          errorDescription = error.message;
+        } else if (error.message.includes('Profile restore failed')) {
+          errorMessage = 'Pengaturan profil gagal dipulihkan';
+          errorDescription = 'Data berhasil dipulihkan tetapi pengaturan profil gagal';
         } else {
           errorMessage = 'Restore gagal';
           errorDescription = error.message;
@@ -898,7 +891,7 @@ export default function Pengaturan() {
                           {isRestoring ? (
                             <>
                               <Loader2 className="w-3 h-3 animate-spin" />
-                              <span className="text-xs">Bulletproof Restore...</span>
+                              <span className="text-xs">Production Restore...</span>
                             </>
                           ) : (
                             <>
@@ -926,10 +919,13 @@ export default function Pengaturan() {
                               ⚠️ <strong>PERHATIAN:</strong> Ini akan menghapus SEMUA data saat ini dan menggantinya dengan backup yang dipilih.
                             </span>
                             <span className="block">
-                              🔄 <strong>BULLETPROOF Restore:</strong> Menggunakan transaksi atomik dengan deteksi schema otomatis.
+                              🔄 <strong>PRODUCTION-GRADE Restore:</strong> Auto-detection format, batching, dan sanitasi data.
                             </span>
                             <span className="block">
-                              ✅ <strong>Keamanan:</strong> Jika gagal, data akan dikembalikan ke kondisi semula (rollback otomatis).
+                              ✅ <strong>Keamanan:</strong> Lock mencegah eksekusi ganda, error handling per tabel.
+                            </span>
+                            <span className="block">
+                              🔧 <strong>Kompatibilitas:</strong> Mendukung format backup lama dan baru.
                             </span>
                             <span className="block text-destructive font-medium">
                               Tindakan ini tidak dapat dibatalkan!

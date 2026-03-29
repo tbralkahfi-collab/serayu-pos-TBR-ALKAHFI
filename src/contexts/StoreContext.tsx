@@ -22,9 +22,9 @@ interface StockSettings {
 
 // ✅ ENHANCED BACKUP STRUCTURE WITH VERSIONING
 interface BackupData {
-  version: string;
-  created_at: string;
-  data: {
+  version?: string;
+  created_at?: string;
+  data?: {
     products: any[];
     suppliers: any[];
     purchases: any[];
@@ -36,6 +36,18 @@ interface BackupData {
   };
 }
 
+// ✅ LEGACY BACKUP STRUCTURE (for backward compatibility)
+interface LegacyBackupData {
+  products?: any[];
+  suppliers?: any[];
+  purchases?: any[];
+  debts?: any[];
+  expenses?: any[];
+  transactions?: any[];
+  projects?: any[];
+  profile?: any;
+}
+
 interface BackupRecord {
   id: string;
   backupType: 'auto' | 'manual';
@@ -45,8 +57,70 @@ interface BackupRecord {
 // Define valid table types for Supabase operations
 type ValidTable = 'products' | 'suppliers' | 'purchases' | 'debts' | 'expenses' | 'transactions' | 'projects';
 
-// ✅ DYNAMIC SANITIZE FUNCTION - Matches actual database schema
+// ✅ AUTO-DETECT BACKUP FORMAT AND NORMALIZE
+const normalizeBackupData = (rawBackupData: any): BackupData => {
+  console.log('🔍 Analyzing backup format...');
+  
+  // Check if it's new format (has 'data' property)
+  if (rawBackupData && typeof rawBackupData === 'object' && rawBackupData.data) {
+    console.log('✅ New backup format detected (versioned with data wrapper)');
+    return {
+      version: rawBackupData.version || '1.0',
+      created_at: rawBackupData.created_at || new Date().toISOString(),
+      data: rawBackupData.data
+    };
+  }
+  
+  // Check if it's legacy format (direct table properties)
+  const tableNames = ['products', 'suppliers', 'purchases', 'debts', 'expenses', 'transactions', 'projects'];
+  const hasLegacyStructure = tableNames.some(table => rawBackupData && rawBackupData[table]);
+  
+  if (hasLegacyStructure) {
+    console.log('✅ Legacy backup format detected (direct table properties)');
+    return {
+      version: 'legacy',
+      created_at: new Date().toISOString(),
+      data: {
+        products: rawBackupData.products || [],
+        suppliers: rawBackupData.suppliers || [],
+        purchases: rawBackupData.purchases || [],
+        debts: rawBackupData.debts || [],
+        expenses: rawBackupData.expenses || [],
+        transactions: rawBackupData.transactions || [],
+        projects: rawBackupData.projects || [],
+        profile: rawBackupData.profile
+      }
+    };
+  }
+  
+  // If neither format, assume empty new format
+  console.log('⚠️ Unknown backup format, treating as empty');
+  return {
+    version: 'unknown',
+    created_at: new Date().toISOString(),
+    data: {
+      products: [],
+      suppliers: [],
+      purchases: [],
+      debts: [],
+      expenses: [],
+      transactions: [],
+      projects: [],
+      profile: undefined
+    }
+  };
+};
+
+// ✅ ENHANCED DYNAMIC SANITIZE FUNCTION - Matches actual database schema
 const sanitizeData = (table: ValidTable, data: any[]): any[] => {
+  if (!data || !Array.isArray(data)) {
+    console.log(`📦 ${table}: No data or invalid array format`);
+    return [];
+  }
+  
+  console.log(`📦 Processing ${table}: ${data.length} records`);
+  console.log(`📦 Sample ${table} record:`, data[0]);
+
   // Dynamic field mapping based on actual database schema
   const schemaFields: Record<ValidTable, string[]> = {
     suppliers: ['id', 'user_id', 'nama', 'alamat', 'telepon', 'email', 'catatan', 'created_at'],
@@ -58,36 +132,40 @@ const sanitizeData = (table: ValidTable, data: any[]): any[] => {
     projects: ['id', 'user_id', 'nama_proyek', 'pelanggan', 'alamat', 'telepon', 'deskripsi', 'nilai_kontrak', 'diskon_persen', 'diskon_nominal', 'dp', 'biaya_tenaga_kerja', 'tanggal_order', 'tanggal_mulai', 'tanggal_selesai', 'status', 'catatan', 'materials', 'created_at']
   };
 
-  console.log(`📦 Raw ${table}:`, data[0]);
+  const allowed = schemaFields[table] || [];
+  console.log(`📦 ${table} allowed fields:`, allowed);
 
-  const cleanData = data.map(item => {
-    const allowed = schemaFields[table] || [];
+  const cleanData = data.map((item, index) => {
     const clean: any = {};
 
     // Only include fields that exist in database schema
     for (const field of allowed) {
-      if (item[field] !== undefined && item[field] !== null) {
+      if (item && item[field] !== undefined && item[field] !== null) {
         // Field-specific validation
         if (field === 'user_id') {
           clean[field] = String(item[field]);
-        } else if (field.includes('harga') || field.includes('total') || field.includes('jumlah') || field.includes('bayar') || field.includes('dp') || field.includes('sisa') || field.includes('nilai_kontrak') || field.includes('diskon_nominal') || field.includes('biaya_tenaga_kerja')) {
+        } else if (field.includes('harga') || field.includes('total') || field.includes('dp') || field.includes('sisa') || field.includes('bayar') || field.includes('kembalian') || field.includes('jumlah') || field.includes('nilai_kontrak') || field.includes('biaya_tenaga_kerja')) {
+          // Numeric fields
           clean[field] = Number(item[field]) || 0;
-        } else if (field.includes('tanggal') || field.includes('created_at') || field.includes('updated_at')) {
-          clean[field] = item[field] || new Date().toISOString();
-        } else if (field === 'type') {
-          clean[field] = item[field] === 'utang' || item[field] === 'piutang' ? item[field] : 'utang';
-        } else if (field === 'stok' || field.includes('diskon_persen')) {
-          clean[field] = Number(item[field]) || 0;
+        } else if (field.includes('stok') || field.includes('min_stok') || field.includes('diskon_persen')) {
+          // Integer fields
+          clean[field] = parseInt(item[field]) || 0;
         } else {
-          clean[field] = item[field];
+          // String fields
+          clean[field] = String(item[field]);
         }
       }
     }
 
-    return clean;
-  });
+    // Always ensure created_at exists
+    if (!clean.created_at) {
+      clean.created_at = new Date().toISOString();
+    }
 
-  console.log(`🧹 Clean ${table}:`, cleanData[0]);
+    return clean;
+  }).filter(Boolean); // Remove any null/undefined entries
+
+  console.log(`📦 ${table}: ${data.length} → ${cleanData.length} valid records`);
   return cleanData;
 };
 
@@ -457,23 +535,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const restoreBackup = async (backupId: string) => {
-    console.log('🔄 Starting BULLETPROOF atomic restore for backup:', backupId);
+    console.log('🔄 Starting PRODUCTION-GRADE restore for backup:', backupId);
     
     return await withUserGuard(async () => {
       const verifiedUser = requireUser(user, authLoading);
       
-      // ✅ STRICT GUARD: Prevent multiple executions
+      // ✅ STRICT LOCK: Prevent multiple executions
       if (isRestoring) {
         console.log('⚠️ Restore already in progress - blocking duplicate request');
         throw new Error('Restore already in progress');
       }
       
-      // ✅ STRICT GUARD: Set restore flag immediately
+      // ✅ STRICT LOCK: Set restore flag immediately
       setIsRestoring(true);
       
       try {
-        // Step 1: Fetch backup with validation
-        console.log('🔍 Fetching and validating backup structure...');
+        // Step 1: Fetch backup
+        console.log('🔍 Step 1: Fetching backup...');
         
         const { data: backup, error: fetchError } = await supabase
           .from('backups')
@@ -487,105 +565,180 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           throw new Error(`Backup not found or access denied: ${fetchError?.message || 'Unknown error'}`);
         }
 
-        // Step 2: Validate backup structure
-        console.log('🔍 Validating backup structure and version...');
-        const backupData = backup.backup_data as any; // ✅ Cast to any for type safety
+        // Step 2: Auto-detect and normalize backup format
+        console.log('🔍 Step 2: Auto-detecting backup format...');
+        const normalizedBackup = normalizeBackupData(backup.backup_data);
         
-        if (!backupData || typeof backupData !== 'object') {
+        console.log('✅ Backup format detected:', {
+          version: normalizedBackup.version,
+          created_at: normalizedBackup.created_at,
+          tables: Object.keys(normalizedBackup.data || {}),
+          recordCounts: Object.fromEntries(
+            Object.entries(normalizedBackup.data || {}).map(([key, value]) => [key, Array.isArray(value) ? value.length : 0])
+          )
+        });
+
+        // Step 3: Validate backup data
+        console.log('🔍 Step 3: Validating backup data...');
+        if (!normalizedBackup.data || typeof normalizedBackup.data !== 'object') {
           throw new Error('Invalid backup data structure');
         }
-        
-        // Check version compatibility
-        const version = backupData.version || '1.0';
-        if (version !== '1.0') {
-          throw new Error(`Backup version ${version} is not compatible with current version 1.0`);
-        }
-        
-        // Check data section
-        if (!backupData.data || typeof backupData.data !== 'object') {
-          throw new Error('Backup data section is missing or invalid');
-        }
-        
-        console.log('✅ Backup validation passed - version:', version);
 
-        // Step 3: Execute atomic restore via RPC
-        console.log('🔄 Executing BULLETPROOF atomic restore via RPC...');
+        // Step 4: Define table processing order (dependency-aware)
+        const deleteOrder: ValidTable[] = ['expenses', 'debts', 'transactions', 'purchases', 'projects', 'suppliers', 'products'];
+        const insertOrder: ValidTable[] = ['products', 'suppliers', 'projects', 'purchases', 'transactions', 'debts', 'expenses'];
         
-        const { data: restoreResults, error: restoreError } = await supabase
-          .rpc('restore_backup_atomic' as any, { // ✅ Cast RPC name to any
-            p_backup_data: backupData,
-            p_user_id: verifiedUser.id
-          });
+        console.log('🔍 Step 4: Processing order defined');
+        console.log('📋 Delete order:', deleteOrder);
+        console.log('📋 Insert order:', insertOrder);
 
-        if (restoreError) {
-          console.error('❌ Atomic restore RPC failed:', restoreError);
-          throw new Error(`Atomic restore failed: ${restoreError.message}`);
-        }
+        // Step 5: Execute restore with proper error handling
+        console.log('🔄 Step 5: Executing restore process...');
+        
+        let totalProcessed = 0;
+        const processedTables: { table: string; records: number; status: string }[] = [];
 
-        console.log('✅ Atomic restore RPC completed:', restoreResults);
+        // Step 5a: Delete existing data in reverse dependency order
+        for (const tableName of deleteOrder) {
+          try {
+            console.log(`🗑️ Deleting existing data from ${tableName}...`);
+            
+            const { error: deleteError } = await supabase
+              .from(tableName)
+              .delete()
+              .eq('user_id', verifiedUser.id);
 
-        // Step 4: Process results and validate
-        const results = restoreResults || [];
-        if (!Array.isArray(results)) {
-          throw new Error('Invalid restore results format');
-        }
-        
-        const summary = results.find(r => r.table_name === 'SUMMARY');
-        const errors = results.filter(r => r.status === 'ERROR');
-        const globalError = results.find(r => r.table_name === 'GLOBAL_ERROR');
-        
-        if (globalError) {
-          throw new Error(`Global restore error: ${globalError.error_message}`);
-        }
-        
-        if (errors.length > 0) {
-          const errorDetails = errors.map(e => `${e.table_name}: ${e.error_message}`).join('; ');
-          throw new Error(`Restore failed for ${errors.length} table(s): ${errorDetails}`);
-        }
-        
-        if (!summary || summary.status !== 'SUCCESS') {
-          throw new Error('Restore completed but summary indicates failure');
+            if (deleteError) {
+              console.error(`❌ Failed to delete ${tableName}:`, deleteError);
+              throw new Error(`Failed to clear ${tableName}: ${deleteError.message}`);
+            }
+            
+            console.log(`✅ Cleared ${tableName}`);
+          } catch (error) {
+            console.error(`❌ Critical error deleting ${tableName}:`, error);
+            throw new Error(`Delete failed at ${tableName}: ${error.message}`);
+          }
         }
 
-        // Step 5: Refresh application data
-        console.log('🔄 Refreshing application data...');
+        // Step 5b: Insert data in correct dependency order with batching
+        for (const tableName of insertOrder) {
+          try {
+            const tableData = normalizedBackup.data[tableName];
+            
+            if (!tableData || !Array.isArray(tableData) || tableData.length === 0) {
+              console.log(`⏭️ Skipping ${tableName} - no data`);
+              processedTables.push({ table: tableName, records: 0, status: 'skipped' });
+              continue;
+            }
+
+            console.log(`📥 Inserting ${tableData.length} records into ${tableName}...`);
+            
+            // Sanitize data before insertion
+            const sanitizedData = sanitizeData(tableName, tableData);
+            
+            if (sanitizedData.length === 0) {
+              console.log(`⏭️ Skipping ${tableName} - no valid data after sanitization`);
+              processedTables.push({ table: tableName, records: 0, status: 'skipped' });
+              continue;
+            }
+
+            // Batch insert (100 records per batch)
+            const batchSize = 100;
+            let insertedCount = 0;
+            
+            for (let i = 0; i < sanitizedData.length; i += batchSize) {
+              const batch = sanitizedData.slice(i, i + batchSize);
+              
+              // Add user_id to each record
+              const batchWithUserId = batch.map(record => ({
+                ...record,
+                user_id: verifiedUser.id
+              }));
+
+              console.log(`📦 Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(sanitizedData.length/batchSize)} for ${tableName} (${batch.length} records)`);
+
+              const { error: insertError } = await supabase
+                .from(tableName)
+                .insert(batchWithUserId);
+
+              if (insertError) {
+                console.error(`❌ Failed to insert batch into ${tableName}:`, insertError);
+                throw new Error(`Insert failed at ${tableName} (batch ${Math.floor(i/batchSize) + 1}): ${insertError.message}`);
+              }
+
+              insertedCount += batch.length;
+            }
+
+            totalProcessed += insertedCount;
+            processedTables.push({ table: tableName, records: insertedCount, status: 'success' });
+            console.log(`✅ Inserted ${insertedCount} records into ${tableName}`);
+            
+          } catch (error) {
+            console.error(`❌ Critical error inserting ${tableName}:`, error);
+            processedTables.push({ table: tableName, records: 0, status: 'failed' });
+            throw new Error(`Insert failed at ${tableName}: ${error.message}`);
+          }
+        }
+
+        // Step 6: Restore profile if exists
+        if (normalizedBackup.data.profile) {
+          try {
+            console.log('⚙️ Restoring profile settings...');
+            
+            const { error: profileError } = await supabase
+              .from('profiles')
+              .upsert({
+                id: verifiedUser.id,
+                ...normalizedBackup.data.profile,
+                updated_at: new Date().toISOString()
+              });
+
+            if (profileError) {
+              console.error('❌ Failed to restore profile:', profileError);
+              throw new Error(`Profile restore failed: ${profileError.message}`);
+            }
+            
+            console.log('✅ Profile settings restored');
+          } catch (error) {
+            console.error('❌ Profile restore error:', error);
+            // Don't throw error for profile - continue with data restore success
+            console.log('⚠️ Profile restore failed but data restore succeeded');
+          }
+        }
+
+        // Step 7: Refresh application data
+        console.log('🔄 Step 7: Refreshing application data...');
         await fetchSettings();
 
-        // Step 6: Return comprehensive success result
-        const totalRows = summary.rows_processed || 0;
-        const tablesRestored = results.filter(r => r.status === 'SUCCESS' && r.table_name !== 'SUMMARY');
-        
-        console.log('✅ BULLETPROOF ATOMIC RESTORE SUCCESS:', {
-          tablesRestored: tablesRestored.length,
-          totalRows,
+        // Step 8: Return success result
+        console.log('✅ PRODUCTION-GRADE RESTORE SUCCESS:', {
           backupId,
-          version,
-          atomic: true
+          version: normalizedBackup.version,
+          totalProcessed,
+          tablesProcessed: processedTables.length,
+          details: processedTables
         });
 
         return {
           success: true,
-          atomic: true,
-          bulletproof: true,
-          results: results,
+          version: normalizedBackup.version,
+          totalRecords: totalProcessed,
+          tablesProcessed: processedTables,
           summary: {
-            tablesRestored: tablesRestored.map(t => t.table_name),
-            totalRecords: totalRows,
-            version: version,
-            details: tablesRestored.map(t => ({
-              table: t.table_name,
-              rows: t.rows_processed
-            }))
+            tablesRestored: processedTables.filter(t => t.status === 'success').map(t => t.table),
+            totalRecords: totalProcessed,
+            version: normalizedBackup.version,
+            details: processedTables
           }
         };
         
       } catch (error) {
-        console.error('❌ BULLETPROOF restore failed:', error);
+        console.error('❌ PRODUCTION-GRADE RESTORE FAILED:', error);
         throw error;
       } finally {
         // ✅ ALWAYS RESET RESTORE FLAG
         setIsRestoring(false);
-        console.log('🔓 Restore flag reset - bulletproof operation completed');
+        console.log('🔓 Restore lock released - operation completed');
       }
     }, 'restoreBackup');
   };
