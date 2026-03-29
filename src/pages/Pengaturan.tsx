@@ -61,6 +61,7 @@ export default function Pengaturan() {
     backups,
     isLoading: isStoreLoading,
     isSyncing,
+    isRestoring, // ✅ USE GLOBAL RESTORE FLAG
     updateStoreInfo, 
     updatePrinterSettings, 
     updateStockSettings,
@@ -78,7 +79,7 @@ export default function Pengaturan() {
   const [previewLogo, setPreviewLogo] = useState<string | null>(storeInfo.logo);
   const [isUploading, setIsUploading] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
-  const [isRestoring, setIsRestoring] = useState(false);
+  // ✅ REMOVE LOCAL isRestoring - use global from context
   const [minStock, setMinStock] = useState(stockSettings.minStockAlert.toString());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -224,7 +225,7 @@ export default function Pengaturan() {
   };
 
   const handleRestore = async (backupId: string) => {
-    setIsRestoring(true);
+    // ✅ Use global isRestoring flag - no local state management
     try {
       // Step 1: Prevent unauthorized restore (role check)
       if (!user) {
@@ -268,21 +269,22 @@ export default function Pengaturan() {
       if (error instanceof Error) {
         if (error.message.includes('access denied')) {
           errorMessage = 'Akses ditolak: Backup tidak valid atau tidak milik Anda';
-        } else if (error.message.includes('structure')) {
-          errorMessage = 'Backup rusak atau tidak valid';
+        } else if (error.message.includes('Restore already in progress')) {
+          errorMessage = 'Restore sedang berjalan, harap tunggu selesai';
+        } else if (error.message.includes('Invalid backup structure')) {
+          errorMessage = 'Struktur backup tidak valid atau rusak';
         } else if (error.message.includes('Failed to clear')) {
           errorMessage = 'Gagal menghapus data lama, coba lagi';
         } else if (error.message.includes('Failed to restore')) {
-          errorMessage = 'Gagal memulihkan data, periksa format backup';
+          errorMessage = 'Gagal memulihkan data, periksa konsol untuk detail';
         } else {
           errorMessage = error.message;
         }
       }
       
       toast.error(errorMessage);
-    } finally {
-      setIsRestoring(false);
     }
+    // ✅ NO FINALLY BLOCK - global flag managed by StoreContext
   };
 
   const handleExportData = async () => {

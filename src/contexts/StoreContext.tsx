@@ -29,43 +29,41 @@ interface BackupRecord {
 // Define valid table types for Supabase operations
 type ValidTable = 'products' | 'suppliers' | 'purchases' | 'debts' | 'expenses' | 'transactions' | 'projects';
 
-// ✅ SANITIZE DATA FUNCTION - Prevent injection and ensure data integrity
+// ✅ DYNAMIC SANITIZE FUNCTION - Matches actual database schema
 const sanitizeData = (table: ValidTable, data: any[]): any[] => {
-  const allowedFields: Record<ValidTable, string[]> = {
-    suppliers: ['id', 'nama', 'email', 'alamat', 'catatan', 'telepon', 'user_id', 'created_at', 'updated_at'],
-    products: ['id', 'name', 'price', 'stock', 'unit', 'cost_price', 'user_id', 'created_at', 'updated_at'],
-    purchases: ['id', 'supplierId', 'supplier', 'date', 'total', 'dp', 'paymentMethod', 'status', 'items', 'itemsData', 'notes', 'user_id', 'created_at', 'updated_at'],
-    debts: ['id', 'type', 'nama', 'total', 'sisa', 'tanggal', 'jatuhTempo', 'keterangan', 'payments', 'projectId', 'transactionId', 'user_id', 'created_at', 'updated_at'],
-    expenses: ['id', 'kategori', 'deskripsi', 'jumlah', 'tanggal', 'user_id', 'created_at', 'updated_at'],
-    transactions: ['id', 'items', 'total', 'paymentMethod', 'cashAmount', 'changeAmount', 'customerName', 'discount', 'itemsData', 'user_id', 'created_at', 'updated_at'],
-    projects: ['id', 'nama', 'deskripsi', 'status', 'startDate', 'endDate', 'budget', 'clientName', 'catatan', 'user_id', 'created_at', 'updated_at']
+  // Dynamic field mapping based on actual database schema
+  const schemaFields: Record<ValidTable, string[]> = {
+    suppliers: ['id', 'user_id', 'nama', 'alamat', 'telepon', 'email', 'catatan', 'created_at'],
+    products: ['id', 'user_id', 'nama', 'kategori', 'harga_beli', 'harga_jual', 'stok', 'satuan', 'min_stok', 'created_at', 'updated_at'],
+    purchases: ['id', 'user_id', 'supplier_id', 'supplier_name', 'tanggal', 'total', 'dp', 'metode_bayar', 'status', 'items', 'catatan', 'created_at'],
+    debts: ['id', 'user_id', 'type', 'nama', 'total', 'sisa', 'tanggal', 'jatuh_tempo', 'keterangan', 'project_id', 'payments', 'created_at'],
+    expenses: ['id', 'user_id', 'kategori', 'deskripsi', 'jumlah', 'tanggal', 'created_at'],
+    transactions: ['id', 'user_id', 'tanggal', 'pelanggan', 'items', 'subtotal', 'diskon', 'diskon_persen', 'total', 'bayar', 'kembalian', 'metode', 'status', 'created_at'],
+    projects: ['id', 'user_id', 'nama_proyek', 'pelanggan', 'alamat', 'telepon', 'deskripsi', 'nilai_kontrak', 'diskon_persen', 'diskon_nominal', 'dp', 'biaya_tenaga_kerja', 'tanggal_order', 'tanggal_mulai', 'tanggal_selesai', 'status', 'catatan', 'materials', 'created_at']
   };
 
   console.log(`📦 Raw ${table}:`, data[0]);
 
   const cleanData = data.map(item => {
-    const allowed = allowedFields[table] || [];
+    const allowed = schemaFields[table] || [];
     const clean: any = {};
 
-    // Only include allowed fields
-    for (const key of allowed) {
-      if (item[key] !== undefined && item[key] !== null) {
-        // Additional validation for specific field types
-        if (key.includes('email') && typeof item[key] === 'string') {
-          // Basic email validation
-          clean[key] = item[key].toLowerCase().trim();
-        } else if (key.includes('harga') || key.includes('price') || key.includes('total') || key.includes('jumlah') || key.includes('budget')) {
-          // Ensure numeric fields are numbers
-          clean[key] = Number(item[key]) || 0;
-        } else if (key.includes('tanggal') || key.includes('created_at') || key.includes('updated_at')) {
-          // Ensure date fields are valid ISO strings
-          clean[key] = item[key] || new Date().toISOString();
-        } else if (key === 'user_id') {
-          // Ensure user_id is a valid string
-          clean[key] = String(item[key]);
+    // Only include fields that exist in database schema
+    for (const field of allowed) {
+      if (item[field] !== undefined && item[field] !== null) {
+        // Field-specific validation
+        if (field === 'user_id') {
+          clean[field] = String(item[field]);
+        } else if (field.includes('harga') || field.includes('total') || field.includes('jumlah') || field.includes('bayar') || field.includes('dp') || field.includes('sisa') || field.includes('nilai_kontrak') || field.includes('diskon_nominal') || field.includes('biaya_tenaga_kerja')) {
+          clean[field] = Number(item[field]) || 0;
+        } else if (field.includes('tanggal') || field.includes('created_at') || field.includes('updated_at')) {
+          clean[field] = item[field] || new Date().toISOString();
+        } else if (field === 'type') {
+          clean[field] = item[field] === 'utang' || item[field] === 'piutang' ? item[field] : 'utang';
+        } else if (field === 'stok' || field.includes('diskon_persen')) {
+          clean[field] = Number(item[field]) || 0;
         } else {
-          // For other fields, keep as-is but ensure they're not null/undefined
-          clean[key] = item[key];
+          clean[field] = item[field];
         }
       }
     }
@@ -84,11 +82,12 @@ interface StoreContextType {
   backups: BackupRecord[];
   isLoading: boolean;
   isSyncing: boolean;
+  isRestoring: boolean; // ✅ ADD RESTORE FLAG
   updateStoreInfo: (info: Partial<StoreInfo>) => Promise<void>;
   updatePrinterSettings: (settings: Partial<PrinterSettings>) => Promise<void>;
   updateStockSettings: (settings: Partial<StockSettings>) => Promise<void>;
   triggerManualBackup: () => Promise<void>;
-  restoreBackup: (backupId: string) => Promise<void>;
+  restoreBackup: (backupId: string) => Promise<any>;
   fetchBackups: () => Promise<void>;
 }
 
@@ -115,6 +114,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const { user, isLoading: authLoading, isAuthLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false); // ✅ GLOBAL RESTORE FLAG
   const [storeInfo, setStoreInfo] = useState<StoreInfo>(DEFAULT_STORE_INFO);
   const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(DEFAULT_PRINTER_SETTINGS);
   const [stockSettings, setStockSettings] = useState<StockSettings>(DEFAULT_STOCK_SETTINGS);
@@ -442,32 +442,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return await withUserGuard(async () => {
       const verifiedUser = requireUser(user, authLoading);
       
-      // Step 1: Validate backup structure and ownership
-      console.log('🔍 Fetching and validating backup...');
-      
-      const { data: backup, error: fetchError } = await supabase
-        .from('backups')
-        .select('backup_data, created_at, user_id')
-        .eq('id', backupId)
-        .eq('user_id', verifiedUser.id)
-        .single();
-
-      if (fetchError || !backup) {
-        console.error('❌ Backup fetch error:', fetchError);
-        throw new Error('Backup not found or access denied');
+      // ✅ PREVENT MULTIPLE EXECUTIONS
+      if (isRestoring) {
+        console.log('⚠️ Restore already in progress, ignoring duplicate request');
+        throw new Error('Restore already in progress');
       }
-
-      const backupData = backup.backup_data as any;
       
-      // Validate backup structure
-      const requiredTables = ['products', 'suppliers', 'purchases', 'debts', 'expenses', 'transactions', 'projects'];
-      const backupTables = Object.keys(backupData).filter(key => requiredTables.includes(key));
+      setIsRestoring(true);
       
-      if (backupTables.length === 0) {
-        throw new Error('Invalid backup structure: No valid data tables found');
-      }
+      try {
+        // Step 1: Validate backup structure and ownership
+        console.log('🔍 Fetching and validating backup...');
+        
+        const { data: backup, error: fetchError } = await supabase
+          .from('backups')
+          .select('backup_data, created_at, user_id')
+          .eq('id', backupId)
+          .eq('user_id', verifiedUser.id)
+          .single();
 
-      console.log('✅ Backup structure validated, tables found:', backupTables);
+        if (fetchError || !backup) {
+          console.error('❌ Backup fetch error:', fetchError);
+          throw new Error(`Backup not found or access denied: ${fetchError?.message || 'Unknown error'}`);
+        }
+
+        const backupData = backup.backup_data as any;
+        
+        // Validate backup structure
+        const requiredTables = ['products', 'suppliers', 'purchases', 'debts', 'expenses', 'transactions', 'projects'];
+        const backupTables = Object.keys(backupData).filter(key => requiredTables.includes(key));
+        
+        if (backupTables.length === 0) {
+          throw new Error('Invalid backup structure: No valid data tables found');
+        }
+
+        console.log('✅ Backup structure validated, tables found:', backupTables);
 
       // Step 2: Define dependency-aware restore sequence
       const restoreSequence: { table: ValidTable; data: any[]; dependencies: string[] }[] = [
@@ -632,6 +641,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
       };
       
+      } catch (error) {
+        console.error('❌ Restore failed:', error);
+        throw error;
+      } finally {
+        // ✅ ALWAYS RESET RESTORE FLAG
+        setIsRestoring(false);
+        console.log('🔓 Restore flag reset - operation completed');
+      }
+      
     }, 'restoreBackup');
   };
 
@@ -663,6 +681,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       backups,
       isLoading,
       isSyncing,
+      isRestoring, // ✅ EXPOSE RESTORE FLAG
       updateStoreInfo, 
       updatePrinterSettings,
       updateStockSettings,
