@@ -225,77 +225,105 @@ export default function Pengaturan() {
   };
 
   const handleRestore = async (backupId: string) => {
-    // ✅ Use global isRestoring flag - no local state management
+    // ✅ BULLETPROOF: Use global isRestoring flag - no local state
     try {
-      // Step 1: Prevent unauthorized restore (role check)
+      // Step 1: User authentication check
       if (!user) {
         toast.error('Anda harus login untuk memulihkan data');
         return;
       }
 
-      // Step 2: Confirm backup exists and belongs to user
+      // Step 2: Backup validation
       const selectedBackup = backups.find(b => b.id === backupId);
       if (!selectedBackup) {
         toast.error('Backup tidak ditemukan');
         return;
       }
 
-      console.log('🔄 Starting ATOMIC restore process for backup:', backupId);
-      console.log('🔍 Atomic transaction will be used for data integrity');
+      console.log('🔄 Starting BULLETPROOF atomic restore for backup:', backupId);
+      console.log('🔍 Atomic transaction with auto schema detection will be used');
       
-      // Step 3: Execute atomic restore with detailed logging
+      // Step 3: Execute bulletproof restore
       const restoreResult = await restoreBackup(backupId);
       
-      // Step 4: Force refresh all data to ensure UI reflects updated data
+      // Step 4: Force refresh all data
       console.log('🔄 Refreshing application data...');
       await refreshData();
       
-      // Step 5: Success feedback with atomic details
+      // Step 5: Success feedback with bulletproof details
       const backupDate = new Date(selectedBackup.createdAt).toLocaleString('id-ID');
       const totalRecords = restoreResult?.summary?.totalRecords || 0;
       const tablesRestored = restoreResult?.summary?.tablesRestored?.length || 0;
       const isAtomic = restoreResult?.atomic || false;
+      const isBulletproof = restoreResult?.bulletproof || false;
       const version = restoreResult?.summary?.version || '1.0';
+      const details = restoreResult?.summary?.details || [];
       
-      const atomicText = isAtomic ? 'ATOMIC' : 'Standard';
-      toast.success(`Data berhasil dipulihkan (${atomicText}): ${totalRecords} records dari ${tablesRestored} tabel (${backupDate}) [v${version}]`);
+      // Build success message
+      const typeText = isBulletproof ? 'BULLETPROOF' : (isAtomic ? 'ATOMIC' : 'Standard');
+      const detailText = details.map(d => `${d.table}(${d.rows})`).join(', ');
       
-      console.log('✅ ATOMIC Restore process completed successfully');
-      console.log('📊 Restore Summary:', {
-        atomic: isAtomic,
+      toast.success(
+        `Data berhasil dipulihkan (${typeText}): ${totalRecords} records dari ${tablesRestored} tabel (${backupDate}) [v${version}]`,
+        {
+          description: detailText,
+          duration: 6000
+        }
+      );
+      
+      console.log('✅ BULLETPROOF ATOMIC Restore completed successfully');
+      console.log('📊 Detailed Restore Summary:', {
+        type: typeText,
         version,
         tablesRestored,
         totalRecords,
+        details,
         backupDate
       });
       
     } catch (error) {
-      console.error('❌ ATOMIC Restore error:', error);
+      console.error('❌ BULLETPROOF Restore error:', error);
       
-      // Step 6: Enhanced error handling for atomic operations
+      // Step 6: Enhanced error handling for bulletproof operations
       let errorMessage = 'Gagal memulihkan data';
+      let errorDescription = '';
       
       if (error instanceof Error) {
         if (error.message.includes('access denied')) {
-          errorMessage = 'Akses ditolak: Backup tidak valid atau tidak milik Anda';
+          errorMessage = 'Akses ditolak';
+          errorDescription = 'Backup tidak valid atau tidak milik Anda';
         } else if (error.message.includes('Restore already in progress')) {
-          errorMessage = 'Restore sedang berjalan, harap tunggu selesai';
+          errorMessage = 'Restore sedang berjalan';
+          errorDescription = 'Harap tunggu proses restore selesai';
         } else if (error.message.includes('not compatible')) {
-          errorMessage = `Versi backup tidak kompatibel: ${error.message}`;
+          errorMessage = 'Versi backup tidak kompatibel';
+          errorDescription = error.message;
         } else if (error.message.includes('Atomic restore failed')) {
-          errorMessage = `Restore atomik gagal: ${error.message}`;
-        } else if (error.message.includes('Invalid backup structure')) {
-          errorMessage = 'Struktur backup tidak valid atau rusak';
-        } else if (error.message.includes('Failed to clear')) {
-          errorMessage = 'Gagal menghapus data lama, coba lagi';
-        } else if (error.message.includes('Failed to restore')) {
-          errorMessage = `Gagal memulihkan data: ${error.message}`;
+          errorMessage = 'Restore atomik gagal';
+          errorDescription = error.message;
+        } else if (error.message.includes('Global restore error')) {
+          errorMessage = 'Error global restore';
+          errorDescription = error.message;
+        } else if (error.message.includes('Invalid backup data structure')) {
+          errorMessage = 'Struktur backup tidak valid';
+          errorDescription = 'Backup rusak atau format tidak didukung';
+        } else if (error.message.includes('Backup data section is missing')) {
+          errorMessage = 'Data backup tidak lengkap';
+          errorDescription = 'Struktur backup tidak lengkap';
+        } else if (error.message.includes('Invalid restore results format')) {
+          errorMessage = 'Format hasil restore tidak valid';
+          errorDescription = 'Terjadi kesalahan dalam proses restore';
         } else {
-          errorMessage = error.message;
+          errorMessage = 'Restore gagal';
+          errorDescription = error.message;
         }
       }
       
-      toast.error(errorMessage);
+      // Show detailed error toast
+      toast.error(errorMessage, {
+        description: errorDescription,
+        duration: 8000
+      });
     }
     // ✅ NO FINALLY BLOCK - global flag managed by StoreContext
   };
@@ -869,7 +897,7 @@ export default function Pengaturan() {
                           {isRestoring ? (
                             <>
                               <Loader2 className="w-3 h-3 animate-spin" />
-                              <span className="text-xs">Atomic Restore...</span>
+                              <span className="text-xs">Bulletproof Restore...</span>
                             </>
                           ) : (
                             <>
@@ -893,13 +921,39 @@ export default function Pengaturan() {
                             <span className="block text-warning font-medium">
                               Data saat ini akan diganti dengan data dari backup!
                             </span>
+                            <span className="block">
+                              ⚠️ <strong>PERHATIAN:</strong> Ini akan menghapus SEMUA data saat ini dan menggantinya dengan backup yang dipilih.
+                            </span>
+                            <span className="block">
+                              🔄 <strong>BULLETPROOF Restore:</strong> Menggunakan transaksi atomik dengan deteksi schema otomatis.
+                            </span>
+                            <span className="block">
+                              ✅ <strong>Keamanan:</strong> Jika gagal, data akan dikembalikan ke kondisi semula (rollback otomatis).
+                            </span>
+                            <span className="block text-destructive font-medium">
+                              Tindakan ini tidak dapat dibatalkan!
+                            </span>
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Batal</AlertDialogCancel>
-                          <Button onClick={() => handleRestore(backup.id)}>
-                            Ya, Pulihkan Data
-                          </Button>
+                          <AlertDialogAction
+                            onClick={() => handleRestore(backup.id)}
+                            disabled={isRestoring}
+                            className="bg-warning hover:bg-warning/90"
+                          >
+                            {isRestoring ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                Memulihkan...
+                              </>
+                            ) : (
+                              <>
+                                <RotateCcw className="w-4 h-4 mr-2" />
+                                Ya, Pulihkan Data
+                              </>
+                            )}
+                          </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>

@@ -457,22 +457,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const restoreBackup = async (backupId: string) => {
-    console.log('🔄 Starting ATOMIC restore process for backup:', backupId);
+    console.log('🔄 Starting BULLETPROOF atomic restore for backup:', backupId);
     
     return await withUserGuard(async () => {
       const verifiedUser = requireUser(user, authLoading);
       
-      // ✅ PREVENT MULTIPLE EXECUTIONS
+      // ✅ STRICT GUARD: Prevent multiple executions
       if (isRestoring) {
-        console.log('⚠️ Restore already in progress, ignoring duplicate request');
+        console.log('⚠️ Restore already in progress - blocking duplicate request');
         throw new Error('Restore already in progress');
       }
       
+      // ✅ STRICT GUARD: Set restore flag immediately
       setIsRestoring(true);
       
       try {
-        // Step 1: Fetch and validate backup
-        console.log('🔍 Fetching and validating backup...');
+        // Step 1: Fetch backup with validation
+        console.log('🔍 Fetching and validating backup structure...');
         
         const { data: backup, error: fetchError } = await supabase
           .from('backups')
@@ -482,84 +483,109 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           .single();
 
         if (fetchError || !backup) {
-          console.error('❌ Backup fetch error:', fetchError);
+          console.error('❌ Backup fetch failed:', fetchError);
           throw new Error(`Backup not found or access denied: ${fetchError?.message || 'Unknown error'}`);
         }
 
-        const backupData = backup.backup_data as BackupData;
+        // Step 2: Validate backup structure
+        console.log('🔍 Validating backup structure and version...');
+        const backupData = backup.backup_data;
         
-        // Step 2: Version validation
-        console.log('🔍 Validating backup version...');
-        if (!backupData.version) {
-          console.warn('⚠️ Legacy backup detected, assuming version 1.0');
-          backupData.version = '1.0';
+        if (!backupData || typeof backupData !== 'object') {
+          throw new Error('Invalid backup data structure');
         }
         
-        if (backupData.version !== '1.0') {
-          throw new Error(`Backup version ${backupData.version} is not compatible with current version 1.0`);
+        // Check version compatibility
+        const version = backupData.version || '1.0';
+        if (version !== '1.0') {
+          throw new Error(`Backup version ${version} is not compatible with current version 1.0`);
         }
         
-        console.log('✅ Backup version validated:', backupData.version);
+        // Check data section
+        if (!backupData.data || typeof backupData.data !== 'object') {
+          throw new Error('Backup data section is missing or invalid');
+        }
+        
+        console.log('✅ Backup validation passed - version:', version);
 
-        // Step 3: ATOMIC RESTORE via RPC
-        console.log('🔄 Executing atomic restore via RPC...');
+        // Step 3: Execute atomic restore via RPC
+        console.log('🔄 Executing BULLETPROOF atomic restore via RPC...');
         
         const { data: restoreResults, error: restoreError } = await supabase
           .rpc('restore_backup_atomic', {
-            p_backup_data: backupData.data,
-            p_user_id: verifiedUser.id,
-            p_version: backupData.version
+            p_backup_data: backupData,
+            p_user_id: verifiedUser.id
           });
 
         if (restoreError) {
-          console.error('❌ Atomic restore failed:', restoreError);
+          console.error('❌ Atomic restore RPC failed:', restoreError);
           throw new Error(`Atomic restore failed: ${restoreError.message}`);
         }
 
-        console.log('✅ Atomic restore completed:', restoreResults);
+        console.log('✅ Atomic restore RPC completed:', restoreResults);
 
-        // Step 4: Process results
+        // Step 4: Process results and validate
         const results = restoreResults || [];
+        if (!Array.isArray(results)) {
+          throw new Error('Invalid restore results format');
+        }
+        
         const summary = results.find(r => r.table_name === 'SUMMARY');
         const errors = results.filter(r => r.status === 'ERROR');
+        const globalError = results.find(r => r.table_name === 'GLOBAL_ERROR');
+        
+        if (globalError) {
+          throw new Error(`Global restore error: ${globalError.error_message}`);
+        }
         
         if (errors.length > 0) {
-          console.error('❌ Restore errors:', errors);
-          throw new Error(`Restore failed for ${errors.length} table(s): ${errors.map(e => e.table_name).join(', ')}`);
+          const errorDetails = errors.map(e => `${e.table_name}: ${e.error_message}`).join('; ');
+          throw new Error(`Restore failed for ${errors.length} table(s): ${errorDetails}`);
+        }
+        
+        if (!summary || summary.status !== 'SUCCESS') {
+          throw new Error('Restore completed but summary indicates failure');
         }
 
-        // Step 5: Refresh settings
-        console.log('🔄 Refreshing settings...');
+        // Step 5: Refresh application data
+        console.log('🔄 Refreshing application data...');
         await fetchSettings();
 
-        // Step 6: Return success
-        const totalRows = summary?.rows_processed || 0;
-        const tablesRestored = results.filter(r => r.status === 'SUCCESS' && r.table_name !== 'SUMMARY').length;
+        // Step 6: Return comprehensive success result
+        const totalRows = summary.rows_processed || 0;
+        const tablesRestored = results.filter(r => r.status === 'SUCCESS' && r.table_name !== 'SUMMARY');
         
-        console.log('✅ ATOMIC RESTORE SUCCESSFUL:', {
-          tablesRestored,
+        console.log('✅ BULLETPROOF ATOMIC RESTORE SUCCESS:', {
+          tablesRestored: tablesRestored.length,
           totalRows,
-          backupId
+          backupId,
+          version,
+          atomic: true
         });
 
         return {
           success: true,
           atomic: true,
+          bulletproof: true,
           results: results,
           summary: {
-            tablesRestored: results.filter(r => r.status === 'SUCCESS' && r.table_name !== 'SUMMARY').map(r => r.table_name),
+            tablesRestored: tablesRestored.map(t => t.table_name),
             totalRecords: totalRows,
-            version: backupData.version
+            version: version,
+            details: tablesRestored.map(t => ({
+              table: t.table_name,
+              rows: t.rows_processed
+            }))
           }
         };
         
       } catch (error) {
-        console.error('❌ Atomic restore failed:', error);
+        console.error('❌ BULLETPROOF restore failed:', error);
         throw error;
       } finally {
         // ✅ ALWAYS RESET RESTORE FLAG
         setIsRestoring(false);
-        console.log('🔓 Restore flag reset - atomic operation completed');
+        console.log('🔓 Restore flag reset - bulletproof operation completed');
       }
     }, 'restoreBackup');
   };
