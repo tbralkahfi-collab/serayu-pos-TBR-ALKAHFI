@@ -29,6 +29,54 @@ interface BackupRecord {
 // Define valid table types for Supabase operations
 type ValidTable = 'products' | 'suppliers' | 'purchases' | 'debts' | 'expenses' | 'transactions' | 'projects';
 
+// ✅ SANITIZE DATA FUNCTION - Prevent injection and ensure data integrity
+const sanitizeData = (table: ValidTable, data: any[]): any[] => {
+  const allowedFields: Record<ValidTable, string[]> = {
+    suppliers: ['id', 'nama', 'email', 'alamat', 'catatan', 'telepon', 'user_id', 'created_at', 'updated_at'],
+    products: ['id', 'name', 'price', 'stock', 'unit', 'cost_price', 'user_id', 'created_at', 'updated_at'],
+    purchases: ['id', 'supplierId', 'supplier', 'date', 'total', 'dp', 'paymentMethod', 'status', 'items', 'itemsData', 'notes', 'user_id', 'created_at', 'updated_at'],
+    debts: ['id', 'type', 'nama', 'total', 'sisa', 'tanggal', 'jatuhTempo', 'keterangan', 'payments', 'projectId', 'transactionId', 'user_id', 'created_at', 'updated_at'],
+    expenses: ['id', 'kategori', 'deskripsi', 'jumlah', 'tanggal', 'user_id', 'created_at', 'updated_at'],
+    transactions: ['id', 'items', 'total', 'paymentMethod', 'cashAmount', 'changeAmount', 'customerName', 'discount', 'itemsData', 'user_id', 'created_at', 'updated_at'],
+    projects: ['id', 'nama', 'deskripsi', 'status', 'startDate', 'endDate', 'budget', 'clientName', 'catatan', 'user_id', 'created_at', 'updated_at']
+  };
+
+  console.log(`📦 Raw ${table}:`, data[0]);
+
+  const cleanData = data.map(item => {
+    const allowed = allowedFields[table] || [];
+    const clean: any = {};
+
+    // Only include allowed fields
+    for (const key of allowed) {
+      if (item[key] !== undefined && item[key] !== null) {
+        // Additional validation for specific field types
+        if (key.includes('email') && typeof item[key] === 'string') {
+          // Basic email validation
+          clean[key] = item[key].toLowerCase().trim();
+        } else if (key.includes('harga') || key.includes('price') || key.includes('total') || key.includes('jumlah') || key.includes('budget')) {
+          // Ensure numeric fields are numbers
+          clean[key] = Number(item[key]) || 0;
+        } else if (key.includes('tanggal') || key.includes('created_at') || key.includes('updated_at')) {
+          // Ensure date fields are valid ISO strings
+          clean[key] = item[key] || new Date().toISOString();
+        } else if (key === 'user_id') {
+          // Ensure user_id is a valid string
+          clean[key] = String(item[key]);
+        } else {
+          // For other fields, keep as-is but ensure they're not null/undefined
+          clean[key] = item[key];
+        }
+      }
+    }
+
+    return clean;
+  });
+
+  console.log(`🧹 Clean ${table}:`, cleanData[0]);
+  return cleanData;
+};
+
 interface StoreContextType {
   storeInfo: StoreInfo;
   printerSettings: PrinterSettings;
@@ -485,8 +533,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         try {
           console.log(`📥 Restoring ${data.length} records to ${table}...`);
           
+          // ✅ Sanitize data before processing
+          const sanitizedData = sanitizeData(table, data);
+          
           // Prepare data with user_id and preserve original IDs
-          const preparedData = data.map((record: any) => ({
+          const preparedData = sanitizedData.map((record: any) => ({
             ...record,
             user_id: verifiedUser.id,
             // Ensure created_at is preserved or set
@@ -494,6 +545,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             // Update modified timestamp
             updated_at: new Date().toISOString()
           }));
+
+          console.log(`🔍 Prepared ${preparedData.length} records for ${table}`);
 
           // Use upsert to handle potential conflicts gracefully
           const { error: insertError, count: insertCount } = await supabase

@@ -240,9 +240,10 @@ export default function Pengaturan() {
       }
 
       console.log('🔄 Starting restore process for backup:', backupId);
+      console.log('🔍 Data sanitization will be applied during restore process');
       
       // Step 3: Execute restore with detailed logging
-      await restoreBackup(backupId);
+      const restoreResult = await restoreBackup(backupId);
       
       // Step 4: Force refresh all data to ensure UI reflects updated data
       console.log('🔄 Refreshing application data...');
@@ -250,9 +251,13 @@ export default function Pengaturan() {
       
       // Step 5: Success feedback with details
       const backupDate = new Date(selectedBackup.createdAt).toLocaleString('id-ID');
-      toast.success(`Data berhasil dipulihkan dari backup (${backupDate})`);
+      const totalRecords = restoreResult?.summary?.totalRecords || 0;
+      const tablesRestored = restoreResult?.summary?.tablesRestored?.length || 0;
+      
+      toast.success(`Data berhasil dipulihkan: ${totalRecords} records dari ${tablesRestored} tabel (${backupDate})`);
       
       console.log('✅ Restore process completed successfully');
+      console.log('📊 Restore Summary:', restoreResult?.summary);
       
     } catch (error) {
       console.error('❌ Restore error:', error);
