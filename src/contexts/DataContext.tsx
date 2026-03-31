@@ -4,6 +4,15 @@ import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
 import type { Json } from '@/integrations/supabase/types';
 
+// ✅ DEBOUNCE UTILITY FOR CACHE SAVING
+const debounce = <T extends (...args: any[]) => any>(func: T, delay: number): T => {
+  let timeoutId: NodeJS.Timeout;
+  return ((...args: Parameters<T>) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => func(...args), delay);
+  }) as T;
+};
+
 // ✅ LOCAL CACHE LAYER - State persistence across refresh
 interface CacheData {
   products: Product[];
@@ -25,19 +34,44 @@ interface CacheState {
 }
 
 const CACHE_VERSION = '1.0';
-const CACHE_KEY_PREFIX = 'serayu_pos_cache_';
-const CACHE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
+const CACHE_KEY_PREFIX = 'app_cache_'; // ✅ REQUIRED FORMAT: app_cache_{user_id}
+const CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days for PWA persistence
+const CACHE_BACKUP_KEY = 'app_cache_backup_'; // Backup for PWA scenarios
 
 // ✅ CACHE FUNCTIONS
 const getCacheKey = (userId: string) => `${CACHE_KEY_PREFIX}${userId}`;
 
+// ✅ REQUIRED CACHE HELPERS
+const loadCache = (userId: string): CacheData | null => {
+  return loadCacheData(userId);
+};
+
+const saveCache = (userId: string, data: Omit<CacheData, 'timestamp'>): void => {
+  saveCacheData(userId, data);
+};
+
+const clearCache = (userId?: string): void => {
+  clearCacheData(userId);
+};
+
 const loadCacheData = (userId: string): CacheData | null => {
   try {
     const cacheKey = getCacheKey(userId);
-    const cached = localStorage.getItem(cacheKey);
+    const backupKey = `${CACHE_BACKUP_KEY}${userId}`;
+    
+    // ✅ PWA: Try primary cache first
+    let cached = localStorage.getItem(cacheKey);
+    let isBackupUsed = false;
+    
+    // ✅ PWA: If primary cache fails, try backup
+    if (!cached) {
+      console.log('📦 Cache: Primary cache empty, trying backup...');
+      cached = localStorage.getItem(backupKey);
+      isBackupUsed = true;
+    }
     
     if (!cached) {
-      console.log('📦 Cache: No cached data found');
+      console.log('📦 Cache: No cached data found (tried primary and backup)');
       return null;
     }
     
@@ -47,14 +81,16 @@ const loadCacheData = (userId: string): CacheData | null => {
     if (cacheData.version !== CACHE_VERSION) {
       console.log('📦 Cache: Version mismatch, clearing cache');
       localStorage.removeItem(cacheKey);
+      localStorage.removeItem(backupKey);
       return null;
     }
     
-    // Check expiry
+    // ✅ PWA: Extended expiry check (7 days)
     const now = Date.now();
     if (now - cacheData.timestamp > CACHE_EXPIRY_MS) {
       console.log('📦 Cache: Expired, clearing cache');
       localStorage.removeItem(cacheKey);
+      localStorage.removeItem(backupKey);
       return null;
     }
     
@@ -62,10 +98,12 @@ const loadCacheData = (userId: string): CacheData | null => {
     if (cacheData.userId !== userId) {
       console.log('📦 Cache: User ID mismatch, clearing cache');
       localStorage.removeItem(cacheKey);
+      localStorage.removeItem(backupKey);
       return null;
     }
     
     console.log('📦 Cache: Loaded cached data', {
+      source: isBackupUsed ? 'backup' : 'primary',
       timestamp: new Date(cacheData.timestamp).toISOString(),
       age: Math.round((now - cacheData.timestamp) / 1000 / 60) + ' minutes',
       records: {
@@ -79,9 +117,44 @@ const loadCacheData = (userId: string): CacheData | null => {
       }
     });
     
+    // ✅ PWA: Restore backup to primary cache for next time
+    if (isBackupUsed) {
+      console.log('📦 Cache: Restoring backup to primary cache');
+      saveCacheData(userId, {
+        products: cacheData.products,
+        suppliers: cacheData.suppliers,
+        purchases: cacheData.purchases,
+        debts: cacheData.debts,
+        expenses: cacheData.expenses,
+        transactions: cacheData.transactions,
+        projects: cacheData.projects,
+        userId: cacheData.userId,
+        version: cacheData.version
+      });
+    }
+    
     return cacheData;
   } catch (error) {
     console.error('📦 Cache: Error loading cache', error);
+    
+    // ✅ PWA: Try to recover from backup on error
+    try {
+      const backupKey = `${CACHE_BACKUP_KEY}${userId}`;
+      const backup = localStorage.getItem(backupKey);
+      if (backup) {
+        console.log('📦 Cache: Attempting backup recovery...');
+        const backupData: CacheData = JSON.parse(backup);
+        if (backupData.userId === userId && backupData.version === CACHE_VERSION) {
+          // Restore backup to primary cache
+          saveCacheData(userId, backupData);
+          console.log('📦 Cache: Backup recovery successful');
+          return backupData;
+        }
+      }
+    } catch (recoveryError) {
+      console.error('📦 Cache: Backup recovery failed', recoveryError);
+    }
+    
     return null;
   }
 };
@@ -89,14 +162,20 @@ const loadCacheData = (userId: string): CacheData | null => {
 const saveCacheData = (userId: string, data: Omit<CacheData, 'timestamp'>): void => {
   try {
     const cacheKey = getCacheKey(userId);
+    const backupKey = `${CACHE_BACKUP_KEY}${userId}`;
     const cacheData: CacheData = {
       ...data,
       timestamp: Date.now(),
       version: CACHE_VERSION
     };
     
+    // ✅ PWA: Save to primary cache
     localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-    console.log('📦 Cache: Saved data to cache', {
+    
+    // ✅ PWA: Also save backup copy for resilience
+    localStorage.setItem(backupKey, JSON.stringify(cacheData));
+    
+    console.log('📦 Cache: Saved data to primary and backup', {
       timestamp: new Date(cacheData.timestamp).toISOString(),
       records: {
         products: cacheData.products.length,
@@ -117,14 +196,20 @@ const clearCacheData = (userId?: string): void => {
   try {
     if (userId) {
       const cacheKey = getCacheKey(userId);
+      const backupKey = `${CACHE_BACKUP_KEY}${userId}`;
+      
+      // ✅ PWA: Clear both primary and backup
       localStorage.removeItem(cacheKey);
-      console.log('📦 Cache: Cleared cache for user', userId);
+      localStorage.removeItem(backupKey);
+      console.log('📦 Cache: Cleared primary and backup cache for user', userId);
     } else {
-      // Clear all caches
+      // Clear all caches (both primary and backup)
       const keys = Object.keys(localStorage);
-      const cacheKeys = keys.filter(key => key.startsWith(CACHE_KEY_PREFIX));
+      const cacheKeys = keys.filter(key => 
+        key.startsWith(CACHE_KEY_PREFIX) || key.startsWith(CACHE_BACKUP_KEY)
+      );
       cacheKeys.forEach(key => localStorage.removeItem(key));
-      console.log('📦 Cache: Cleared all caches');
+      console.log('📦 Cache: Cleared all primary and backup caches');
     }
   } catch (error) {
     console.error('📦 Cache: Error clearing cache', error);
@@ -643,7 +728,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
       setIsHydrated(false);
       // Clear cache for logged out user
-      clearCacheData();
+      clearCache();
       return;
     }
 
@@ -655,7 +740,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     try {
       // ✅ STEP 1: LOAD FROM CACHE FIRST (Instant UI)
       console.log('📦 DataContext: Loading data from cache...');
-      const cachedData = loadCacheData(user.id);
+      const cachedData = loadCache(user.id);
       
       if (cachedData) {
         console.log('📦 DataContext: Cache hit - hydrating state instantly');
@@ -682,6 +767,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
           toast.error('Koneksi ke database gagal. Silakan periksa konfigurasi Supabase.');
           setIsLoading(false);
           setIsHydrated(false);
+        } else {
+          // ✅ FAILSAFE: Show offline mode warning if cache available
+          toast.warning('Mode offline - Menggunakan data tersimpan');
         }
         return;
       }
@@ -703,7 +791,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       
       // ✅ STEP 4: UPDATE CACHE WITH FRESH DATA
       console.log('📦 DataContext: Updating cache with fresh data...');
-      saveCacheData(user.id, {
+      saveCache(user.id, {
         products,
         suppliers,
         purchases,
@@ -728,6 +816,63 @@ export function DataProvider({ children }: { children: ReactNode }) {
       console.log('📊 DataContext: Data fetch completed');
     }
   }, [user, isAuthLoading, loadProducts, loadSuppliers, loadPurchases, loadDebts, loadExpenses, loadTransactions, loadProjects, products, suppliers, purchases, debts, expenses, transactions, projects]);
+
+  // ✅ PWA VISIBILITY MANAGEMENT - Handle app backgrounding/foregrounding
+  useEffect(() => {
+    if (!user) return;
+
+    const handleVisibilityChange = () => {
+      console.log('📱 PWA: Visibility changed', {
+        hidden: document.hidden,
+        state: document.visibilityState,
+        userId: user.id
+      });
+
+      if (!document.hidden && document.visibilityState === 'visible') {
+        // ✅ PWA: App came to foreground, refresh data if needed
+        console.log('📱 PWA: App came to foreground, checking cache...');
+        const cachedData = loadCacheData(user.id);
+        
+        if (!cachedData) {
+          console.log('📱 PWA: No cache available, fetching fresh data...');
+          fetchInitialData();
+        } else {
+          console.log('📱 PWA: Cache available, keeping current state');
+        }
+      } else if (document.hidden) {
+        // ✅ PWA: App going to background, ensure cache is saved
+        console.log('📱 PWA: App going to background, saving cache...');
+        updateCacheAfterOperation();
+      }
+    };
+
+    // Add visibility change listener
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Also listen for page hide/show events (more reliable for PWA)
+    document.addEventListener('pagehide', () => {
+      console.log('📱 PWA: Page hiding, saving cache...');
+      updateCacheAfterOperation();
+    });
+    
+    document.addEventListener('pageshow', (event) => {
+      console.log('📱 PWA: Page showing', { persisted: event.persisted });
+      if (event.persisted) {
+        // Page was restored from back/forward cache
+        console.log('📱 PWA: Page restored from cache, checking data...');
+        const cachedData = loadCacheData(user.id);
+        if (!cachedData) {
+          console.log('📱 PWA: No cache after page restore, fetching...');
+          fetchInitialData();
+        }
+      }
+    });
+
+    return () => {
+      // Cleanup listeners
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [user?.id, updateCacheAfterOperation]);
 
   // ✅ CORRECT: useEffect depends only on user.id to prevent loops
   useEffect(() => {
@@ -984,7 +1129,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     
     console.log('📦 DataContext: Updating cache after operation...');
-    saveCacheData(user.id, {
+    saveCache(user.id, {
       products,
       suppliers,
       purchases,
@@ -997,42 +1142,91 @@ export function DataProvider({ children }: { children: ReactNode }) {
     });
   }, [user, products, suppliers, purchases, debts, expenses, transactions, projects]);
 
+  // ✅ DEBOUNCED CACHE SAVING (500ms as required)
+  const debouncedUpdateCache = useCallback(
+    debounce(updateCacheAfterOperation, 500),
+    [updateCacheAfterOperation]
+  );
+
   const createProduct = async (product: Omit<Product, 'id'>) => {
-    if (!user) return;
+    // ✅ STEP 2: VALIDATE AUTH
+    if (!user) {
+      console.error("❌ User not authenticated");
+      toast.error('User tidak terautentikasi');
+      throw new Error("User not authenticated");
+    }
     
-    const { data, error } = await supabase.from('products').insert({
-      user_id: user.id,
+    console.log("✅ User authenticated:", user.id);
+    
+    // ✅ STEP 3: VALIDATE DATA STRUCTURE
+    const productData = {
+      user_id: user.id, // ✅ Attach user_id
       nama: product.nama,
       kategori: product.kategori,
       harga_beli: product.hargaBeli,
       harga_jual: product.hargaJual,
       stok: product.stok,
       satuan: product.satuan,
-      min_stok: product.minStok ?? null,
-    }).select().single();
-
-    if (error) {
-      toast.error('Gagal menambah produk');
-      console.error(error);
-      return;
-    }
+      min_stok: product.minStok ?? null, // ✅ Handle undefined
+    };
     
-    if (data) {
-      const newProduct = {
-        id: data.id,
-        nama: data.nama,
-        kategori: data.kategori,
-        hargaBeli: Number(data.harga_beli),
-        hargaJual: Number(data.harga_jual),
-        stok: data.stok,
-        satuan: data.satuan,
-        minStok: data.min_stok ?? undefined,
-      };
-      setProducts(prev => [newProduct, ...prev]);
-      toast.success('Produk berhasil ditambahkan');
+    // ✅ Remove undefined/null fields
+    const cleanData = Object.fromEntries(
+      Object.entries(productData).filter(([_, value]) => value !== undefined && value !== null)
+    );
+    
+    console.log("📝 Before insert - Product data:", cleanData);
+    
+    // ✅ STEP 4: INSERT TO SUPABASE
+    try {
+      const { data, error } = await supabase
+        .from("products")
+        .insert([cleanData])
+        .select()
+        .single();
+
+      // ✅ Add error logging
+      if (error) {
+        console.error("❌ Insert error:", error);
+        toast.error('Gagal menambah produk: ' + error.message);
+        throw error;
+      }
       
-      // ✅ UPDATE CACHE AFTER OPERATION
-      updateCacheAfterOperation();
+      console.log("✅ After insert - Supabase response:", data);
+      
+      // ✅ STEP 5: UPDATE LOCAL STATE (CRITICAL)
+      if (data) {
+        const newProduct = {
+          id: data.id,
+          nama: data.nama,
+          kategori: data.kategori,
+          hargaBeli: Number(data.harga_beli),
+          hargaJual: Number(data.harga_jual),
+          stok: data.stok,
+          satuan: data.satuan,
+          minStok: data.min_stok ?? undefined,
+        };
+        
+        console.log("🔄 Updating local state with:", newProduct);
+        setProducts(prev => [newProduct, ...prev]);
+        
+        console.log("✅ After state update - Products count:", prev => prev.length + 1);
+        
+        // ✅ STEP 6: UPDATE CACHE
+        console.log("💾 Updating cache...");
+        debouncedUpdateCache();
+        
+        // ✅ STEP 7: UI FEEDBACK
+        toast.success('Produk berhasil ditambahkan');
+        
+        // ✅ STEP 8: RESET FORM (handled by UI component)
+        console.log("🎉 Product creation completed successfully");
+      }
+    } catch (error) {
+      // ✅ STEP 8: HANDLE FAILURES
+      console.error("❌ Product creation failed:", error);
+      toast.error('Gagal menambah produk');
+      throw error;
     }
   };
 
@@ -1066,8 +1260,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       } : p));
       toast.success('Produk berhasil diperbarui');
       
-      // ✅ UPDATE CACHE AFTER OPERATION
-      updateCacheAfterOperation();
+      // ✅ DEBOUNCED CACHE SAVING (500ms)
+      debouncedUpdateCache();
     }
   };
 
@@ -1088,8 +1282,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setProducts(prev => prev.filter(p => p.id !== id));
     toast.success('Produk berhasil dihapus');
     
-    // ✅ UPDATE CACHE AFTER OPERATION
-    updateCacheAfterOperation();
+    // ✅ DEBOUNCED CACHE SAVING (500ms)
+    debouncedUpdateCache();
   };
 
   const createSupplier = async (supplier: Omit<Supplier, 'id'>): Promise<Supplier> => {

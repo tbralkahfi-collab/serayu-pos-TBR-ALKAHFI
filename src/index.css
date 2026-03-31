@@ -231,3 +231,22 @@
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground) / 0.5);
 }
+
+/* Dialog pointer-events fix */
+[data-radix-dialog-content] {
+  pointer-events: auto !important;
+}
+
+[data-radix-dialog-overlay] {
+  pointer-events: auto !important;
+}
+
+/* Ensure dialog is above all other content */
+[data-radix-dialog-content] {
+  z-index: 9999 !important;
+}
+
+/* Fix any potential overlay issues */
+[data-radix-dialog-overlay] {
+  z-index: 9998 !important;
+}

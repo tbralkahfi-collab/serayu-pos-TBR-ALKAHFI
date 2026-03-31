@@ -52,7 +52,7 @@ const categories = ['Rangka', 'Atap', 'Aksesoris', 'Hollow'];
 const units = ['batang', 'lembar', 'dus', 'pcs', 'meter'];
 
 export default function Produk() {
-  const { products, addProduct, updateProduct, deleteProduct } = useData();
+  const { products, createProduct, updateProduct, deleteProduct } = useData();
   const [search, setSearch] = useState('');
   const [showDialog, setShowDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -106,7 +106,12 @@ export default function Produk() {
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    
+    // ✅ DEBUG LOG: Form submission
+    console.log("Submitting product:", formData);
+    
     if (!formData.nama || !formData.hargaBeli || !formData.hargaJual || !formData.stok || !formData.kategori || !formData.satuan) {
       toast.error('Semua field harus diisi');
       return;
@@ -120,28 +125,47 @@ export default function Produk() {
       return;
     }
 
-    if (editingProduct) {
-      await updateProduct(editingProduct.id, {
-        nama: formData.nama,
-        hargaBeli,
-        hargaJual,
-        stok: parseInt(formData.stok),
-        kategori: formData.kategori,
-        satuan: formData.satuan,
+    try {
+      if (editingProduct) {
+        console.log("Updating product:", editingProduct.id, formData);
+        await updateProduct(editingProduct.id, {
+          nama: formData.nama,
+          hargaBeli,
+          hargaJual,
+          stok: parseInt(formData.stok),
+          kategori: formData.kategori,
+          satuan: formData.satuan,
+        });
+        toast.success('Produk berhasil diperbarui');
+      } else {
+        console.log("Adding new product:", formData);
+        await createProduct({
+          nama: formData.nama,
+          hargaBeli,
+          hargaJual,
+          stok: parseInt(formData.stok),
+          kategori: formData.kategori,
+          satuan: formData.satuan,
+        });
+        toast.success('Produk berhasil ditambahkan');
+      }
+      
+      // ✅ STEP 7: RESET FORM AFTER SUCCESS
+      setFormData({ 
+        nama: '', 
+        hargaBeli: '', 
+        hargaJual: '', 
+        stok: '', 
+        kategori: '', 
+        satuan: '' 
       });
-      toast.success('Produk berhasil diperbarui');
-    } else {
-      await addProduct({
-        nama: formData.nama,
-        hargaBeli,
-        hargaJual,
-        stok: parseInt(formData.stok),
-        kategori: formData.kategori,
-        satuan: formData.satuan,
-      });
-      toast.success('Produk berhasil ditambahkan');
+      setEditingProduct(null);
+      setShowDialog(false);
+      
+    } catch (error) {
+      // ✅ STEP 8: HANDLE FAILURES - Error already shown in DataContext
+      console.error("Form submission failed:", error);
     }
-    setShowDialog(false);
   };
 
   const totalProducts = products.length;
@@ -312,97 +336,108 @@ export default function Produk() {
           <DialogHeader>
             <DialogTitle>{editingProduct ? 'Edit Produk' : 'Tambah Produk Baru'}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Nama Produk</Label>
-              <Input
-                placeholder="Contoh: Baja Ringan C75"
-                value={formData.nama}
-                onChange={(e) => setFormData(prev => ({ ...prev, nama: e.target.value }))}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
+          <form onSubmit={handleSave}>
+            <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Kategori</Label>
-                <Select 
-                  value={formData.kategori} 
-                  onValueChange={(v) => setFormData(prev => ({ ...prev, kategori: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih kategori" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map(cat => (
-                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Nama Produk</Label>
+                <Input
+                  placeholder="Contoh: Baja Ringan C75"
+                  value={formData.nama}
+                  onChange={(e) => setFormData(prev => ({ ...prev, nama: e.target.value }))}
+                  required
+                />
               </div>
-              <div className="space-y-2">
-                <Label>Satuan</Label>
-                <Select 
-                  value={formData.satuan} 
-                  onValueChange={(v) => setFormData(prev => ({ ...prev, satuan: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih satuan" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {units.map(unit => (
-                      <SelectItem key={unit} value={unit}>{unit}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Kategori</Label>
+                  <Select 
+                    value={formData.kategori} 
+                    onValueChange={(v) => setFormData(prev => ({ ...prev, kategori: v }))}
+                    required
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih kategori" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map(cat => (
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Satuan</Label>
+                  <Select 
+                    value={formData.satuan} 
+                    onValueChange={(v) => setFormData(prev => ({ ...prev, satuan: v }))}
+                    required
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih satuan" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {units.map(unit => (
+                        <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Harga Beli (Rp)</Label>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    value={formData.hargaBeli}
+                    onChange={(e) => setFormData(prev => ({ ...prev, hargaBeli: e.target.value }))}
+                    required
+                    min="0"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Harga Jual (Rp)</Label>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    value={formData.hargaJual}
+                    onChange={(e) => setFormData(prev => ({ ...prev, hargaJual: e.target.value }))}
+                    required
+                    min="0"
+                  />
+                </div>
+              </div>
+              {formData.hargaBeli && formData.hargaJual && (
+                <div className="p-3 bg-muted/50 rounded-lg">
+                  <p className="text-sm text-muted-foreground">
+                    Margin: <span className="font-bold text-secondary">
+                      {(((parseInt(formData.hargaJual) - parseInt(formData.hargaBeli)) / parseInt(formData.hargaBeli)) * 100).toFixed(1)}%
+                    </span> ({formatRupiah(parseInt(formData.hargaJual) - parseInt(formData.hargaBeli))} per unit)
+                  </p>
+                </div>
+              )}
               <div className="space-y-2">
-                <Label>Harga Beli (Rp)</Label>
+                <Label>Stok</Label>
                 <Input
                   type="number"
                   placeholder="0"
-                  value={formData.hargaBeli}
-                  onChange={(e) => setFormData(prev => ({ ...prev, hargaBeli: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Harga Jual (Rp)</Label>
-                <Input
-                  type="number"
-                  placeholder="0"
-                  value={formData.hargaJual}
-                  onChange={(e) => setFormData(prev => ({ ...prev, hargaJual: e.target.value }))}
+                  value={formData.stok}
+                  onChange={(e) => setFormData(prev => ({ ...prev, stok: e.target.value }))}
+                  required
+                  min="0"
                 />
               </div>
             </div>
-            {formData.hargaBeli && formData.hargaJual && (
-              <div className="p-3 bg-muted/50 rounded-lg">
-                <p className="text-sm text-muted-foreground">
-                  Margin: <span className="font-bold text-secondary">
-                    {(((parseInt(formData.hargaJual) - parseInt(formData.hargaBeli)) / parseInt(formData.hargaBeli)) * 100).toFixed(1)}%
-                  </span> ({formatRupiah(parseInt(formData.hargaJual) - parseInt(formData.hargaBeli))} per unit)
-                </p>
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label>Stok</Label>
-              <Input
-                type="number"
-                placeholder="0"
-                value={formData.stok}
-                onChange={(e) => setFormData(prev => ({ ...prev, stok: e.target.value }))}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(false)}>
-              <X className="w-4 h-4 mr-2" />
-              Batal
-            </Button>
-            <Button onClick={handleSave} className="bg-gradient-primary">
-              {editingProduct ? 'Simpan Perubahan' : 'Tambah Produk'}
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowDialog(false)}>
+                <X className="w-4 h-4 mr-2" />
+                Batal
+              </Button>
+              <Button type="submit" className="bg-gradient-primary">
+                {editingProduct ? 'Simpan Perubahan' : 'Tambah Produk'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
