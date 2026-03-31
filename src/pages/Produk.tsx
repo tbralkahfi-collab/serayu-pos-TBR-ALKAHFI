@@ -74,9 +74,24 @@ export default function Produk() {
   );
 
   const handleAddNew = () => {
+    console.log('🔘 Tambah Produk button clicked - DEBUG');
+    console.log('🔘 Current state:', { showDialog, showDeleteDialog, isLoading });
+    
+    // Reset semua state dialog
     setEditingProduct(null);
     setFormData({ nama: '', hargaBeli: '', hargaJual: '', stok: '', kategori: '', satuan: '' });
     setShowDialog(true);
+    
+    // Force cleanup untuk dialog yang mungkin stuck
+    setTimeout(() => {
+      const dialogs = document.querySelectorAll('[role="dialog"]');
+      const overlays = document.querySelectorAll('[data-state="open"]');
+      console.log('🔘 Dialog elements found:', dialogs.length, overlays.length);
+      
+      // Check untuk overlay yang mungkin menutupi button
+      const elements = document.elementsFromPoint(window.innerWidth / 2, 200);
+      console.log('🔘 Elements at button position:', elements);
+    }, 100);
   };
 
   const handleEdit = (product: Product) => {
