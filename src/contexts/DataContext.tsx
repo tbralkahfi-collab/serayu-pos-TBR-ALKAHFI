@@ -134,7 +134,7 @@ export interface Project {
 
 // ✅ DEBOUNCE UTILITY FOR CACHE SAVING
 const debounce = <T extends (...args: any[]) => any>(func: T, delay: number): T => {
-  let timeoutId: NodeJS.Timeout;
+  let timeoutId: number;
   return ((...args: Parameters<T>) => {
     clearTimeout(timeoutId);
     timeoutId = setTimeout(() => func(...args), delay);
@@ -514,7 +514,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // Prevent loading during auth initialization
     if (isAuthLoading || !user) return;
     
-    console.log(' Loading products for user:', user.id);
+    console.log('📦 Loading products for user:', user.id);
     
     // 1 Load dari cache dulu untuk instant UI
     try {
@@ -890,7 +890,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       console.error('📊 DataContext: Error loading initial data:', error);
       toast.error('Gagal memuat data');
     }
-  }, [user, products, projects]);
+  }, [user]);
 
   // ✅ PWA VISIBILITY MANAGEMENT - Handle app backgrounding/foregrounding
   useEffect(() => {
@@ -931,8 +931,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     });
     
     document.addEventListener('pageshow', (event) => {
-      console.log('📱 PWA: Page showing', { persisted: event.persisted });
-      if (event.persisted) {
+      const persisted = (event as any).persisted;
+      console.log('📱 PWA: Page showing', { persisted });
+      if (persisted) {
         // Page was restored from back/forward cache
         console.log('📱 PWA: Page restored from cache, checking data...');
         const cachedData = loadCache(user.id);
