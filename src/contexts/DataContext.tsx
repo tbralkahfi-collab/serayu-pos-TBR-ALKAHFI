@@ -710,16 +710,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       min_stok: product.minStok ?? null,
     };
     
-    const cleanData = Object.fromEntries(
-      Object.entries(productData).filter(([_, value]) => value !== undefined && value !== null)
-    );
-    
-    console.log("📝 Before insert - Product data:", cleanData);
+    console.log("📝 Before insert - Product data:", productData);
     
     try {
       const { data, error } = await supabase
         .from("products")
-        .insert([cleanData])
+        .insert([productData])
         .select()
         .single();
 
