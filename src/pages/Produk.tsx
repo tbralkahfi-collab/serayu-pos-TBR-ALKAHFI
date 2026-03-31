@@ -27,6 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -51,9 +52,6 @@ import {
 const categories = ['Rangka', 'Atap', 'Aksesoris', 'Hollow'];
 const units = ['batang', 'lembar', 'dus', 'pcs', 'meter'];
 
-console.log('🔍 DEBUG: Categories:', categories);
-console.log('🔍 DEBUG: Units:', units);
-
 export default function Produk() {
   const { products, createProduct, updateProduct, deleteProduct } = useData();
   const [search, setSearch] = useState('');
@@ -70,51 +68,29 @@ export default function Produk() {
     satuan: '',
   });
 
-  // Monitor showDialog state changes
-  useEffect(() => {
-    console.log('🔘 showDialog state changed to:', showDialog);
-  }, [showDialog]);
-
   const filteredProducts = products.filter(
     (p) =>
       p.nama.toLowerCase().includes(search.toLowerCase()) ||
       p.kategori.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleAddNew = () => {
-    console.log('🔘 Tambah Produk button clicked - DEBUG');
-    console.log('🔘 Current state:', { showDialog, showDeleteDialog });
-    console.log('🔘 Button is clickable!');
-    
-    // Reset semua state dialog
+  // Clean handler functions
+  const handleOpenDialog = () => {
     setEditingProduct(null);
-    const resetData = { nama: '', hargaBeli: '', hargaJual: '', stok: '', kategori: '', satuan: '' };
-    console.log('🔘 Resetting formData to:', resetData);
-    setFormData(resetData);
-    
-    // Force dialog open dengan callback
+    setFormData({ 
+      nama: '', 
+      hargaBeli: '', 
+      hargaJual: '', 
+      stok: '', 
+      kategori: '', 
+      satuan: '' 
+    });
     setShowDialog(true);
-    console.log('🔘 setShowDialog(true) called');
-    
-    // Check state immediately
-    setTimeout(() => {
-      console.log('🔘 Dialog state after 100ms:', showDialog);
-    }, 100);
-    
-    // Force cleanup untuk dialog yang mungkin stuck
-    setTimeout(() => {
-      const dialogs = document.querySelectorAll('[role="dialog"]');
-      const overlays = document.querySelectorAll('[data-state="open"]');
-      console.log('🔘 Dialog elements found:', dialogs.length, overlays.length);
-      
-      // Check untuk overlay yang mungkin menutupi button
-      const elements = document.elementsFromPoint(window.innerWidth / 2, 200);
-      console.log('🔘 Elements at button position:', elements);
-      
-      // Check if dialog actually opened
-      console.log('🔘 Dialog should be open now:', showDialog);
-      console.log('🔘 Current formData after reset:', formData);
-    }, 200);
+  };
+
+  const handleCloseDialog = () => {
+    setShowDialog(false);
+    setEditingProduct(null);
   };
 
   const handleEdit = (product: Product) => {
@@ -188,7 +164,7 @@ export default function Produk() {
         toast.success('Produk berhasil ditambahkan');
       }
       
-      // ✅ STEP 7: RESET FORM AFTER SUCCESS
+      // Reset form after success
       setFormData({ 
         nama: '', 
         hargaBeli: '', 
@@ -198,10 +174,9 @@ export default function Produk() {
         satuan: '' 
       });
       setEditingProduct(null);
-      setShowDialog(false);
+      handleCloseDialog();
       
     } catch (error) {
-      // ✅ STEP 8: HANDLE FAILURES - Error already shown in DataContext
       console.error("Form submission failed:", error);
     }
   };
@@ -226,11 +201,7 @@ export default function Produk() {
         </div>
         <Button 
           className="gap-2 bg-gradient-primary hover:opacity-90 transition-opacity" 
-          onClick={handleAddNew}
-          style={{ pointerEvents: 'auto', zIndex: 10 }}
-          onMouseDown={() => console.log('🔘 Mouse down on button')}
-          onMouseUp={() => console.log('🔘 Mouse up on button')}
-          onMouseEnter={() => console.log('🔘 Mouse entered button')}
+          onClick={handleOpenDialog}
         >
           <Plus className="w-4 h-4" />
           Tambah Produk
@@ -376,13 +347,13 @@ export default function Produk() {
       </Card>
 
       {/* Add/Edit Dialog */}
-      <Dialog open={showDialog} onOpenChange={(open) => {
-        console.log('🔘 Dialog onOpenChange called with:', open);
-        setShowDialog(open);
-      }}>
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingProduct ? 'Edit Produk' : 'Tambah Produk Baru'}</DialogTitle>
+            <DialogDescription>
+              {editingProduct ? 'Edit data produk yang sudah ada' : 'Tambah produk baru ke dalam sistem'}
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSave}>
             <div className="space-y-4">
@@ -401,23 +372,16 @@ export default function Produk() {
                   <Select 
                     key="kategori-select"
                     value={formData.kategori} 
-                    onValueChange={(v) => {
-                      console.log('🔍 Kategori changed to:', v);
-                      setFormData(prev => ({ ...prev, kategori: v }));
-                    }}
+                    onValueChange={(v) => setFormData(prev => ({ ...prev, kategori: v }))}
                     required
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Pilih kategori" />
                     </SelectTrigger>
                     <SelectContent>
-                      {console.log('🔍 Rendering categories:', categories)}
-                      {categories.map(cat => {
-                        console.log('🔍 Rendering category item:', cat);
-                        return (
-                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                        );
-                      })}
+                      {categories.map(cat => (
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -426,23 +390,16 @@ export default function Produk() {
                   <Select 
                     key="satuan-select"
                     value={formData.satuan} 
-                    onValueChange={(v) => {
-                      console.log('🔍 Satuan changed to:', v);
-                      setFormData(prev => ({ ...prev, satuan: v }));
-                    }}
+                    onValueChange={(v) => setFormData(prev => ({ ...prev, satuan: v }))}
                     required
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Pilih satuan" />
                     </SelectTrigger>
                     <SelectContent>
-                      {console.log('🔍 Rendering units:', units)}
-                      {units.map(unit => {
-                        console.log('🔍 Rendering unit item:', unit);
-                        return (
-                          <SelectItem key={unit} value={unit}>{unit}</SelectItem>
-                        );
-                      })}
+                      {units.map(unit => (
+                        <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -493,7 +450,7 @@ export default function Produk() {
               </div>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowDialog(false)}>
+              <Button type="button" variant="outline" onClick={handleCloseDialog}>
                 <X className="w-4 h-4 mr-2" />
                 Batal
               </Button>
