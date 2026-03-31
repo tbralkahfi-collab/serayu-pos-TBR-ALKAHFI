@@ -509,11 +509,34 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isHydrated, setIsHydrated] = useState<boolean>(false);
 
-  // Load functions
+  // Load functions dengan cache
   const loadProducts = useCallback(async () => {
     // Prevent loading during auth initialization
     if (isAuthLoading || !user) return;
     
+    console.log(' Loading products for user:', user.id);
+    
+    // 1 Load dari cache dulu untuk instant UI
+    try {
+      const cached = localStorage.getItem(`products_${user.id}`);
+      if (cached) {
+        const cachedData = JSON.parse(cached);
+        const cacheAge = Date.now() - cachedData.timestamp;
+        
+        // Cache valid selama 5 menit
+        if (cacheAge < 5 * 60 * 1000) {
+          console.log(' Using cached products (age:', Math.round(cacheAge / 1000), 'seconds)');
+          setProducts(cachedData.products);
+        } else {
+          console.log(' Cache expired, fetching fresh data');
+          localStorage.removeItem(`products_${user.id}`);
+        }
+      }
+    } catch (error) {
+      console.error(' Cache load error:', error);
+    }
+    
+    // 2 Fetch fresh data dari Supabase
     const { data, error } = await supabase
       .from('products')
       .select('*')
@@ -521,12 +544,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
       .order('nama');
 
     if (error) {
-      console.error('Error loading products:', error);
+      console.error(' Error loading products:', error);
+      toast.error('Gagal memuat data produk');
       return;
     }
 
     if (data) {
-      setProducts(data.map(p => ({
+      const products = data.map(p => ({
         id: p.id,
         nama: p.nama,
         kategori: p.kategori,
@@ -535,9 +559,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
         stok: p.stok,
         satuan: p.satuan,
         minStok: p.min_stok ?? undefined,
-      })));
+      }));
+      
+      console.log(' Products loaded from Supabase:', products.length);
+      setProducts(products);
+      
+      // 3 Update cache dengan fresh data
+      try {
+        localStorage.setItem(`products_${user.id}`, JSON.stringify({
+          products,
+          timestamp: Date.now()
+        }));
+        console.log(' Products cached to localStorage');
+      } catch (error) {
+        console.error(' Cache save error:', error);
+      }
     }
-  }, []);
+  }, [user, isAuthLoading]);
 
   const loadSuppliers = useCallback(async () => {
     // Prevent loading during auth initialization
@@ -599,7 +637,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         };
       }));
     }
-  }, [user]);
+  }, [user, isAuthLoading]);
 
   const loadDebts = useCallback(async () => {
     // Prevent loading during auth initialization
@@ -630,7 +668,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         projectId: d.project_id ?? undefined,
       })));
     }
-  }, []);
+  }, [user, isAuthLoading]);
 
   const loadExpenses = useCallback(async () => {
     // Prevent loading during auth initialization
@@ -656,7 +694,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         tanggal: e.tanggal,
       })));
     }
-  }, []);
+  }, [user, isAuthLoading]);
 
   const loadTransactions = useCallback(async () => {
     // Prevent loading during auth initialization
@@ -693,7 +731,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         };
       }));
     }
-  }, []);
+  }, [user, isAuthLoading]);
 
   const loadProjects = useCallback(async () => {
     // Prevent loading during auth initialization
@@ -851,12 +889,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('📊 DataContext: Error loading initial data:', error);
       toast.error('Gagal memuat data');
-      setIsHydrated(false);
-    } finally {
-      setIsLoading(false);
-      console.log('📊 DataContext: Data fetch completed');
     }
-  }, [user, isAuthLoading, loadProducts, loadSuppliers, loadPurchases, loadDebts, loadExpenses, loadTransactions, loadProjects, products, suppliers, purchases, debts, expenses, transactions, projects]);
+  }, [user, products, projects]);
 
   // ✅ PWA VISIBILITY MANAGEMENT - Handle app backgrounding/foregrounding
   useEffect(() => {
@@ -1164,24 +1198,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       supabase.removeChannel(channel);
     };
   }, [user, isAuthLoading]);
-
-  // CRUD Functions - NO FETCH CALLS
-  const updateCacheAfterOperation = useCallback(() => {
-    if (!user) return;
-    
-    console.log('📦 DataContext: Updating cache after operation...');
-    saveCache(user.id, {
-      products,
-      suppliers,
-      purchases,
-      debts,
-      expenses,
-      transactions,
-      projects,
-      userId: user.id,
-      version: CACHE_VERSION
-    });
-  }, [user, products, suppliers, purchases, debts, expenses, transactions, projects]);
 
   // ✅ DEBOUNCED CACHE SAVING (500ms as required)
   const debouncedUpdateCache = useCallback(
