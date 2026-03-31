@@ -41,178 +41,91 @@ const CACHE_BACKUP_KEY = 'app_cache_backup_'; // Backup for PWA scenarios
 // ✅ CACHE FUNCTIONS
 const getCacheKey = (userId: string) => `${CACHE_KEY_PREFIX}${userId}`;
 
-// ✅ REQUIRED CACHE HELPERS
+// ✅ PRIMARY CACHE FUNCTIONS - DEFINE DIRECTLY
 const loadCache = (userId: string): CacheData | null => {
-  return loadCacheData(userId);
-};
-
-const saveCache = (userId: string, data: Omit<CacheData, 'timestamp'>): void => {
-  saveCacheData(userId, data);
-};
-
-const clearCache = (userId?: string): void => {
-  clearCacheData(userId);
-};
-
-const loadCacheData = (userId: string): CacheData | null => {
   try {
     const cacheKey = getCacheKey(userId);
     const backupKey = `${CACHE_BACKUP_KEY}${userId}`;
     
-    // ✅ PWA: Try primary cache first
-    let cached = localStorage.getItem(cacheKey);
-    let isBackupUsed = false;
-    
-    // ✅ PWA: If primary cache fails, try backup
-    if (!cached) {
-      console.log('📦 Cache: Primary cache empty, trying backup...');
-      cached = localStorage.getItem(backupKey);
-      isBackupUsed = true;
-    }
-    
-    if (!cached) {
-      console.log('📦 Cache: No cached data found (tried primary and backup)');
-      return null;
-    }
-    
-    const cacheData: CacheData = JSON.parse(cached);
-    
-    // Check version compatibility
-    if (cacheData.version !== CACHE_VERSION) {
-      console.log('📦 Cache: Version mismatch, clearing cache');
-      localStorage.removeItem(cacheKey);
-      localStorage.removeItem(backupKey);
-      return null;
-    }
-    
-    // ✅ PWA: Extended expiry check (7 days)
-    const now = Date.now();
-    if (now - cacheData.timestamp > CACHE_EXPIRY_MS) {
-      console.log('📦 Cache: Expired, clearing cache');
-      localStorage.removeItem(cacheKey);
-      localStorage.removeItem(backupKey);
-      return null;
-    }
-    
-    // Verify user ID match
-    if (cacheData.userId !== userId) {
-      console.log('📦 Cache: User ID mismatch, clearing cache');
-      localStorage.removeItem(cacheKey);
-      localStorage.removeItem(backupKey);
-      return null;
-    }
-    
-    console.log('📦 Cache: Loaded cached data', {
-      source: isBackupUsed ? 'backup' : 'primary',
-      timestamp: new Date(cacheData.timestamp).toISOString(),
-      age: Math.round((now - cacheData.timestamp) / 1000 / 60) + ' minutes',
-      records: {
-        products: cacheData.products.length,
-        suppliers: cacheData.suppliers.length,
-        purchases: cacheData.purchases.length,
-        debts: cacheData.debts.length,
-        expenses: cacheData.expenses.length,
-        transactions: cacheData.transactions.length,
-        projects: cacheData.projects.length
+    // Try primary cache first
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      const cacheData: CacheData = JSON.parse(cached);
+      
+      // Check expiry
+      if (Date.now() - cacheData.timestamp > CACHE_EXPIRY_MS) {
+        localStorage.removeItem(cacheKey);
+        console.log('📦 Cache expired, checking backup...');
+      } else {
+        console.log('📦 Cache loaded from primary storage');
+        return cacheData;
       }
-    });
-    
-    // ✅ PWA: Restore backup to primary cache for next time
-    if (isBackupUsed) {
-      console.log('📦 Cache: Restoring backup to primary cache');
-      saveCacheData(userId, {
-        products: cacheData.products,
-        suppliers: cacheData.suppliers,
-        purchases: cacheData.purchases,
-        debts: cacheData.debts,
-        expenses: cacheData.expenses,
-        transactions: cacheData.transactions,
-        projects: cacheData.projects,
-        userId: cacheData.userId,
-        version: cacheData.version
-      });
     }
     
-    return cacheData;
+    // Try backup cache
+    const backup = localStorage.getItem(backupKey);
+    if (backup) {
+      console.log('📦 Using backup cache');
+      const cacheData: CacheData = JSON.parse(backup);
+      
+      if (cacheData.userId === userId && cacheData.version === CACHE_VERSION) {
+        // Restore backup to primary cache
+        saveCache(userId, cacheData);
+        console.log('📦 Cache: Backup recovery successful');
+        return cacheData;
+      }
+    }
+    
+    return null;
   } catch (error) {
-    console.error('📦 Cache: Error loading cache', error);
-    
-    // ✅ PWA: Try to recover from backup on error
-    try {
-      const backupKey = `${CACHE_BACKUP_KEY}${userId}`;
-      const backup = localStorage.getItem(backupKey);
-      if (backup) {
-        console.log('📦 Cache: Attempting backup recovery...');
-        const backupData: CacheData = JSON.parse(backup);
-        if (backupData.userId === userId && backupData.version === CACHE_VERSION) {
-          // Restore backup to primary cache
-          saveCacheData(userId, backupData);
-          console.log('📦 Cache: Backup recovery successful');
-          return backupData;
-        }
-      }
-    } catch (recoveryError) {
-      console.error('📦 Cache: Backup recovery failed', recoveryError);
-    }
-    
+    console.error('📦 Cache load error:', error);
     return null;
   }
 };
 
-const saveCacheData = (userId: string, data: Omit<CacheData, 'timestamp'>): void => {
+const saveCache = (userId: string, data: Omit<CacheData, 'timestamp'>): void => {
   try {
     const cacheKey = getCacheKey(userId);
     const backupKey = `${CACHE_BACKUP_KEY}${userId}`;
+    
     const cacheData: CacheData = {
       ...data,
       timestamp: Date.now(),
-      version: CACHE_VERSION
+      userId,
+      version: CACHE_VERSION,
     };
     
-    // ✅ PWA: Save to primary cache
+    // Save to primary cache
     localStorage.setItem(cacheKey, JSON.stringify(cacheData));
     
-    // ✅ PWA: Also save backup copy for resilience
+    // Also save to backup for PWA reliability
     localStorage.setItem(backupKey, JSON.stringify(cacheData));
     
-    console.log('📦 Cache: Saved data to primary and backup', {
-      timestamp: new Date(cacheData.timestamp).toISOString(),
-      records: {
-        products: cacheData.products.length,
-        suppliers: cacheData.suppliers.length,
-        purchases: cacheData.purchases.length,
-        debts: cacheData.debts.length,
-        expenses: cacheData.expenses.length,
-        transactions: cacheData.transactions.length,
-        projects: cacheData.projects.length
-      }
-    });
+    console.log('📦 Cache saved to primary and backup');
   } catch (error) {
-    console.error('📦 Cache: Error saving cache', error);
+    console.error('📦 Cache save error:', error);
   }
 };
 
-const clearCacheData = (userId?: string): void => {
+const clearCache = (userId?: string): void => {
   try {
     if (userId) {
+      // Clear specific user cache
       const cacheKey = getCacheKey(userId);
       const backupKey = `${CACHE_BACKUP_KEY}${userId}`;
-      
-      // ✅ PWA: Clear both primary and backup
       localStorage.removeItem(cacheKey);
       localStorage.removeItem(backupKey);
-      console.log('📦 Cache: Cleared primary and backup cache for user', userId);
     } else {
-      // Clear all caches (both primary and backup)
-      const keys = Object.keys(localStorage);
-      const cacheKeys = keys.filter(key => 
-        key.startsWith(CACHE_KEY_PREFIX) || key.startsWith(CACHE_BACKUP_KEY)
-      );
-      cacheKeys.forEach(key => localStorage.removeItem(key));
-      console.log('📦 Cache: Cleared all primary and backup caches');
+      // Clear all cache
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith(CACHE_KEY_PREFIX) || key.startsWith(CACHE_BACKUP_KEY)) {
+          localStorage.removeItem(key);
+        }
+      });
     }
+    console.log('📦 Cache cleared');
   } catch (error) {
-    console.error('📦 Cache: Error clearing cache', error);
+    console.error('📦 Cache clear error:', error);
   }
 };
 
@@ -831,7 +744,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (!document.hidden && document.visibilityState === 'visible') {
         // ✅ PWA: App came to foreground, refresh data if needed
         console.log('📱 PWA: App came to foreground, checking cache...');
-        const cachedData = loadCacheData(user.id);
+        const cachedData = loadCache(user.id);
         
         if (!cachedData) {
           console.log('📱 PWA: No cache available, fetching fresh data...');
@@ -860,7 +773,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (event.persisted) {
         // Page was restored from back/forward cache
         console.log('📱 PWA: Page restored from cache, checking data...');
-        const cachedData = loadCacheData(user.id);
+        const cachedData = loadCache(user.id);
         if (!cachedData) {
           console.log('📱 PWA: No cache after page restore, fetching...');
           fetchInitialData();
