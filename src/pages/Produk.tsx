@@ -75,7 +75,8 @@ export default function Produk() {
 
   const handleAddNew = () => {
     console.log('🔘 Tambah Produk button clicked - DEBUG');
-    console.log('🔘 Current state:', { showDialog, showDeleteDialog, isLoading });
+    console.log('🔘 Current state:', { showDialog, showDeleteDialog });
+    console.log('🔘 Button is clickable!');
     
     // Reset semua state dialog
     setEditingProduct(null);
@@ -91,6 +92,9 @@ export default function Produk() {
       // Check untuk overlay yang mungkin menutupi button
       const elements = document.elementsFromPoint(window.innerWidth / 2, 200);
       console.log('🔘 Elements at button position:', elements);
+      
+      // Check if dialog actually opened
+      console.log('🔘 Dialog should be open now:', showDialog);
     }, 100);
   };
 
@@ -201,7 +205,14 @@ export default function Produk() {
           <h1 className="text-2xl font-bold text-foreground">Produk</h1>
           <p className="text-muted-foreground">Kelola daftar produk baja ringan</p>
         </div>
-        <Button className="gap-2 bg-gradient-primary" onClick={handleAddNew}>
+        <Button 
+          className="gap-2 bg-gradient-primary hover:opacity-90 transition-opacity" 
+          onClick={handleAddNew}
+          style={{ pointerEvents: 'auto', zIndex: 10 }}
+          onMouseDown={() => console.log('🔘 Mouse down on button')}
+          onMouseUp={() => console.log('🔘 Mouse up on button')}
+          onMouseEnter={() => console.log('🔘 Mouse entered button')}
+        >
           <Plus className="w-4 h-4" />
           Tambah Produk
         </Button>
