@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -70,6 +70,11 @@ export default function Produk() {
     satuan: '',
   });
 
+  // Monitor showDialog state changes
+  useEffect(() => {
+    console.log('🔘 showDialog state changed to:', showDialog);
+  }, [showDialog]);
+
   const filteredProducts = products.filter(
     (p) =>
       p.nama.toLowerCase().includes(search.toLowerCase()) ||
@@ -86,7 +91,15 @@ export default function Produk() {
     const resetData = { nama: '', hargaBeli: '', hargaJual: '', stok: '', kategori: '', satuan: '' };
     console.log('🔘 Resetting formData to:', resetData);
     setFormData(resetData);
+    
+    // Force dialog open dengan callback
     setShowDialog(true);
+    console.log('🔘 setShowDialog(true) called');
+    
+    // Check state immediately
+    setTimeout(() => {
+      console.log('🔘 Dialog state after 100ms:', showDialog);
+    }, 100);
     
     // Force cleanup untuk dialog yang mungkin stuck
     setTimeout(() => {
@@ -101,7 +114,7 @@ export default function Produk() {
       // Check if dialog actually opened
       console.log('🔘 Dialog should be open now:', showDialog);
       console.log('🔘 Current formData after reset:', formData);
-    }, 100);
+    }, 200);
   };
 
   const handleEdit = (product: Product) => {
@@ -363,7 +376,10 @@ export default function Produk() {
       </Card>
 
       {/* Add/Edit Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+      <Dialog open={showDialog} onOpenChange={(open) => {
+        console.log('🔘 Dialog onOpenChange called with:', open);
+        setShowDialog(open);
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingProduct ? 'Edit Produk' : 'Tambah Produk Baru'}</DialogTitle>
