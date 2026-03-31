@@ -51,6 +51,9 @@ import {
 const categories = ['Rangka', 'Atap', 'Aksesoris', 'Hollow'];
 const units = ['batang', 'lembar', 'dus', 'pcs', 'meter'];
 
+console.log('🔍 DEBUG: Categories:', categories);
+console.log('🔍 DEBUG: Units:', units);
+
 export default function Produk() {
   const { products, createProduct, updateProduct, deleteProduct } = useData();
   const [search, setSearch] = useState('');
@@ -80,7 +83,9 @@ export default function Produk() {
     
     // Reset semua state dialog
     setEditingProduct(null);
-    setFormData({ nama: '', hargaBeli: '', hargaJual: '', stok: '', kategori: '', satuan: '' });
+    const resetData = { nama: '', hargaBeli: '', hargaJual: '', stok: '', kategori: '', satuan: '' };
+    console.log('🔘 Resetting formData to:', resetData);
+    setFormData(resetData);
     setShowDialog(true);
     
     // Force cleanup untuk dialog yang mungkin stuck
@@ -95,6 +100,7 @@ export default function Produk() {
       
       // Check if dialog actually opened
       console.log('🔘 Dialog should be open now:', showDialog);
+      console.log('🔘 Current formData after reset:', formData);
     }, 100);
   };
 
@@ -377,34 +383,50 @@ export default function Produk() {
                 <div className="space-y-2">
                   <Label>Kategori</Label>
                   <Select 
+                    key="kategori-select"
                     value={formData.kategori} 
-                    onValueChange={(v) => setFormData(prev => ({ ...prev, kategori: v }))}
+                    onValueChange={(v) => {
+                      console.log('🔍 Kategori changed to:', v);
+                      setFormData(prev => ({ ...prev, kategori: v }));
+                    }}
                     required
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Pilih kategori" />
                     </SelectTrigger>
                     <SelectContent>
-                      {categories.map(cat => (
-                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                      ))}
+                      {console.log('🔍 Rendering categories:', categories)}
+                      {categories.map(cat => {
+                        console.log('🔍 Rendering category item:', cat);
+                        return (
+                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Satuan</Label>
                   <Select 
+                    key="satuan-select"
                     value={formData.satuan} 
-                    onValueChange={(v) => setFormData(prev => ({ ...prev, satuan: v }))}
+                    onValueChange={(v) => {
+                      console.log('🔍 Satuan changed to:', v);
+                      setFormData(prev => ({ ...prev, satuan: v }));
+                    }}
                     required
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Pilih satuan" />
                     </SelectTrigger>
                     <SelectContent>
-                      {units.map(unit => (
-                        <SelectItem key={unit} value={unit}>{unit}</SelectItem>
-                      ))}
+                      {console.log('🔍 Rendering units:', units)}
+                      {units.map(unit => {
+                        console.log('🔍 Rendering unit item:', unit);
+                        return (
+                          <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
