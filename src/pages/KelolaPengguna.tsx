@@ -133,7 +133,7 @@ export default function KelolaPengguna() {
     setActionLoading(prev => ({ ...prev, [`role-${userId}`]: true }));
     try {
       await callAdminApi('update_role', { user_id: userId, new_role: newRole });
-      toast({ title: 'Berhasil', description: `Role berhasil diubah ke ${newRole}` });
+      toast.success(`Role berhasil diubah ke ${newRole}`);
       await fetchUsers();
     } catch (error: any) {
       toast.error(error.message || 'Gagal mengubah role');
