@@ -27,8 +27,8 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error('Error caught by boundary:', error, errorInfo);
     
     // Log error to monitoring service
-    if (window.gtag) {
-      window.gtag('event', 'exception', {
+    if ((window as any).gtag) {
+      (window as any).gtag('event', 'exception', {
         description: error.message,
         fatal: false,
       });

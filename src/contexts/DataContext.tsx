@@ -539,7 +539,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   // Placeholder functions for other entities
   const createPurchase = async (purchase: Omit<Purchase, 'id'>) => {
-    // Implementation similar to createProduct
     console.log('createPurchase called', purchase);
   };
 

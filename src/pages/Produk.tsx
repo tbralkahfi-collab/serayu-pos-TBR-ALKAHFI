@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -73,10 +74,23 @@ export default function Produk() {
       p.kategori.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleAddNew = () => {
+  // Clean handler functions
+  const handleOpenDialog = () => {
     setEditingProduct(null);
-    setFormData({ nama: '', hargaBeli: '', hargaJual: '', stok: '', kategori: '', satuan: '' });
+    setFormData({ 
+      nama: '', 
+      hargaBeli: '', 
+      hargaJual: '', 
+      stok: '', 
+      kategori: '', 
+      satuan: '' 
+    });
     setShowDialog(true);
+  };
+
+  const handleCloseDialog = () => {
+    setShowDialog(false);
+    setEditingProduct(null);
   };
 
   const handleEdit = (product: Product) => {
@@ -150,7 +164,7 @@ export default function Produk() {
         toast.success('Produk berhasil ditambahkan');
       }
       
-      // ✅ STEP 7: RESET FORM AFTER SUCCESS
+      // Reset form after success
       setFormData({ 
         nama: '', 
         hargaBeli: '', 
@@ -160,10 +174,9 @@ export default function Produk() {
         satuan: '' 
       });
       setEditingProduct(null);
-      setShowDialog(false);
+      handleCloseDialog();
       
     } catch (error) {
-      // ✅ STEP 8: HANDLE FAILURES - Error already shown in DataContext
       console.error("Form submission failed:", error);
     }
   };
@@ -186,7 +199,10 @@ export default function Produk() {
           <h1 className="text-2xl font-bold text-foreground">Produk</h1>
           <p className="text-muted-foreground">Kelola daftar produk baja ringan</p>
         </div>
-        <Button className="gap-2 bg-gradient-primary" onClick={handleAddNew}>
+        <Button 
+          className="gap-2 bg-gradient-primary hover:opacity-90 transition-opacity" 
+          onClick={handleOpenDialog}
+        >
           <Plus className="w-4 h-4" />
           Tambah Produk
         </Button>
@@ -335,6 +351,9 @@ export default function Produk() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingProduct ? 'Edit Produk' : 'Tambah Produk Baru'}</DialogTitle>
+            <DialogDescription>
+              {editingProduct ? 'Edit data produk yang sudah ada' : 'Tambah produk baru ke dalam sistem'}
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSave}>
             <div className="space-y-4">
@@ -351,6 +370,7 @@ export default function Produk() {
                 <div className="space-y-2">
                   <Label>Kategori</Label>
                   <Select 
+                    key="kategori-select"
                     value={formData.kategori} 
                     onValueChange={(v) => setFormData(prev => ({ ...prev, kategori: v }))}
                     required
@@ -368,6 +388,7 @@ export default function Produk() {
                 <div className="space-y-2">
                   <Label>Satuan</Label>
                   <Select 
+                    key="satuan-select"
                     value={formData.satuan} 
                     onValueChange={(v) => setFormData(prev => ({ ...prev, satuan: v }))}
                     required
@@ -429,7 +450,7 @@ export default function Produk() {
               </div>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowDialog(false)}>
+              <Button type="button" variant="outline" onClick={handleCloseDialog}>
                 <X className="w-4 h-4 mr-2" />
                 Batal
               </Button>

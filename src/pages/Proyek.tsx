@@ -73,7 +73,7 @@ const statusIcons: Record<string, React.ReactNode> = {
 };
 
 export default function Proyek() {
-  const { projects, products, addProject, updateProject, deleteProject, updateProduct, addTransaction, transactions, updateTransaction, getProjectDebts, deleteDebt } = useData();
+  const { projects, products, createProject, updateProject, deleteProject, updateProduct, createTransaction, transactions, updateTransaction, getProjectDebts, deleteDebt } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showDialog, setShowDialog] = useState(false);
@@ -260,7 +260,7 @@ export default function Proyek() {
 
     const createProjectPaymentTransaction = async (amount: number, label: string) => {
       if (amount <= 0) return;
-      await addTransaction({
+      await createTransaction({
         tanggal: `${dateStr} ${timeStr}`,
         // IMPORTANT: pelanggan diset ke nama proyek agar masuk tab "Proyek" di menu Transaksi
         pelanggan: projectData.namaProyek,
@@ -321,7 +321,7 @@ export default function Proyek() {
         }
       }
 
-      await addProject(projectData);
+      await createProject(projectData);
 
       // Catat DP awal proyek sebagai transaksi
       if ((projectData.dp || 0) > 0) {

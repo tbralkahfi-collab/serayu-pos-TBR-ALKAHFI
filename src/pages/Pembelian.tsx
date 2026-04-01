@@ -74,7 +74,7 @@ const getStatusColor = (status: string) => {
 };
 
 export default function Pembelian() {
-  const { purchases, addPurchase, updatePurchase, deletePurchase, suppliers, addSupplier, updateSupplier, deleteSupplier, products, updateProduct, createPurchaseDebt, removeRelatedDebt } = useData();
+  const { purchases, createPurchase, updatePurchase, deletePurchase, suppliers, createSupplier, updateSupplier, deleteSupplier, products, updateProduct, createPurchaseDebt, removeRelatedDebt } = useData();
   const [activeTab, setActiveTab] = useState('pembelian');
   const [showDialog, setShowDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -284,7 +284,7 @@ export default function Pembelian() {
       toast.success('Pembelian berhasil diperbarui');
     } else {
       // For new purchases, we need the ID after insert - use a temp reference
-      await addPurchase({
+      await createPurchase({
         supplierId: formData.supplierId, supplier: formData.supplier, date: formData.date,
         total: totalAmount, dp: parseInt(formData.dp) || 0,
         paymentMethod: formData.paymentMethod, status: formData.status, items: itemsStr, 
@@ -342,7 +342,7 @@ export default function Pembelian() {
       await updateSupplier(editingSupplier.id, supplierFormData);
       toast.success('Supplier berhasil diperbarui');
     } else {
-      await addSupplier(supplierFormData);
+      await createSupplier(supplierFormData);
       toast.success('Supplier berhasil ditambahkan');
     }
     setShowSupplierDialog(false);

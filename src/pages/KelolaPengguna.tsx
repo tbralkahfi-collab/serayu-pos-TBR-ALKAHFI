@@ -133,7 +133,7 @@ export default function KelolaPengguna() {
     setActionLoading(prev => ({ ...prev, [`role-${userId}`]: true }));
     try {
       await callAdminApi('update_role', { user_id: userId, new_role: newRole });
-      toast({ title: 'Berhasil', description: `Role berhasil diubah ke ${newRole}` });
+      toast.success(`Role berhasil diubah ke ${newRole}`);
       await fetchUsers();
     } catch (error: any) {
       toast.error(error.message || 'Gagal mengubah role');
@@ -146,7 +146,7 @@ export default function KelolaPengguna() {
     setActionLoading(prev => ({ ...prev, [`approve-${userId}`]: true }));
     try {
       await callAdminApi('approve_user', { user_id: userId, approved });
-      toast({ title: 'Berhasil', description: approved ? 'Pengguna disetujui' : 'Persetujuan dicabut' });
+      toast.success(approved ? 'Pengguna disetujui' : 'Persetujuan dicabut');
       await fetchUsers();
     } catch (error: any) {
       toast.error(error.message || 'Gagal mengubah status approval');
