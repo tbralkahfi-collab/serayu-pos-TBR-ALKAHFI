@@ -284,7 +284,7 @@ export default function Pembelian() {
       toast.success('Pembelian berhasil diperbarui');
     } else {
       // For new purchases, we need the ID after insert - use a temp reference
-      await addPurchase({
+      await createPurchase({
         supplierId: formData.supplierId, supplier: formData.supplier, date: formData.date,
         total: totalAmount, dp: parseInt(formData.dp) || 0,
         paymentMethod: formData.paymentMethod, status: formData.status, items: itemsStr, 
