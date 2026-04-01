@@ -742,9 +742,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         console.log("🔄 Updating local state with:", newProduct);
         setProducts(prev => [newProduct, ...prev]);
         
-        console.log("✅ After state update - Products count:", prev => prev.length + 1);
-        
-        toast.success('Produk berhasil ditambahkan');
+        console.log("✅ After state update - Products count increased");
         console.log("✅ Product creation completed successfully");
       }
     } catch (error) {
