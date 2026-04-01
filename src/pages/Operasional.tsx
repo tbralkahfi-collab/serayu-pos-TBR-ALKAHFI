@@ -86,7 +86,7 @@ const getCategoryColor = (kategori: string) => {
 };
 
 export default function Operasional() {
-  const { expenses, addExpense, updateExpense, deleteExpense } = useData();
+  const { expenses, createExpense, updateExpense, deleteExpense } = useData();
   const [showDialog, setShowDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -148,7 +148,7 @@ export default function Operasional() {
       });
       toast.success('Biaya berhasil diperbarui');
     } else {
-      await addExpense({
+      await createExpense({
         kategori: formData.kategori,
         deskripsi: formData.deskripsi,
         jumlah: parseInt(formData.jumlah),
