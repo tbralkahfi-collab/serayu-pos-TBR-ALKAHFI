@@ -248,7 +248,7 @@ export default function Akuntansi() {
       return;
     }
     toast.success('Data modal berhasil dihapus');
-    fetchCapitalRecords();
+    // Capital data auto-refreshes via realtime subscription
     setShowDeleteDialog(false);
     setRecordToDelete(null);
   };

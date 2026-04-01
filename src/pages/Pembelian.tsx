@@ -74,7 +74,7 @@ const getStatusColor = (status: string) => {
 };
 
 export default function Pembelian() {
-  const { purchases, addPurchase, updatePurchase, deletePurchase, suppliers, addSupplier, updateSupplier, deleteSupplier, products, updateProduct, createPurchaseDebt, removeRelatedDebt } = useData();
+  const { purchases, createPurchase, updatePurchase, deletePurchase, suppliers, createSupplier, updateSupplier, deleteSupplier, products, updateProduct, createPurchaseDebt, removeRelatedDebt } = useData();
   const [activeTab, setActiveTab] = useState('pembelian');
   const [showDialog, setShowDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);

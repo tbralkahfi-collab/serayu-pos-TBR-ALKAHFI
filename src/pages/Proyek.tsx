@@ -73,7 +73,7 @@ const statusIcons: Record<string, React.ReactNode> = {
 };
 
 export default function Proyek() {
-  const { projects, products, addProject, updateProject, deleteProject, updateProduct, addTransaction, transactions, updateTransaction, getProjectDebts, deleteDebt } = useData();
+  const { projects, products, createProject, updateProject, deleteProject, updateProduct, createTransaction, transactions, updateTransaction, getProjectDebts, deleteDebt } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showDialog, setShowDialog] = useState(false);

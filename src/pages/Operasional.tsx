@@ -86,7 +86,7 @@ const getCategoryColor = (kategori: string) => {
 };
 
 export default function Operasional() {
-  const { expenses, addExpense, updateExpense, deleteExpense } = useData();
+  const { expenses, createExpense, updateExpense, deleteExpense } = useData();
   const [showDialog, setShowDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
