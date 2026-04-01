@@ -260,7 +260,7 @@ export default function Proyek() {
 
     const createProjectPaymentTransaction = async (amount: number, label: string) => {
       if (amount <= 0) return;
-      await addTransaction({
+      await createTransaction({
         tanggal: `${dateStr} ${timeStr}`,
         // IMPORTANT: pelanggan diset ke nama proyek agar masuk tab "Proyek" di menu Transaksi
         pelanggan: projectData.namaProyek,
