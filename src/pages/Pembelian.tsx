@@ -342,7 +342,7 @@ export default function Pembelian() {
       await updateSupplier(editingSupplier.id, supplierFormData);
       toast.success('Supplier berhasil diperbarui');
     } else {
-      await addSupplier(supplierFormData);
+      await createSupplier(supplierFormData);
       toast.success('Supplier berhasil ditambahkan');
     }
     setShowSupplierDialog(false);

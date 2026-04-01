@@ -321,7 +321,7 @@ export default function Proyek() {
         }
       }
 
-      await addProject(projectData);
+      await createProject(projectData);
 
       // Catat DP awal proyek sebagai transaksi
       if ((projectData.dp || 0) > 0) {

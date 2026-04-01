@@ -148,7 +148,7 @@ export default function Operasional() {
       });
       toast.success('Biaya berhasil diperbarui');
     } else {
-      await addExpense({
+      await createExpense({
         kategori: formData.kategori,
         deskripsi: formData.deskripsi,
         jumlah: parseInt(formData.jumlah),
