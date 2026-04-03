@@ -154,34 +154,21 @@ export default function Transaksi() {
     }
 
     try {
-      // Show loading state
       const loadingToast = toast.loading('Menghapus transaksi...');
       
       // Remove related piutang first
-      const debtRemoved = await removeRelatedDebt(transactionToDelete.id);
-      if (!debtRemoved) {
-        toast.dismiss(loadingToast);
-        toast.error('Gagal menghapus piutang terkait');
-        return;
-      }
+      await removeRelatedDebt(transactionToDelete.id);
 
       // Delete the transaction
-      const transactionDeleted = await deleteTransaction(transactionToDelete.id);
+      await deleteTransaction(transactionToDelete.id);
       
       toast.dismiss(loadingToast);
-      
-      if (transactionDeleted) {
-        // Close dialog and reset state
-        setShowDeleteDialog(false);
-        setTransactionToDelete(null);
-        toast.success(`Transaksi ${transactionToDelete.id} berhasil dihapus & stok dikembalikan`);
-      } else {
-        // Error is already handled in deleteTransaction function
-        toast.error('Gagal menghapus transaksi. Silakan coba lagi.');
-      }
+      setShowDeleteDialog(false);
+      setTransactionToDelete(null);
+      toast.success(`Transaksi ${transactionToDelete.id} berhasil dihapus & stok dikembalikan`);
     } catch (error) {
       console.error('Unexpected error during transaction deletion:', error);
-      toast.error('Terjadi kesalahan yang tidak terduga. Silakan coba lagi.');
+      toast.error('Terjadi kesalahan. Silakan coba lagi.');
     }
   };
 
