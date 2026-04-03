@@ -189,4 +189,9 @@ export interface DataContextType {
   createPurchaseDebt: (purchaseRef: string, supplierName: string, amount: number) => Promise<void>;
   removeRelatedDebt: (refId: string) => Promise<void>;
   refreshData: () => Promise<void>;
+  // Aliases and extra functions
+  addDebt: (debt: Omit<DebtRecord, 'id'>) => Promise<void>;
+  addPayment: (debtId: string, payment: Omit<PaymentHistory, 'id'>) => Promise<void>;
+  createProjectDebt: (projectId: string, name: string, amount: number, dueDate: string) => Promise<void>;
+  getProjectDebts: (projectId: string) => DebtRecord[];
 }
