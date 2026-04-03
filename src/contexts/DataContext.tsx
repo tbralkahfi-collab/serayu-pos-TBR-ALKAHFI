@@ -672,6 +672,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     createTransaction, updateTransaction, deleteTransaction,
     createProject, updateProject, deleteProject,
     createTransactionDebt, createPurchaseDebt, removeRelatedDebt, refreshData,
+    addDebt, addPayment, createProjectDebt, getProjectDebts,
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
