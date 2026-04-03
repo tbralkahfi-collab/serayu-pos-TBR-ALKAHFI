@@ -593,6 +593,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const addDebt = createDebt;
+
+  const addPayment = async (debtId: string, payment: Omit<PaymentHistory, 'id'>) => {
+    const debt = debts.find(d => d.id === debtId);
+    if (!debt) return;
+    const newPayment = { ...payment, id: crypto.randomUUID() };
+    const updatedPayments = [...debt.payments, newPayment];
+    const newSisa = debt.sisa - payment.jumlah;
+    await updateDebt(debtId, { payments: updatedPayments as any, sisa: Math.max(0, newSisa) });
+  };
+
+  const createProjectDebt = async (projectId: string, name: string, amount: number, dueDate: string) => {
+    await createDebt({
+      type: 'piutang', nama: name, total: amount, sisa: amount,
+      tanggal: new Date().toISOString().split('T')[0],
+      jatuhTempo: dueDate, keterangan: `Piutang proyek`, catatan: '',
+      payments: [], projectId,
+    });
+  };
+
+  const getProjectDebts = (projectId: string): DebtRecord[] => {
+    return debts.filter(d => d.projectId === projectId);
+  };
+
   const removeRelatedDebt = async (refId: string) => {
     if (!user) return;
     // Find and delete debts related to the given reference ID
