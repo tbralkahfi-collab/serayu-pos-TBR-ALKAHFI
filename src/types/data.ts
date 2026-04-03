@@ -1,4 +1,4 @@
-// Types for DataContext - Separate file to avoid circular dependency
+// Types for DataContext - Matches what pages expect (camelCase)
 
 export interface Product {
   id: string;
@@ -17,6 +17,7 @@ export interface Supplier {
   nama: string;
   alamat: string;
   telepon: string;
+  email: string;
   catatan: string;
 }
 
@@ -25,17 +26,22 @@ export interface PurchaseItem {
   nama: string;
   qty: number;
   harga: number;
-  total: number;
-  isManual: boolean;
+  total?: number;
+  satuan?: string;
+  isManual?: boolean;
 }
 
 export interface Purchase {
   id: string;
   supplierId: string;
   supplier: string;
+  date: string;
   tanggal: string;
-  items: PurchaseItem[];
+  items: string;
+  itemsData: PurchaseItem[];
   total: number;
+  dp: number;
+  paymentMethod: string;
   status: string;
   notes: string;
 }
@@ -47,8 +53,10 @@ export interface DebtRecord {
   total: number;
   sisa: number;
   tanggal: string;
+  jatuhTempo: string;
+  keterangan: string;
   catatan: string;
-  payments?: PaymentHistory[];
+  payments: PaymentHistory[];
   projectId?: string;
 }
 
@@ -76,16 +84,23 @@ export interface TransactionItem {
   total: number;
   diskon?: number;
   diskonNominal?: number;
+  satuan?: string;
+  diskonPersen?: number;
 }
 
 export interface Transaction {
   id: string;
   tanggal: string;
   pelanggan: string;
-  items: TransactionItem[];
+  items: string;
+  itemsData: TransactionItem[];
+  subtotal: number;
+  diskon: number;
+  diskonPersen: number;
   total: number;
   bayar: number;
   kembalian: number;
+  metode: string;
   status: string;
 }
 
@@ -94,14 +109,24 @@ export interface ProjectMaterial {
   productName: string;
   qty: number;
   harga: number;
+  satuan?: string;
 }
 
 export interface Project {
   id: string;
   namaProyek: string;
   pelanggan: string;
-  tanggal: string;
-  totalBiaya: number;
+  alamat: string;
+  telepon: string;
+  deskripsi: string;
+  nilaiKontrak: number;
+  diskonPersen: number;
+  diskonNominal: number;
+  dp: number;
+  biayaTenagaKerja: number;
+  tanggalOrder: string;
+  tanggalMulai: string;
+  tanggalSelesai: string;
   status: string;
   catatan: string;
   materials: ProjectMaterial[];
@@ -144,7 +169,7 @@ export interface DataContextType {
   createSupplier: (supplier: Omit<Supplier, 'id'>) => Promise<Supplier>;
   updateSupplier: (id: string, supplier: Partial<Supplier>) => Promise<void>;
   deleteSupplier: (id: string) => Promise<void>;
-  createPurchase: (purchase: Omit<Purchase, 'id'>) => Promise<void>;
+  createPurchase: (purchase: Partial<Purchase>) => Promise<void>;
   updatePurchase: (id: string, purchase: Partial<Purchase>) => Promise<void>;
   deletePurchase: (id: string) => Promise<void>;
   createDebt: (debt: Omit<DebtRecord, 'id'>) => Promise<void>;
@@ -153,10 +178,15 @@ export interface DataContextType {
   createExpense: (expense: Omit<Expense, 'id'>) => Promise<void>;
   updateExpense: (id: string, expense: Partial<Expense>) => Promise<void>;
   deleteExpense: (id: string) => Promise<void>;
-  createTransaction: (transaction: Omit<Transaction, 'id'>) => Promise<void>;
+  createTransaction: (transaction: Partial<Transaction>) => Promise<void>;
   updateTransaction: (id: string, transaction: Partial<Transaction>) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
-  createProject: (project: Omit<Project, 'id'>) => Promise<void>;
+  createProject: (project: Partial<Project>) => Promise<void>;
   updateProject: (id: string, project: Partial<Project>) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
+  // Extra functions
+  createTransactionDebt: (trxId: string, customerName: string, amount: number) => Promise<void>;
+  createPurchaseDebt: (purchaseRef: string, supplierName: string, amount: number) => Promise<void>;
+  removeRelatedDebt: (refId: string) => Promise<void>;
+  refreshData: () => Promise<void>;
 }
