@@ -81,7 +81,7 @@ export interface TransactionItem {
   nama: string;
   qty: number;
   harga: number;
-  total: number;
+  total?: number;
   diskon?: number;
   diskonNominal?: number;
   satuan?: string;
