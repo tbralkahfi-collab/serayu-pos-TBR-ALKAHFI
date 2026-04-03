@@ -7,12 +7,16 @@ import type {
   Product, 
   Supplier, 
   Purchase, 
+  PurchaseItem,
   DebtRecord, 
   Expense, 
   Transaction, 
+  TransactionItem,
   Project,
+  ProjectMaterial,
   CacheData,
-  DataContextType 
+  DataContextType,
+  PaymentHistory,
 } from '@/types/data';
 import { 
   loadCacheData, 
@@ -25,6 +29,13 @@ import {
   formatItemsString,
   debounce
 } from '@/utils/cache';
+
+// Re-export types for pages that import from DataContext
+export type { 
+  Product, Supplier, Purchase, PurchaseItem, DebtRecord, Expense, 
+  Transaction, TransactionItem, Project, ProjectMaterial, PaymentHistory,
+  DataContextType 
+} from '@/types/data';
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
@@ -44,392 +55,260 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [isHydrated, setIsHydrated] = useState<boolean>(false);
 
   // Cache wrapper functions
-  const loadCache = (userId: string): CacheData | null => {
-    return loadCacheData(userId);
+  const loadCache = (userId: string): CacheData | null => loadCacheData(userId);
+  const saveCache = (userId: string, data: Omit<CacheData, 'timestamp'>): void => saveCacheData(userId, data);
+  const clearCache = (userId?: string): void => clearCacheData(userId);
+
+  // Helper: map DB purchase to app Purchase
+  const mapPurchase = (p: any): Purchase => ({
+    id: p.id,
+    supplierId: p.supplier_id || '',
+    supplier: p.supplier_name || '',
+    date: p.tanggal || '',
+    tanggal: p.tanggal || '',
+    items: formatItemsString(parsePurchaseItems(p.items)),
+    itemsData: parsePurchaseItems(p.items),
+    total: Number(p.total) || 0,
+    dp: Number(p.dp) || 0,
+    paymentMethod: p.metode_bayar || 'cash',
+    status: p.status || 'Pending',
+    notes: p.catatan || '',
+  });
+
+  // Helper: map DB debt to app DebtRecord
+  const mapDebt = (d: any): DebtRecord => ({
+    id: d.id,
+    type: d.type as 'utang' | 'piutang',
+    nama: d.nama,
+    total: Number(d.total) || 0,
+    sisa: Number(d.sisa) || 0,
+    tanggal: d.tanggal || '',
+    jatuhTempo: d.jatuh_tempo || '',
+    keterangan: d.keterangan || '',
+    catatan: d.keterangan || '',
+    payments: parsePayments(d.payments),
+    projectId: d.project_id || undefined,
+  });
+
+  // Helper: map DB transaction to app Transaction
+  const mapTransaction = (t: any): Transaction => {
+    const itemsArr = parseTransactionItems(t.items);
+    return {
+      id: t.id,
+      tanggal: t.tanggal || '',
+      pelanggan: t.pelanggan || 'Umum',
+      items: formatItemsString(itemsArr),
+      itemsData: itemsArr,
+      subtotal: Number(t.subtotal) || 0,
+      diskon: Number(t.diskon) || 0,
+      diskonPersen: Number(t.diskon_persen) || 0,
+      total: Number(t.total) || 0,
+      bayar: Number(t.bayar) || 0,
+      kembalian: Number(t.kembalian) || 0,
+      metode: t.metode || 'Cash',
+      status: t.status || 'Selesai',
+    };
   };
 
-  const saveCache = (userId: string, data: Omit<CacheData, 'timestamp'>): void => {
-    saveCacheData(userId, data);
-  };
+  // Helper: map DB project to app Project
+  const mapProject = (p: any): Project => ({
+    id: p.id,
+    namaProyek: p.nama_proyek || '',
+    pelanggan: p.pelanggan || '',
+    alamat: p.alamat || '',
+    telepon: p.telepon || '',
+    deskripsi: p.deskripsi || '',
+    nilaiKontrak: Number(p.nilai_kontrak) || 0,
+    diskonPersen: Number(p.diskon_persen) || 0,
+    diskonNominal: Number(p.diskon_nominal) || 0,
+    dp: Number(p.dp) || 0,
+    biayaTenagaKerja: Number(p.biaya_tenaga_kerja) || 0,
+    tanggalOrder: p.tanggal_order || '',
+    tanggalMulai: p.tanggal_mulai || '',
+    tanggalSelesai: p.tanggal_selesai || '',
+    status: p.status || 'Pending',
+    catatan: p.catatan || '',
+    materials: parseMaterials(p.materials),
+  });
 
-  const clearCache = (userId?: string): void => {
-    clearCacheData(userId);
-  };
+  // Helper: map DB supplier to app Supplier
+  const mapSupplier = (s: any): Supplier => ({
+    id: s.id,
+    nama: s.nama || '',
+    alamat: s.alamat || '',
+    telepon: s.telepon || '',
+    email: s.email || '',
+    catatan: s.catatan || '',
+  });
+
+  // Helper: map DB expense to app Expense
+  const mapExpense = (e: any): Expense => ({
+    id: e.id,
+    kategori: e.kategori || '',
+    deskripsi: e.deskripsi || '',
+    jumlah: Number(e.jumlah) || 0,
+    tanggal: e.tanggal || '',
+  });
 
   // Load functions
   const loadProducts = useCallback(async () => {
     if (isAuthLoading || !user) return;
-    
     try {
       const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error loading products:', error);
-        return;
-      }
-
-      const formattedProducts = data.map(product => ({
-        id: product.id,
-        nama: product.nama,
-        kategori: product.kategori,
-        hargaBeli: Number(product.harga_beli),
-        hargaJual: Number(product.harga_jual),
-        stok: product.stok,
-        satuan: product.satuan,
-        minStok: product.min_stok ?? undefined,
-      }));
-
-      setProducts(formattedProducts);
-    } catch (error) {
-      console.error('Error loading products:', error);
-    }
+        .from('products').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+      if (error) { console.error('Error loading products:', error); return; }
+      setProducts(data.map(product => ({
+        id: product.id, nama: product.nama, kategori: product.kategori,
+        hargaBeli: Number(product.harga_beli), hargaJual: Number(product.harga_jual),
+        stok: product.stok, satuan: product.satuan, minStok: product.min_stok ?? undefined,
+      })));
+    } catch (error) { console.error('Error loading products:', error); }
   }, [user, isAuthLoading]);
 
   const loadSuppliers = useCallback(async () => {
     if (isAuthLoading || !user) return;
-    
     try {
       const { data, error } = await supabase
-        .from('suppliers')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error loading suppliers:', error);
-        return;
-      }
-
-      setSuppliers(data || []);
-    } catch (error) {
-      console.error('Error loading suppliers:', error);
-    }
+        .from('suppliers').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+      if (error) { console.error('Error loading suppliers:', error); return; }
+      setSuppliers((data || []).map(mapSupplier));
+    } catch (error) { console.error('Error loading suppliers:', error); }
   }, [user, isAuthLoading]);
 
   const loadPurchases = useCallback(async () => {
     if (isAuthLoading || !user) return;
-    
     try {
       const { data, error } = await supabase
-        .from('purchases')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error loading purchases:', error);
-        return;
-      }
-
-      const formattedPurchases = data.map(purchase => ({
-        ...purchase,
-        items: parsePurchaseItems(purchase.items),
-        tanggal: purchase.created_at,
-      }));
-
-      setPurchases(formattedPurchases);
-    } catch (error) {
-      console.error('Error loading purchases:', error);
-    }
+        .from('purchases').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+      if (error) { console.error('Error loading purchases:', error); return; }
+      setPurchases((data || []).map(mapPurchase));
+    } catch (error) { console.error('Error loading purchases:', error); }
   }, [user, isAuthLoading]);
 
   const loadDebts = useCallback(async () => {
     if (isAuthLoading || !user) return;
-    
     try {
       const { data, error } = await supabase
-        .from('debts')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error loading debts:', error);
-        return;
-      }
-
-      const formattedDebts = data.map(debt => ({
-        ...debt,
-        payments: parsePayments(debt.payments),
-      }));
-
-      setDebts(formattedDebts);
-    } catch (error) {
-      console.error('Error loading debts:', error);
-    }
+        .from('debts').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+      if (error) { console.error('Error loading debts:', error); return; }
+      setDebts((data || []).map(mapDebt));
+    } catch (error) { console.error('Error loading debts:', error); }
   }, [user, isAuthLoading]);
 
   const loadExpenses = useCallback(async () => {
     if (isAuthLoading || !user) return;
-    
     try {
       const { data, error } = await supabase
-        .from('expenses')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error loading expenses:', error);
-        return;
-      }
-
-      setExpenses(data || []);
-    } catch (error) {
-      console.error('Error loading expenses:', error);
-    }
+        .from('expenses').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+      if (error) { console.error('Error loading expenses:', error); return; }
+      setExpenses((data || []).map(mapExpense));
+    } catch (error) { console.error('Error loading expenses:', error); }
   }, [user, isAuthLoading]);
 
   const loadTransactions = useCallback(async () => {
     if (isAuthLoading || !user) return;
-    
     try {
       const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error loading transactions:', error);
-        return;
-      }
-
-      const formattedTransactions = data.map(transaction => ({
-        ...transaction,
-        items: parseTransactionItems(transaction.items),
-      }));
-
-      setTransactions(formattedTransactions);
-    } catch (error) {
-      console.error('Error loading transactions:', error);
-    }
+        .from('transactions').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+      if (error) { console.error('Error loading transactions:', error); return; }
+      setTransactions((data || []).map(mapTransaction));
+    } catch (error) { console.error('Error loading transactions:', error); }
   }, [user, isAuthLoading]);
 
   const loadProjects = useCallback(async () => {
     if (isAuthLoading || !user) return;
-    
     try {
       const { data, error } = await supabase
-        .from('projects')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error loading projects:', error);
-        return;
-      }
-
-      const formattedProjects = data.map(project => ({
-        ...project,
-        materials: parseMaterials(project.materials),
-      }));
-
-      setProjects(formattedProjects);
-    } catch (error) {
-      console.error('Error loading projects:', error);
-    }
+        .from('projects').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+      if (error) { console.error('Error loading projects:', error); return; }
+      setProjects((data || []).map(mapProject));
+    } catch (error) { console.error('Error loading projects:', error); }
   }, [user, isAuthLoading]);
+
+  // Refresh all data
+  const refreshData = useCallback(async () => {
+    await Promise.all([
+      loadProducts(), loadSuppliers(), loadPurchases(), loadDebts(),
+      loadExpenses(), loadTransactions(), loadProjects(),
+    ]);
+  }, [loadProducts, loadSuppliers, loadPurchases, loadDebts, loadExpenses, loadTransactions, loadProjects]);
 
   // Initial data fetch
   const fetchInitialData = useCallback(async () => {
     if (isAuthLoading || hasFetched.current) return;
-
-    console.log('📊 DataContext: fetchInitialData called', { 
-      isAuthLoading, 
-      hasFetched: hasFetched.current, 
-      userId: user?.id 
-    });
-
     hasFetched.current = true;
 
     if (!user) {
-      console.log('📊 DataContext: No user, clearing state');
-      setProducts([]);
-      setSuppliers([]);
-      setPurchases([]);
-      setDebts([]);
-      setExpenses([]);
-      setTransactions([]);
-      setProjects([]);
-      setIsLoading(false);
-      setIsHydrated(false);
-      clearCache();
+      setProducts([]); setSuppliers([]); setPurchases([]); setDebts([]);
+      setExpenses([]); setTransactions([]); setProjects([]);
+      setIsLoading(false); setIsHydrated(false); clearCache();
       return;
     }
 
     try {
-      // Load from cache first
-      console.log('📦 DataContext: Loading data from cache...');
       const cachedData = loadCache(user.id);
-      
       if (cachedData) {
-        console.log('📦 DataContext: Cache hit - hydrating state instantly');
-        setProducts(cachedData.products);
-        setSuppliers(cachedData.suppliers);
-        setPurchases(cachedData.purchases);
-        setDebts(cachedData.debts);
-        setExpenses(cachedData.expenses);
-        setTransactions(cachedData.transactions);
+        setProducts(cachedData.products); setSuppliers(cachedData.suppliers);
+        setPurchases(cachedData.purchases); setDebts(cachedData.debts);
+        setExpenses(cachedData.expenses); setTransactions(cachedData.transactions);
         setProjects(cachedData.projects);
-        setIsHydrated(true);
-        setIsLoading(false);
-        
-        console.log('📦 DataContext: Hydration completed - UI is now instant');
+        setIsHydrated(true); setIsLoading(false);
       }
       
-      // Test Supabase connection
       const isConnected = await testSupabaseConnection();
       if (!isConnected) {
-        console.error('📊 DataContext: Supabase connection failed');
         if (!cachedData) {
-          toast.error('Koneksi ke database gagal. Silakan periksa konfigurasi Supabase.');
-          setIsLoading(false);
-          setIsHydrated(false);
+          toast.error('Koneksi ke database gagal.');
+          setIsLoading(false); setIsHydrated(false);
         } else {
           toast.warning('Mode offline - Menggunakan data tersimpan');
         }
         return;
       }
 
-      console.log('📊 DataContext: Connection successful, fetching fresh data');
-      
-      // Fetch fresh data from server
-      await Promise.all([
-        loadProducts(),
-        loadSuppliers(),
-        loadPurchases(),
-        loadDebts(),
-        loadExpenses(),
-        loadTransactions(),
-        loadProjects(),
-      ]);
-      
-      console.log('📊 DataContext: Fresh data fetched successfully');
-      
-      // Update cache with fresh data
-      console.log('📦 DataContext: Updating cache with fresh data...');
-      saveCache(user.id, {
-        products,
-        suppliers,
-        purchases,
-        debts,
-        expenses,
-        transactions,
-        projects,
-        userId: user.id,
-        version: '1.0'
-      });
-      
-      // Mark hydration complete
+      await refreshData();
       setIsHydrated(true);
-      console.log('📊 DataContext: Hydration cycle completed');
     } catch (error) {
-      console.error('📊 DataContext: Error in fetchInitialData:', error);
+      console.error('DataContext: Error in fetchInitialData:', error);
       toast.error('Gagal memuat data. Silakan refresh halaman.');
     } finally {
       setIsLoading(false);
     }
-  }, [user, isAuthLoading, loadProducts, loadSuppliers, loadPurchases, loadDebts, loadExpenses, loadTransactions, loadProjects, products, suppliers, purchases, debts, expenses, transactions, projects, loadCache, saveCache, clearCache]);
+  }, [user, isAuthLoading, refreshData]);
 
-  // CRUD Functions
+  // Cache update
   const updateCacheAfterOperation = useCallback(() => {
     if (!user) return;
-    
-    console.log('📦 DataContext: Updating cache after operation...');
     saveCache(user.id, {
-      products,
-      suppliers,
-      purchases,
-      debts,
-      expenses,
-      transactions,
-      projects,
-      userId: user.id,
-      version: '1.0'
+      products, suppliers, purchases, debts, expenses, transactions, projects,
+      userId: user.id, version: '1.0'
     });
-  }, [user, products, suppliers, purchases, debts, expenses, transactions, projects, saveCache]);
+  }, [user, products, suppliers, purchases, debts, expenses, transactions, projects]);
 
-  // Debounced cache saving
   const debouncedUpdateCache = useCallback(
     debounce(updateCacheAfterOperation, 500),
     [updateCacheAfterOperation]
   );
 
-  const createProduct = async (product: Omit<Product, 'id'>) => {
-    if (!user) {
-      console.error("❌ User not authenticated");
-      toast.error('User tidak terautentikasi');
-      throw new Error("User not authenticated");
-    }
-    
-    console.log("✅ User authenticated:", user.id);
-    
-    const productData = {
-      user_id: user.id,
-      nama: product.nama,
-      kategori: product.kategori,
-      harga_beli: product.hargaBeli,
-      harga_jual: product.hargaJual,
-      stok: product.stok,
-      satuan: product.satuan,
-      min_stok: product.minStok ?? null,
-    };
-    
-    const cleanData = Object.fromEntries(
-      Object.entries(productData).filter(([_, value]) => value !== undefined && value !== null)
-    );
-    
-    console.log("📝 Before insert - Product data:", cleanData);
-    
-    try {
-      const { data, error } = await supabase
-        .from("products")
-        .insert([cleanData])
-        .select()
-        .single();
+  // ======== CRUD Functions ========
 
-      if (error) {
-        console.error("❌ Insert error:", error);
-        toast.error('Gagal menambah produk: ' + error.message);
-        throw error;
-      }
-      
-      console.log("✅ After insert - Supabase response:", data);
-      
-      if (data) {
-        const newProduct = {
-          id: data.id,
-          nama: data.nama,
-          kategori: data.kategori,
-          hargaBeli: Number(data.harga_beli),
-          hargaJual: Number(data.harga_jual),
-          stok: data.stok,
-          satuan: data.satuan,
-          minStok: data.min_stok ?? undefined,
-        };
-        
-        console.log("🔄 Updating local state with:", newProduct);
-        setProducts(prev => [newProduct, ...prev]);
-        
-        console.log("✅ After state update - Products count updated");
-        
-        console.log("💾 Updating cache...");
-        debouncedUpdateCache();
-        
-        toast.success('Produk berhasil ditambahkan');
-        
-        console.log("🎉 Product creation completed successfully");
-      }
-    } catch (error) {
-      console.error("❌ Product creation failed:", error);
-      toast.error('Gagal menambah produk');
-      throw error;
+  const createProduct = async (product: Omit<Product, 'id'>) => {
+    if (!user) { toast.error('User tidak terautentikasi'); throw new Error("Not authenticated"); }
+    const productData: any = {
+      user_id: user.id, nama: product.nama, kategori: product.kategori,
+      harga_beli: product.hargaBeli, harga_jual: product.hargaJual,
+      stok: product.stok, satuan: product.satuan, min_stok: product.minStok ?? null,
+    };
+    const { data, error } = await supabase.from("products").insert([productData]).select().single();
+    if (error) { toast.error('Gagal menambah produk: ' + error.message); throw error; }
+    if (data) {
+      setProducts(prev => [{
+        id: data.id, nama: data.nama, kategori: data.kategori,
+        hargaBeli: Number(data.harga_beli), hargaJual: Number(data.harga_jual),
+        stok: data.stok, satuan: data.satuan, minStok: data.min_stok ?? undefined,
+      }, ...prev]);
+      debouncedUpdateCache();
+      toast.success('Produk berhasil ditambahkan');
     }
   };
 
@@ -442,265 +321,361 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (product.stok !== undefined) updateData.stok = product.stok;
     if (product.satuan !== undefined) updateData.satuan = product.satuan;
     if (product.minStok !== undefined) updateData.min_stok = product.minStok;
-
     const { data, error } = await supabase.from('products').update(updateData).eq('id', id).select().single();
-    if (error) {
-      toast.error('Gagal memperbarui produk');
-      console.error(error);
-      return;
-    }
-    
+    if (error) { toast.error('Gagal memperbarui produk'); return; }
     if (data) {
-      const updatedProduct = {
-        id: data.id,
-        nama: data.nama,
-        kategori: data.kategori,
-        hargaBeli: Number(data.harga_beli),
-        hargaJual: Number(data.harga_jual),
-        stok: data.stok,
-        satuan: data.satuan,
-        minStok: data.min_stok ?? undefined,
-      };
-      setProducts(prev => prev.map(p => p.id === id ? updatedProduct : p));
+      setProducts(prev => prev.map(p => p.id === id ? {
+        id: data.id, nama: data.nama, kategori: data.kategori,
+        hargaBeli: Number(data.harga_beli), hargaJual: Number(data.harga_jual),
+        stok: data.stok, satuan: data.satuan, minStok: data.min_stok ?? undefined,
+      } : p));
       toast.success('Produk berhasil diperbarui');
-      
       debouncedUpdateCache();
     }
   };
 
   const deleteProduct = async (id: string) => {
     if (!user) return;
-    
-    const { error } = await supabase
-      .from('products')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      toast.error('Gagal menghapus produk');
-      console.error(error);
-      return;
-    }
-
+    const { error } = await supabase.from('products').delete().eq('id', id);
+    if (error) { toast.error('Gagal menghapus produk'); return; }
     setProducts(prev => prev.filter(p => p.id !== id));
     toast.success('Produk berhasil dihapus');
-    
     debouncedUpdateCache();
   };
 
-  // Placeholder functions for other CRUD operations
   const createSupplier = async (supplier: Omit<Supplier, 'id'>): Promise<Supplier> => {
     if (!user) throw new Error('Not authenticated');
-    
     const { data, error } = await supabase.from('suppliers').insert({
-      user_id: user.id,
-      ...supplier
+      user_id: user.id, nama: supplier.nama, alamat: supplier.alamat,
+      telepon: supplier.telepon, email: supplier.email, catatan: supplier.catatan,
     }).select().single();
-    
-    if (error) {
-      toast.error('Gagal menambah supplier');
-      throw error;
-    }
-    
-    const newSupplier = data as Supplier;
+    if (error) { toast.error('Gagal menambah supplier'); throw error; }
+    const newSupplier = mapSupplier(data);
     setSuppliers(prev => [newSupplier, ...prev]);
     debouncedUpdateCache();
-    
     return newSupplier;
   };
 
   const updateSupplier = async (id: string, supplier: Partial<Supplier>) => {
     const { data, error } = await supabase.from('suppliers').update(supplier).eq('id', id).select().single();
-    if (error) {
-      toast.error('Gagal memperbarui supplier');
-      console.error(error);
-      return;
-    }
-    
-    if (data) {
-      setSuppliers(prev => prev.map(s => s.id === id ? data as Supplier : s));
-      debouncedUpdateCache();
-    }
+    if (error) { toast.error('Gagal memperbarui supplier'); return; }
+    if (data) { setSuppliers(prev => prev.map(s => s.id === id ? mapSupplier(data) : s)); debouncedUpdateCache(); }
   };
 
   const deleteSupplier = async (id: string) => {
     if (!user) return;
-    
     const { error } = await supabase.from('suppliers').delete().eq('id', id);
-    if (error) {
-      toast.error('Gagal menghapus supplier');
-      console.error(error);
-      return;
-    }
-    
+    if (error) { toast.error('Gagal menghapus supplier'); return; }
     setSuppliers(prev => prev.filter(s => s.id !== id));
     debouncedUpdateCache();
   };
 
-  // Placeholder functions for other entities
-  const createPurchase = async (purchase: Omit<Purchase, 'id'>) => {
-    console.log('createPurchase called', purchase);
+  const createPurchase = async (purchase: Partial<Purchase>) => {
+    if (!user) return;
+    const { data, error } = await supabase.from('purchases').insert({
+      user_id: user.id,
+      supplier_id: purchase.supplierId || null,
+      supplier_name: purchase.supplier || '',
+      tanggal: purchase.date || new Date().toISOString().split('T')[0],
+      total: purchase.total || 0,
+      dp: purchase.dp || 0,
+      metode_bayar: purchase.paymentMethod || 'cash',
+      status: purchase.status || 'Pending',
+      items: (purchase as any).itemsData || [] as unknown as Json,
+      catatan: purchase.notes || '',
+    }).select().single();
+    if (error) { toast.error('Gagal menambah pembelian: ' + error.message); return; }
+    if (data) { setPurchases(prev => [mapPurchase(data), ...prev]); debouncedUpdateCache(); }
   };
 
   const updatePurchase = async (id: string, purchase: Partial<Purchase>) => {
-    console.log('updatePurchase called', id, purchase);
+    if (!user) return;
+    const updateData: Record<string, unknown> = {};
+    if (purchase.supplierId !== undefined) updateData.supplier_id = purchase.supplierId;
+    if (purchase.supplier !== undefined) updateData.supplier_name = purchase.supplier;
+    if (purchase.date !== undefined) updateData.tanggal = purchase.date;
+    if (purchase.total !== undefined) updateData.total = purchase.total;
+    if (purchase.dp !== undefined) updateData.dp = purchase.dp;
+    if (purchase.paymentMethod !== undefined) updateData.metode_bayar = purchase.paymentMethod;
+    if (purchase.status !== undefined) updateData.status = purchase.status;
+    if ((purchase as any).itemsData !== undefined) updateData.items = (purchase as any).itemsData;
+    if (purchase.notes !== undefined) updateData.catatan = purchase.notes;
+    const { data, error } = await supabase.from('purchases').update(updateData).eq('id', id).select().single();
+    if (error) { toast.error('Gagal memperbarui pembelian'); return; }
+    if (data) { setPurchases(prev => prev.map(p => p.id === id ? mapPurchase(data) : p)); debouncedUpdateCache(); }
   };
 
   const deletePurchase = async (id: string) => {
-    console.log('deletePurchase called', id);
+    if (!user) return;
+    const { error } = await supabase.from('purchases').delete().eq('id', id);
+    if (error) { toast.error('Gagal menghapus pembelian'); return; }
+    setPurchases(prev => prev.filter(p => p.id !== id));
+    debouncedUpdateCache();
   };
 
   const createDebt = async (debt: Omit<DebtRecord, 'id'>) => {
-    console.log('createDebt called', debt);
+    if (!user) return;
+    const { data, error } = await supabase.from('debts').insert({
+      user_id: user.id, type: debt.type, nama: debt.nama,
+      total: debt.total, sisa: debt.sisa || debt.total,
+      tanggal: debt.tanggal || new Date().toISOString().split('T')[0],
+      jatuh_tempo: debt.jatuhTempo || null,
+      keterangan: debt.keterangan || '',
+      project_id: debt.projectId || null,
+      payments: (debt.payments || []) as unknown as Json,
+    }).select().single();
+    if (error) { toast.error('Gagal menambah utang/piutang'); return; }
+    if (data) { setDebts(prev => [mapDebt(data), ...prev]); debouncedUpdateCache(); }
   };
 
   const updateDebt = async (id: string, debt: Partial<DebtRecord>) => {
-    console.log('updateDebt called', id, debt);
+    if (!user) return;
+    const updateData: Record<string, unknown> = {};
+    if (debt.nama !== undefined) updateData.nama = debt.nama;
+    if (debt.total !== undefined) updateData.total = debt.total;
+    if (debt.sisa !== undefined) updateData.sisa = debt.sisa;
+    if (debt.jatuhTempo !== undefined) updateData.jatuh_tempo = debt.jatuhTempo;
+    if (debt.keterangan !== undefined) updateData.keterangan = debt.keterangan;
+    if (debt.payments !== undefined) updateData.payments = debt.payments as unknown as Json;
+    const { data, error } = await supabase.from('debts').update(updateData).eq('id', id).select().single();
+    if (error) { toast.error('Gagal memperbarui data'); return; }
+    if (data) { setDebts(prev => prev.map(d => d.id === id ? mapDebt(data) : d)); debouncedUpdateCache(); }
   };
 
   const deleteDebt = async (id: string) => {
-    console.log('deleteDebt called', id);
+    if (!user) return;
+    const { error } = await supabase.from('debts').delete().eq('id', id);
+    if (error) { toast.error('Gagal menghapus data'); return; }
+    setDebts(prev => prev.filter(d => d.id !== id));
+    debouncedUpdateCache();
   };
 
   const createExpense = async (expense: Omit<Expense, 'id'>) => {
-    console.log('createExpense called', expense);
+    if (!user) return;
+    const { data, error } = await supabase.from('expenses').insert({
+      user_id: user.id, kategori: expense.kategori,
+      deskripsi: expense.deskripsi, jumlah: expense.jumlah,
+      tanggal: expense.tanggal || new Date().toISOString().split('T')[0],
+    }).select().single();
+    if (error) { toast.error('Gagal menambah biaya'); return; }
+    if (data) { setExpenses(prev => [mapExpense(data), ...prev]); debouncedUpdateCache(); }
   };
 
   const updateExpense = async (id: string, expense: Partial<Expense>) => {
-    console.log('updateExpense called', id, expense);
+    if (!user) return;
+    const { data, error } = await supabase.from('expenses').update(expense).eq('id', id).select().single();
+    if (error) { toast.error('Gagal memperbarui biaya'); return; }
+    if (data) { setExpenses(prev => prev.map(e => e.id === id ? mapExpense(data) : e)); debouncedUpdateCache(); }
   };
 
   const deleteExpense = async (id: string) => {
-    console.log('deleteExpense called', id);
+    if (!user) return;
+    const { error } = await supabase.from('expenses').delete().eq('id', id);
+    if (error) { toast.error('Gagal menghapus biaya'); return; }
+    setExpenses(prev => prev.filter(e => e.id !== id));
+    debouncedUpdateCache();
   };
 
-  const createTransaction = async (transaction: Omit<Transaction, 'id'>) => {
-    console.log('createTransaction called', transaction);
+  const createTransaction = async (transaction: Partial<Transaction>) => {
+    if (!user) return;
+    const { data, error } = await supabase.from('transactions').insert({
+      user_id: user.id,
+      tanggal: transaction.tanggal || new Date().toISOString(),
+      pelanggan: transaction.pelanggan || 'Umum',
+      items: ((transaction as any).itemsData || []) as unknown as Json,
+      subtotal: transaction.subtotal || 0,
+      diskon: transaction.diskon || 0,
+      diskon_persen: transaction.diskonPersen || 0,
+      total: transaction.total || 0,
+      bayar: transaction.bayar || 0,
+      kembalian: transaction.kembalian || 0,
+      metode: transaction.metode || 'Cash',
+      status: transaction.status || 'Selesai',
+    }).select().single();
+    if (error) { toast.error('Gagal menyimpan transaksi: ' + error.message); return; }
+    if (data) { setTransactions(prev => [mapTransaction(data), ...prev]); debouncedUpdateCache(); }
   };
 
   const updateTransaction = async (id: string, transaction: Partial<Transaction>) => {
-    console.log('updateTransaction called', id, transaction);
+    if (!user) return;
+    const updateData: Record<string, unknown> = {};
+    if (transaction.pelanggan !== undefined) updateData.pelanggan = transaction.pelanggan;
+    if (transaction.metode !== undefined) updateData.metode = transaction.metode;
+    if (transaction.status !== undefined) updateData.status = transaction.status;
+    if (transaction.total !== undefined) updateData.total = transaction.total;
+    if (transaction.bayar !== undefined) updateData.bayar = transaction.bayar;
+    const { data, error } = await supabase.from('transactions').update(updateData).eq('id', id).select().single();
+    if (error) { toast.error('Gagal memperbarui transaksi'); return; }
+    if (data) { setTransactions(prev => prev.map(t => t.id === id ? mapTransaction(data) : t)); debouncedUpdateCache(); }
   };
 
   const deleteTransaction = async (id: string) => {
-    console.log('deleteTransaction called', id);
+    if (!user) return;
+    const { error } = await supabase.from('transactions').delete().eq('id', id);
+    if (error) { toast.error('Gagal menghapus transaksi'); return; }
+    setTransactions(prev => prev.filter(t => t.id !== id));
+    debouncedUpdateCache();
   };
 
-  const createProject = async (project: Omit<Project, 'id'>) => {
-    console.log('createProject called', project);
+  const createProject = async (project: Partial<Project>) => {
+    if (!user) return;
+    const { data, error } = await supabase.from('projects').insert({
+      user_id: user.id,
+      nama_proyek: project.namaProyek || '',
+      pelanggan: project.pelanggan || '',
+      alamat: project.alamat || '',
+      telepon: project.telepon || '',
+      deskripsi: project.deskripsi || '',
+      nilai_kontrak: project.nilaiKontrak || 0,
+      diskon_persen: project.diskonPersen || 0,
+      diskon_nominal: project.diskonNominal || 0,
+      dp: project.dp || 0,
+      biaya_tenaga_kerja: project.biayaTenagaKerja || 0,
+      tanggal_order: project.tanggalOrder || null,
+      tanggal_mulai: project.tanggalMulai || null,
+      tanggal_selesai: project.tanggalSelesai || null,
+      status: project.status || 'Pending',
+      catatan: project.catatan || '',
+      materials: (project.materials || []) as unknown as Json,
+    }).select().single();
+    if (error) { toast.error('Gagal menambah proyek: ' + error.message); return; }
+    if (data) { setProjects(prev => [mapProject(data), ...prev]); debouncedUpdateCache(); }
   };
 
   const updateProject = async (id: string, project: Partial<Project>) => {
-    console.log('updateProject called', id, project);
+    if (!user) return;
+    const updateData: Record<string, unknown> = {};
+    if (project.namaProyek !== undefined) updateData.nama_proyek = project.namaProyek;
+    if (project.pelanggan !== undefined) updateData.pelanggan = project.pelanggan;
+    if (project.alamat !== undefined) updateData.alamat = project.alamat;
+    if (project.telepon !== undefined) updateData.telepon = project.telepon;
+    if (project.deskripsi !== undefined) updateData.deskripsi = project.deskripsi;
+    if (project.nilaiKontrak !== undefined) updateData.nilai_kontrak = project.nilaiKontrak;
+    if (project.diskonPersen !== undefined) updateData.diskon_persen = project.diskonPersen;
+    if (project.diskonNominal !== undefined) updateData.diskon_nominal = project.diskonNominal;
+    if (project.dp !== undefined) updateData.dp = project.dp;
+    if (project.biayaTenagaKerja !== undefined) updateData.biaya_tenaga_kerja = project.biayaTenagaKerja;
+    if (project.tanggalOrder !== undefined) updateData.tanggal_order = project.tanggalOrder;
+    if (project.tanggalMulai !== undefined) updateData.tanggal_mulai = project.tanggalMulai;
+    if (project.tanggalSelesai !== undefined) updateData.tanggal_selesai = project.tanggalSelesai;
+    if (project.status !== undefined) updateData.status = project.status;
+    if (project.catatan !== undefined) updateData.catatan = project.catatan;
+    if (project.materials !== undefined) updateData.materials = project.materials as unknown as Json;
+    const { data, error } = await supabase.from('projects').update(updateData).eq('id', id).select().single();
+    if (error) { toast.error('Gagal memperbarui proyek'); return; }
+    if (data) { setProjects(prev => prev.map(p => p.id === id ? mapProject(data) : p)); debouncedUpdateCache(); }
   };
 
   const deleteProject = async (id: string) => {
-    console.log('deleteProject called', id);
+    if (!user) return;
+    const { error } = await supabase.from('projects').delete().eq('id', id);
+    if (error) { toast.error('Gagal menghapus proyek'); return; }
+    setProjects(prev => prev.filter(p => p.id !== id));
+    debouncedUpdateCache();
+  };
+
+  // Extra functions used by pages
+  const createTransactionDebt = async (trxId: string, customerName: string, amount: number) => {
+    await createDebt({
+      type: 'piutang', nama: customerName, total: amount, sisa: amount,
+      tanggal: new Date().toISOString().split('T')[0],
+      jatuhTempo: '', keterangan: `Piutang dari transaksi ${trxId}`, catatan: '',
+      payments: [],
+    });
+  };
+
+  const createPurchaseDebt = async (purchaseRef: string, supplierName: string, amount: number) => {
+    await createDebt({
+      type: 'utang', nama: supplierName, total: amount, sisa: amount,
+      tanggal: new Date().toISOString().split('T')[0],
+      jatuhTempo: '', keterangan: `Utang dari pembelian ${purchaseRef}`, catatan: '',
+      payments: [],
+    });
+  };
+
+  const addDebt = createDebt;
+
+  const addPayment = async (debtId: string, payment: Omit<PaymentHistory, 'id'>) => {
+    const debt = debts.find(d => d.id === debtId);
+    if (!debt) return;
+    const newPayment = { ...payment, id: crypto.randomUUID() };
+    const updatedPayments = [...debt.payments, newPayment];
+    const newSisa = debt.sisa - payment.jumlah;
+    await updateDebt(debtId, { payments: updatedPayments as any, sisa: Math.max(0, newSisa) });
+  };
+
+  const createProjectDebt = async (projectId: string, name: string, amount: number, dueDate: string) => {
+    await createDebt({
+      type: 'piutang', nama: name, total: amount, sisa: amount,
+      tanggal: new Date().toISOString().split('T')[0],
+      jatuhTempo: dueDate, keterangan: `Piutang proyek`, catatan: '',
+      payments: [], projectId,
+    });
+  };
+
+  const getProjectDebts = (projectId: string): DebtRecord[] => {
+    return debts.filter(d => d.projectId === projectId);
+  };
+
+  const removeRelatedDebt = async (refId: string) => {
+    if (!user) return;
+    // Find and delete debts related to the given reference ID
+    const relatedDebts = debts.filter(d => d.keterangan?.includes(refId));
+    for (const debt of relatedDebts) {
+      await deleteDebt(debt.id);
+    }
   };
 
   // Effects
-  useEffect(() => {
-    fetchInitialData();
-  }, [fetchInitialData]);
+  useEffect(() => { fetchInitialData(); }, [fetchInitialData]);
 
   // Realtime subscriptions
   useEffect(() => {
     if (!user) return;
-
-    // Products subscription
     const productsSubscription = supabase
       .channel('products-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'products',
-          filter: `user_id=eq.${user.id}`
-        },
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products', filter: `user_id=eq.${user.id}` },
         (payload) => {
           if (payload.eventType === 'INSERT') {
             setProducts(prev => {
-              const exists = prev.some(p => p.id === payload.new.id);
-              if (exists) return prev;
+              if (prev.some(p => p.id === payload.new.id)) return prev;
               return [...prev, {
-                id: payload.new.id,
-                nama: payload.new.nama,
-                kategori: payload.new.kategori,
-                hargaBeli: Number(payload.new.harga_beli),
-                hargaJual: Number(payload.new.harga_jual),
-                stok: payload.new.stok,
-                satuan: payload.new.satuan,
-                minStok: payload.new.min_stok ?? undefined,
+                id: payload.new.id, nama: payload.new.nama, kategori: payload.new.kategori,
+                hargaBeli: Number(payload.new.harga_beli), hargaJual: Number(payload.new.harga_jual),
+                stok: payload.new.stok, satuan: payload.new.satuan, minStok: payload.new.min_stok ?? undefined,
               }];
             });
           }
-
           if (payload.eventType === 'UPDATE') {
-            setProducts(prev =>
-              prev.map(p => p.id === payload.new.id ? {
-                ...p,
-                nama: payload.new.nama,
-                kategori: payload.new.kategori,
-                hargaBeli: Number(payload.new.harga_beli),
-                hargaJual: Number(payload.new.harga_jual),
-                stok: payload.new.stok,
-                satuan: payload.new.satuan,
-                minStok: payload.new.min_stok ?? undefined,
-              } : p)
-            );
+            setProducts(prev => prev.map(p => p.id === payload.new.id ? {
+              ...p, nama: payload.new.nama, kategori: payload.new.kategori,
+              hargaBeli: Number(payload.new.harga_beli), hargaJual: Number(payload.new.harga_jual),
+              stok: payload.new.stok, satuan: payload.new.satuan, minStok: payload.new.min_stok ?? undefined,
+            } : p));
           }
-
           if (payload.eventType === 'DELETE') {
             setProducts(prev => prev.filter(p => p.id !== payload.old.id));
           }
         }
-      )
-      .subscribe();
-
-    return () => {
-      productsSubscription.unsubscribe();
-    };
+      ).subscribe();
+    return () => { productsSubscription.unsubscribe(); };
   }, [user]);
 
   const value: DataContextType = {
-    isLoading,
-    isHydrated,
-    products,
-    suppliers,
-    purchases,
-    debts,
-    expenses,
-    transactions,
-    projects,
-    createProduct,
-    updateProduct,
-    deleteProduct,
-    createSupplier,
-    updateSupplier,
-    deleteSupplier,
-    createPurchase,
-    updatePurchase,
-    deletePurchase,
-    createDebt,
-    updateDebt,
-    deleteDebt,
-    createExpense,
-    updateExpense,
-    deleteExpense,
-    createTransaction,
-    updateTransaction,
-    deleteTransaction,
-    createProject,
-    updateProject,
-    deleteProject,
+    isLoading, isHydrated,
+    products, suppliers, purchases, debts, expenses, transactions, projects,
+    createProduct, updateProduct, deleteProduct,
+    createSupplier, updateSupplier, deleteSupplier,
+    createPurchase, updatePurchase, deletePurchase,
+    createDebt, updateDebt, deleteDebt,
+    createExpense, updateExpense, deleteExpense,
+    createTransaction, updateTransaction, deleteTransaction,
+    createProject, updateProject, deleteProject,
+    createTransactionDebt, createPurchaseDebt, removeRelatedDebt, refreshData,
+    addDebt, addPayment, createProjectDebt, getProjectDebts,
   };
 
-  return (
-    <DataContext.Provider value={value}>
-      {children}
-    </DataContext.Provider>
-  );
+  return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }
 
 export function useData() {

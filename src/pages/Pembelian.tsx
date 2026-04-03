@@ -190,7 +190,7 @@ export default function Pembelian() {
     setFormData({
       supplierId: purchase.supplierId, supplier: purchase.supplier, date: purchase.date,
       total: purchase.total.toString(), dp: purchase.dp.toString(),
-      paymentMethod: purchase.paymentMethod, status: purchase.status, notes: purchase.notes,
+      paymentMethod: purchase.paymentMethod as 'cash' | 'transfer', status: purchase.status, notes: purchase.notes,
       statusBayar: (purchase.dp > 0 && purchase.dp < purchase.total) ? 'belum_lunas' : 'lunas',
     });
     // Parse items string to PurchaseItem array

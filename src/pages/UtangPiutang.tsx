@@ -114,14 +114,10 @@ export default function UtangPiutang() {
 
   const confirmDelete = async () => {
     if (recordToDelete) {
-      const success = await deleteDebt(recordToDelete.id);
-      if (success) {
-        toast.success(`Data ${recordToDelete.nama} berhasil dihapus`);
-        setShowDeleteDialog(false);
-        setRecordToDelete(null);
-      } else {
-        toast.error('Gagal menghapus data');
-      }
+      await deleteDebt(recordToDelete.id);
+      toast.success(`Data ${recordToDelete.nama} berhasil dihapus`);
+      setShowDeleteDialog(false);
+      setRecordToDelete(null);
     }
   };
 
@@ -188,6 +184,8 @@ export default function UtangPiutang() {
         tanggal: new Date().toISOString().split('T')[0],
         jatuhTempo: formData.jatuhTempo,
         keterangan: formData.keterangan,
+        catatan: formData.keterangan,
+        payments: [],
       });
       toast.success('Data berhasil ditambahkan');
     }
