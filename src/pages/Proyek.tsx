@@ -233,7 +233,7 @@ export default function Proyek() {
       tanggalOrder: project.tanggalOrder,
       tanggalMulai: project.tanggalMulai,
       tanggalSelesai: project.tanggalSelesai,
-      status: project.status,
+      status: project.status as 'Pending' | 'Berjalan' | 'Selesai' | 'Dibatalkan',
       catatan: project.catatan,
     });
     setMaterials(project.materials || []);

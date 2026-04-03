@@ -184,6 +184,8 @@ export default function UtangPiutang() {
         tanggal: new Date().toISOString().split('T')[0],
         jatuhTempo: formData.jatuhTempo,
         keterangan: formData.keterangan,
+        catatan: formData.keterangan,
+        payments: [],
       });
       toast.success('Data berhasil ditambahkan');
     }
